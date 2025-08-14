@@ -40,21 +40,46 @@ const getIPData = async () => {
 
 const getActionCollectList = async () => {
     try {
-        const res = await axios.get("http://10.4.10.129:8080/api/esAgentBasic/search")
+        const res = await axios.get("http://114.215.254.187:8082/api/esAgentBasic/search")
         return res?.data
     } catch (error) {
         console.error("==ERROR==", error)
     }
 }
 
-const getConfigTableList = async () => {
+const getConfigTableList = async (data) => {
     try { 
-        const res = await axios.get("http://114.215.254.187:8082/api/user/config/queryByPage")
-        console.log(res, "res");
+        const res = await axios.get("http://114.215.254.187:8082/api/user/config/queryByPage", {
+            params: {
+                pageNum: data?.current,
+                pageSize: data?.pageSize
+            }
+        })
         return res?.data
     } catch (error) {
         console.error("==ERROR==", error)
     }
+}
+
+const addConfigTable = async (data) => {
+    try { 
+        const res = await axios.post("http://114.215.254.187:8082/api/user/config/add", data)
+        console.log(res, "res");
+        return res
+    } catch (error) {
+        console.error("==ERROR==", error)
+    }
+}
+
+const deleteConfigTable = async (data) => {    
+    try { 
+        const res = await axios.delete(`http://114.215.254.187:8082/api/user/config/delete/${data}`)
+        console.log(res, "res");
+        return res
+    } catch (error) {
+        console.error("==ERROR==", error)
+    }
+
 }
 
 
@@ -63,5 +88,7 @@ export {
     getAllOverView,
     getIPData,
     getActionCollectList,
-    getConfigTableList
+    getConfigTableList,
+    addConfigTable,
+    deleteConfigTable
 }

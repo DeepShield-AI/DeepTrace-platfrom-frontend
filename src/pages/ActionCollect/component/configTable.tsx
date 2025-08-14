@@ -1,12 +1,31 @@
-import { DownOutlined, DownloadOutlined, CopyOutlined, DeleteOutlined  } from '@ant-design/icons';
+import { DownOutlined, DownloadOutlined, CopyOutlined, DeleteOutlined } from '@ant-design/icons';
 import type { ProColumns } from '@ant-design/pro-components';
 import { ProTable, TableDropdown } from '@ant-design/pro-components';
-import { Button, Tag, Table, Tabs, Descriptions, Select, Drawer, Space, Form, Input, Row, Col, DatePicker, InputNumber } from 'antd';
+import { 
+  Button, 
+  Tag, 
+  Table, 
+  Tabs, 
+  Descriptions, 
+  Select, 
+  Drawer, 
+  Space, 
+  Form, 
+  Input, 
+  Row, 
+  Col, 
+  DatePicker, 
+  InputNumber,
+  message,
+  Popconfirm
+} from 'antd';
 import {
     getActionCollectList,
-    getConfigTableList
+    getConfigTableList,
+    addConfigTable,
+    deleteConfigTable
 } from "../../../services/server.js"
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useForm } from 'antd/es/form/Form.js';
 
 const { Option } = Select;
@@ -16,58 +35,67 @@ export type Status = {
   text: string;
 };
 
-const columns: ProColumns[] = [
-  {
-    title: '采集器组',
-    width: 200,
-    dataIndex: 'groupName',
-    render: (_) => <a>{_}</a>,
-  },
-  {
-    title: '团队',
-    dataIndex: 'teamName',
-  },
-  {
-    title: 'CPU限制',
-    dataIndex: 'maxCpus',
-  },
-  {
-    title: '内存限制',
-    dataIndex: 'maxMemory',
-    sorter: (a, b) => a.maxMemory - b.maxMemory,
-  },
-  {
-    title: '采集网口',
-    width: 400,
-    dataIndex: 'collectionPort',
-  },
-  {
-    title: '操作',
-    valueType: 'option',
-    key: 'option',
-    fixed: 'right',
-    width: 120,
-    render: (text, record, _, action) => [
-      <Button
-        key="copy"
-        onClick={() => {
-          action?.startEditable?.(record.id);
-        }}
-        disabled
-        icon={<CopyOutlined />}
-      />,
-      <Button 
-        icon={<DeleteOutlined />}
-        key="delete"
-      />,
-    ],
-  },
-];
-
 export default () => {
-  const [tableDataSource, setTableListDataSource] = useState([])
+  const [tableDataSource, setTableListDataSource] = useState([]);
   const [form] = useForm();
   const [open, setOpen] = useState(false);
+  const tableRef = useRef(); // 添加表格引用
+
+  const columns: ProColumns[] = [
+    {
+      title: '采集器组',
+      width: 200,
+      dataIndex: 'groupName',
+      render: (_) => <a>{_}</a>,
+    },
+    {
+      title: '团队',
+      dataIndex: 'teamName',
+    },
+    {
+      title: 'CPU限制',
+      dataIndex: 'maxCpus',
+    },
+    {
+      title: '内存限制',
+      dataIndex: 'maxMemory',
+      sorter: (a, b) => a.maxMemory - b.maxMemory,
+    },
+    {
+      title: '采集网口',
+      width: 400,
+      dataIndex: 'collectionPort',
+    },
+    {
+      title: '操作',
+      valueType: 'option',
+      key: 'option',
+      fixed: 'right',
+      width: 120,
+      render: (text, record, _, action) => [
+        <Button
+          key="copy"
+          onClick={() => {
+            action?.startEditable?.(record.id);
+          }}
+          disabled
+          icon={<CopyOutlined />}
+        />,
+        <Popconfirm
+          key="delete-confirm"
+          title="确定要删除吗？"
+          onConfirm={() => deleteItem(record)}
+          okText="确定"
+          cancelText="取消"
+        >
+          <Button 
+            icon={<DeleteOutlined />}
+            key="delete"
+          />
+        </Popconfirm>,
+      ],
+    },
+  ];
 
   const showDrawer = () => {
     setOpen(true);
@@ -77,9 +105,64 @@ export default () => {
     setOpen(false);
   };
 
+  // 优化删除函数，添加错误处理和表格刷新
+  const deleteItem = async (record) => {
+    try {
+      const res = await deleteConfigTable(record.id);
+      console.log(res, "删除结果");
+      
+      if(res?.status === 200) {
+        message.success('删除成功');
+        // 刷新表格数据 - 方法1: 直接调用查询函数
+        await queryTableList({});
+        tableRef.current?.reload(); // 强制刷新表格
+        // 或者方法2: 使用ProTable的reload方法(如果使用tableRef)
+        // tableRef.current?.reload();
+      } else {
+        message.error('删除失败');
+      }
+    } catch (error) {
+      console.error('删除出错:', error);
+      message.error('删除出错');
+    }
+  }
+
+  // 提取查询函数，方便复用
+  const queryTableList = async (params) => {
+    try {
+      const data = await getConfigTableList(params);
+      setTableListDataSource(data.content);
+      return {
+        data: data.content,
+        total: data.totalElements || 0,
+        success: true
+      };
+    } catch (error) {
+      console.error('查询数据出错:', error);
+      return {
+        data: [],
+        total: 0,
+        success: false
+      };
+    }
+  }
+
   const submitForm = async () => {
-    const values = await form.validateFields()
-    console.log(values, "values");
+    try {
+      const values = await form.validateFields();
+      const res = await addConfigTable(values);
+      console.log(res, "提交结果");
+      
+      if(res?.status === 200) {
+        await queryTableList({});
+        message.success("提交成功");
+        tableRef.current?.reload(); // 强制刷新表格
+        setOpen(false);
+      }
+    } catch (error) {
+      console.error("提交出错:", error);
+      message.error("提交出错");
+    }
   }
 
   return (
@@ -87,32 +170,22 @@ export default () => {
         <ProTable
             scroll={{ x: 'max-content' }}
             columns={columns}
-            request={async (params) => {
-                // 传递搜索参数到后端，params中会包含groupName的搜索值
-                console.log('搜索参数:', params);
-                // 实际项目中可以将params传递给接口，实现模糊搜索
-                const data = await getConfigTableList(params);
-                setTableListDataSource(data.content);
-                return {
-                  data: data.content,
-                  total: data.total || 0, // 确保分页正常工作
-                  success: true
-                };
-            }}
+            request={queryTableList} // 直接使用提取的函数
             rowKey="lcuuid"
             pagination={{
                 showQuickJumper: true,
+                showSizeChanger: true
             }}
             search={false}
             dateFormatter="string"
+            actionRef={tableRef} // 添加actionRef以便手动控制表格
             options={{
                 search: {
-                    name: 'groupName', // 指定搜索字段
-                    placeholder: '请输入采集器组名称', // 自定义占位符
-                    // 自定义搜索逻辑（可选，如果后端已处理则不需要）
-                    onSearch: (value) => {
-                        // 这里可以添加前端搜索逻辑
-                        console.log('搜索值:', value);
+                    name: 'groupName',
+                    placeholder: '请输入采集器组名称',
+                    onSearch: async (value) => {
+                        const res = await getConfigTableList({});
+                        console.log('搜索值:', value, res);
                     }
                 },
             }}

@@ -2,7 +2,7 @@ import { DownOutlined, DownloadOutlined, CopyOutlined, DeleteOutlined  } from '@
 import type { ProColumns } from '@ant-design/pro-components';
 import { ProTable, TableDropdown } from '@ant-design/pro-components';
 import { Button, Tag, Table, Tabs, Descriptions  } from 'antd';
-import {getActionCollectList} from "../../../services/server.js"
+import {getActionCollectList, } from "../../../services/server.js"
 import { useState } from 'react';
 
 export type Status = {
@@ -291,9 +291,9 @@ export default () => {
         // 表单搜索项会从 params 传入，传递给后端接口。
         console.log(params, sorter, filter);
         const data = await getActionCollectList()
-        console.log(data.content, "data---");
-        setTableListDataSource(data.content)
-        return data.content
+        console.log(data, "data---");
+        setTableListDataSource(data)
+        return data
         return Promise.resolve({
           data: tableListDataSource,
           success: true,
