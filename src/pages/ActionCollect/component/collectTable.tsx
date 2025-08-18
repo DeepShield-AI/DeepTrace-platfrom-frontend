@@ -3,7 +3,10 @@ import type { ProColumns } from '@ant-design/pro-components';
 import { ProTable, TableDropdown } from '@ant-design/pro-components';
 import { Button, Tag, Table, Tabs, Descriptions  } from 'antd';
 import {getActionCollectList, } from "../../../services/server.js"
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { history } from 'umi';
+import { useNavigate } from 'react-router-dom';
+import { expandDataMap } from '../../../constant'
 
 export type Status = {
   color: string;
@@ -96,181 +99,207 @@ const tableListDataSource = [
   }
 ];
 
-const columns: ProColumns[] = [
-  {
-    title: '名称',
-    width: 200,
-    dataIndex: 'name',
-    render: (_) => <a>{_}</a>,
-  },
-  {
-    title: '团队',
-    // width: 100,
-    dataIndex: 'group',
-    // render: (_, record) => (
-    //   <Tag color={record.status.color}>{record.status.text}</Tag>
-    // ),
-  },
-  {
-    title: '类型',
-    // width: 120,
-    dataIndex: 'archType',
-    align: 'right',
-    render: (_, record) => {
-      return (
-        _ == 0 ? "容器-V" : "--"
-      )
-    },
-    sorter: (a, b) => a.containers - b.containers,
-  },
-  {
-    title: '采集模式',
-    // width: 120,
-    dataIndex: 'tapMode',
-    align: 'right',
-    render: (_, record) => {
-      return (
-        _ == 0 ? "本地" : "--"
-      )
-    },
-    sorter: (a, b) => a.containers - b.containers,
-  },
-  {
-    title: '可用区',
-    // width: 120,
-    dataIndex: 'azName',
-    align: 'right',
-    sorter: (a, b) => a.containers - b.containers,
-  },
-  {
-    title: '组',
-    // width: 120,
-    dataIndex: 'vtapGroupName',
-  },
-  {
-    title: '总CPU（核）',
-    // width: 120,
-    dataIndex: 'cpuNum',
-    align: 'right',
-    sorter: (a, b) => a.containers - b.containers,
-  },
-  {
-    title: '运行环境IP',
-    // width: 120,
-    dataIndex: 'launchServer',
-    align: 'right',
-    sorter: (a, b) => a.containers - b.containers,
-  },
-  {
-    title: '所属容器集群',
-    // width: 120,
-    dataIndex: 'podClusterName',
-    align: 'right',
-    sorter: (a, b) => a.containers - b.containers,
-  },
-  {
-    title: '控制IP',
-    // width: 120,
-    dataIndex: 'ctrlIp',
-    align: 'right',
-    sorter: (a, b) => a.containers - b.containers,
-  },
-  {
-    title: '状态',
-    // width: 120,
-    dataIndex: 'state',
-    align: 'right',
-    sorter: (a, b) => a.containers - b.containers,
-  },
-  {
-    title: '控制器',
-    // width: 120,
-    dataIndex: 'curControllerIp',
-    align: 'right',
-    sorter: (a, b) => a.containers - b.containers,
-  },
-  {
-    title: '数据节点',
-    // width: 120,
-    dataIndex: 'curAnalyzerIp',
-    align: 'right',
-    sorter: (a, b) => a.containers - b.containers,
-  },
-  {
-    title: '操作',
-    valueType: 'option',
-    key: 'option',
-    fixed: 'right',
-    width: 120,
-    render: (text, record, _, action) => [
-      <Button
-        key="copy"
-        onClick={() => {
-          action?.startEditable?.(record.id);
-        }}
-        disabled
-        icon={<CopyOutlined></CopyOutlined>}
-      >
-        
-      </Button>,
-      <Button 
-        disabled 
-        href={record.url} 
-        key="delete"
-        icon={<DeleteOutlined />}
-      >
-        
-      </Button>,
-      <TableDropdown
-        key="actionGroup"
-        onSelect={() => action?.reload()}
-        menus={[
-          { key: 'edit', name: '编辑' },
-        ]}
-      />,
-    ],
-  },
-];
-
 
 
 export default () => {
   const [tableDataSource, setTableListDataSource] = useState([])
   const [expandRowList, setExpandRowList] = useState([])
+  const navigate = useNavigate();
 
-  const expandDataMap = {
-    arch: "体系架构",
-    archType: "类型",
-    completeRevision: "完整版本",
-    controllerIp: "控制IP",
-    cpuNum: "CPU数",
-    createTime: "创建时间",
-    ctrlIp: "控制IP",
-    ctrlMac: "控制Mac地址",
-    curAnalyzerIp: "当前分析IP",
-    curControllerIp: "当前控制IP",
-    currentK8sImage: "当前K8s镜像",
-    kernelVersion: "内核版本",
-    launchServer: "软件版本",
-    licenseType: "许可类型",
-    memorySize: "内存大小",
-    name: "采集器名称",
-    os: "操作系统",
-    regionName: "区域",
-    revision: "版本",
-    state: "状态",
-    updateTime: "更新时间",
-    vtapGroupName: "采集器组"
-  }
+  const columns: ProColumns[] = [
+    {
+      title: '名称',
+      width: 200,
+      dataIndex: 'name',
+      render: (_, item) => <a
+        onClick={() => {
+          console.log(_, item);
+          // history.push({
+          //   pathname: "/ActionDetail",
+          //   state: {
+          //     record: item
+          //   }
+          // })
+          navigate('/ActionDetail', {
+            state: {
+              item: item
+            }
+          })
+        }}
+      >{_}</a>,
+    },
+    {
+      title: '团队',
+      // width: 100,
+      dataIndex: 'group',
+      // render: (_, record) => (
+      //   <Tag color={record.status.color}>{record.status.text}</Tag>
+      // ),
+    },
+    {
+      title: '类型',
+      // width: 120,
+      dataIndex: 'archType',
+      align: 'right',
+      render: (_, record) => {
+        return (
+          _ == 0 ? "容器-V" : "--"
+        )
+      },
+      sorter: (a, b) => a.containers - b.containers,
+    },
+    {
+      title: '采集模式',
+      // width: 120,
+      dataIndex: 'tapMode',
+      align: 'right',
+      render: (_, record) => {
+        return (
+          _ == 0 ? "本地" : "--"
+        )
+      },
+      sorter: (a, b) => a.containers - b.containers,
+    },
+    {
+      title: '可用区',
+      // width: 120,
+      dataIndex: 'azName',
+      align: 'right',
+      sorter: (a, b) => a.containers - b.containers,
+    },
+    {
+      title: '组',
+      // width: 120,
+      dataIndex: 'vtapGroupName',
+    },
+    {
+      title: '总CPU（核）',
+      // width: 120,
+      dataIndex: 'cpuNum',
+      align: 'right',
+      sorter: (a, b) => a.containers - b.containers,
+    },
+    {
+      title: '运行环境IP',
+      // width: 120,
+      dataIndex: 'launchServer',
+      align: 'right',
+      sorter: (a, b) => a.containers - b.containers,
+    },
+    {
+      title: '所属容器集群',
+      // width: 120,
+      dataIndex: 'podClusterName',
+      align: 'right',
+      sorter: (a, b) => a.containers - b.containers,
+    },
+    {
+      title: '控制IP',
+      // width: 120,
+      dataIndex: 'ctrlIp',
+      align: 'right',
+      sorter: (a, b) => a.containers - b.containers,
+    },
+    {
+      title: '状态',
+      // width: 120,
+      dataIndex: 'state',
+      align: 'right',
+      sorter: (a, b) => a.containers - b.containers,
+    },
+    {
+      title: '控制器',
+      // width: 120,
+      dataIndex: 'curControllerIp',
+      align: 'right',
+      sorter: (a, b) => a.containers - b.containers,
+    },
+    {
+      title: '数据节点',
+      // width: 120,
+      dataIndex: 'curAnalyzerIp',
+      align: 'right',
+      sorter: (a, b) => a.containers - b.containers,
+    },
+    {
+      title: '操作',
+      valueType: 'option',
+      key: 'option',
+      fixed: 'right',
+      width: 120,
+      render: (text, record, _, action) => [
+        <Button
+          key="copy"
+          onClick={() => {
+            action?.startEditable?.(record.id);
+          }}
+          disabled
+          icon={<CopyOutlined></CopyOutlined>}
+        >
+          
+        </Button>,
+        <Button 
+          disabled 
+          href={record.url} 
+          key="delete"
+          icon={<DeleteOutlined />}
+        >
+          
+        </Button>,
+        <TableDropdown
+          key="actionGroup"
+          onSelect={() => action?.reload()}
+          menus={[
+            { key: 'edit', name: '编辑' },
+          ]}
+        />,
+      ],
+    },
+  ];
+
+    // 添加清理函数
+  useEffect(() => {
+    return () => {
+      // 清理逻辑
+      setTableListDataSource([]);  // 清空数据
+    };
+  }, []);
+
+  // const expandDataMap = {
+  //   arch: "体系架构",
+  //   archType: "类型",
+  //   completeRevision: "完整版本",
+  //   controllerIp: "控制IP",
+  //   cpuNum: "CPU数",
+  //   createTime: "创建时间",
+  //   ctrlIp: "控制IP",
+  //   ctrlMac: "控制Mac地址",
+  //   curAnalyzerIp: "当前分析IP",
+  //   curControllerIp: "当前控制IP",
+  //   currentK8sImage: "当前K8s镜像",
+  //   kernelVersion: "内核版本",
+  //   launchServer: "软件版本",
+  //   licenseType: "许可类型",
+  //   memorySize: "内存大小",
+  //   name: "采集器名称",
+  //   os: "操作系统",
+  //   regionName: "区域",
+  //   revision: "版本",
+  //   state: "状态",
+  //   updateTime: "更新时间",
+  //   vtapGroupName: "采集器组"
+  // }
   const expandedRowRender = (item) => {
     
     return (
         <Descriptions title="基本信息"> 
           {
             Object.keys(item).map(key => {
-              return (
-                <Descriptions.Item label={expandDataMap[key]}>{item[key]}</Descriptions.Item>
-              )
+                if(expandDataMap[key]) {
+                    return (
+                        <Descriptions.Item key={item.name} label={expandDataMap[key]}>{item[key] || "-"}</Descriptions.Item>
+                    )
+                }
             })
           }
         </Descriptions>
@@ -289,10 +318,8 @@ export default () => {
       columns={columns}
       request={async (params, sorter, filter) => {
         // 表单搜索项会从 params 传入，传递给后端接口。
-        console.log(params, sorter, filter);
         const data = await getActionCollectList()
-        console.log(data, "data---");
-        setTableListDataSource(data)
+        setTableListDataSource(data?.content)
         return data
         return Promise.resolve({
           data: tableListDataSource,

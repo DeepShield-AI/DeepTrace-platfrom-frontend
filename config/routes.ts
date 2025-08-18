@@ -124,6 +124,10 @@ export default [
     ]
   },
   {
+    path: '/ActionDetail',
+    component: './ActionCollect/component/collectTableDetail.tsx'
+  },
+  {
     path: '/Alert',
     name: '告警管理',
     icon: "WarningOutlined",

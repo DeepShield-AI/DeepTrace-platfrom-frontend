@@ -7,6 +7,8 @@ import {
 // mock接口数据
 let isMock = true
 
+const ipAddress = "202.112.237.37"
+
 const getAllOverView = async () => {
 
     try {
@@ -64,7 +66,6 @@ const getConfigTableList = async (data) => {
 const addConfigTable = async (data) => {
     try { 
         const res = await axios.post("http://114.215.254.187:8082/api/user/config/add", data)
-        console.log(res, "res");
         return res
     } catch (error) {
         console.error("==ERROR==", error)
@@ -74,14 +75,31 @@ const addConfigTable = async (data) => {
 const deleteConfigTable = async (data) => {    
     try { 
         const res = await axios.delete(`http://114.215.254.187:8082/api/user/config/delete/${data}`)
+        return res
+    } catch (error) {
+        console.error("==ERROR==", error)
+    }
+}
+
+const logTableQuery = async (data) => {    
+    try { 
+        const res = await axios.get(`http://114.215.254.187:8082/api/esAgentLog/search`)
         console.log(res, "res");
         return res
     } catch (error) {
         console.error("==ERROR==", error)
     }
-
 }
 
+const basicTableQuery = async (data) => {    
+    try { 
+        const res = await axios.get(`http://114.215.254.187:8082/api/esAgentConfig/search`)
+        console.log(res, "res");
+        return res
+    } catch (error) {
+        console.error("==ERROR==", error)
+    }
+}
 
 
 export {
@@ -90,5 +108,7 @@ export {
     getActionCollectList,
     getConfigTableList,
     addConfigTable,
-    deleteConfigTable
+    deleteConfigTable,
+    logTableQuery,
+    basicTableQuery
 }
