@@ -17,11 +17,11 @@ import {
 
 import { Button, Drawer, List, Radio, Space, message, Modal, Tabs, Descriptions } from 'antd';
 
-import { PlusOutlined, PlusSquareTwoTone, PlusCircleTwoTone, EllipsisOutlined, PlusSquareFilled  } from '@ant-design/icons';
+import { PlusOutlined, PlusSquareTwoTone, PlusCircleTwoTone, EllipsisOutlined, PlusSquareFilled, SelectOutlined  } from '@ant-design/icons';
 
-import { useLocation } from 'react-router-dom';
+import { useLocation, Link } from 'react-router-dom';
 
-import { expandDataMap } from '../../../constant'
+import { expandDataMap, basicDataMap } from '../../../constant'
 
 import {
     logTableQuery,
@@ -29,6 +29,7 @@ import {
 } from "../../../services/server.js"
 
 import {formatDate} from "../.././../utils"
+import { history } from '@umijs/max';
 // import './index.less'
 
 const ActionCollect = () => {
@@ -38,6 +39,7 @@ const ActionCollect = () => {
     const [isModalOpen, setIsModalOpen] = useState(false)
     const [itemDetail, setItemDetail] = useState({})
     const [logTableData, setLogTableData] = useState([])
+    const [basicTableData, setBasicTableData] = useState([])
 
     const location = useLocation();
     
@@ -66,15 +68,34 @@ const ActionCollect = () => {
         },
     ];
     
-    useEffect(async () => {
+    useEffect( () => {
         const { item } = location.state || {};
         setItemDetail(item)
-        await getLogTableData()
+        // getLogTableData()
+        getBasicTableData()
     }, [])
 
-    const getLogTableData = async () => {
+    const getBasicTableData = async () => {
         try {
-            const res = await logTableQuery()
+            const res = await basicTableQuery()
+            console.log(res, "basic");
+            const { data = [{}]} = res
+            setBasicTableData(data[0])
+        } catch (error) {
+            console.error('查询数据出错:', error);
+        }
+    }
+
+    const getLogTableData = async (params, data, filter) => {
+        console.log(params, filter, "ccc");
+        
+        try {
+            const {current, pageSize, content} = params
+            const res = await logTableQuery({
+                current,
+                pageSize,
+                keyword: content
+            })
             const { data = [] } = res
             const dataRes = data?.content?.map(item => {
                 return item.logs
@@ -82,7 +103,7 @@ const ActionCollect = () => {
             setLogTableData(dataRes)
             return {
                 data: dataRes,
-                total: dataRes.length, //todo 待修改
+                total: data.totalElements, //todo 待修改
                 success: true
             }
         } catch (error) {
@@ -115,9 +136,9 @@ const ActionCollect = () => {
             <Descriptions> 
                 {
                     Object.keys(item).map(key => {
-                        if(expandDataMap[key]) {
+                        if(basicDataMap[key]) {
                             return (
-                                <Descriptions.Item key={item.name} label={expandDataMap[key]}>{item[key] || "-"}</Descriptions.Item>
+                                <Descriptions.Item key={item.name} label={basicDataMap[key]}>{item[key] || "-"}</Descriptions.Item>
                             )
                         }
                     })
@@ -139,8 +160,8 @@ const ActionCollect = () => {
                     getLogTableData
                 }
                 search={{
-                    optionRender: false,
-                    collapsed: false,
+                    // optionRender: true,
+                    // collapsed: false,
                 }}
                 dateFormatter="string"
                 headerTitle="表格标题"
@@ -183,23 +204,29 @@ const ActionCollect = () => {
                     title= "配置信息"
                 >
                     <div>
-                        {expandedRowRender(itemDetail)}
+                        {configTableRender(basicTableData)}
                     </div>
                 </ProCard>
         },
         {
-            label: '监控信息',
-            key: '3',
-            disabled: true,
-            children: 
-                <ProCard
-                    ghost
-                    title= "监控信息"
-                >
-                    <div>
-                        {expandedRowRender(itemDetail)}
-                    </div>
-                </ProCard>
+            label: <Link 
+                to="/Monitor/custom"
+                style={{color: "#000"}}    
+            ><SelectOutlined />监控信息</Link>,
+            key: '3'
+            // disabled: true,
+            // onClick: () => {
+            //     history.push("/Monitor/Monitor/custom")
+            // },
+            // children: 
+            //     <ProCard
+            //         ghost
+            //         title= "监控信息"
+            //     >
+            //         <div>
+            //             {expandedRowRender(itemDetail)}
+            //         </div>
+            //     </ProCard>
         },
         {
             label: '运行日志',

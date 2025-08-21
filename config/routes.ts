@@ -50,6 +50,23 @@ export default [
   //   icon: "SecurityScan",
   // },
   {
+    path: '/Monitor',
+    name: '视图列表',
+    icon: "FundProjectionScreenOutlined",
+    routes: [
+      {
+        path: '/Monitor/custom',
+        name: '自定义视图', 
+        component: './MonitorNative'
+      },
+      {
+        path: '/Monitor/native',
+        name: '内置视图',
+        component: './MonitorNative'
+      },
+    ]
+  },
+  {
     path: '/Network',
     name: '网络观测',
     icon: "CloudSync",

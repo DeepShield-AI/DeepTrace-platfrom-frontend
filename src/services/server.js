@@ -81,9 +81,21 @@ const deleteConfigTable = async (data) => {
     }
 }
 
-const logTableQuery = async (data) => {    
+const logTableQuery = async (data) => {
     try { 
-        const res = await axios.get(`http://114.215.254.187:8082/api/esAgentLog/search`)
+        const {
+            current = 1,
+            pageSize = 10,
+            keyword
+        } = data
+        const res = await axios.get(`http://114.215.254.187:8082/api/esAgentLog/search`, {
+            params: {
+                pageNum: current - 1,
+                pageSize: pageSize,
+                keyword
+            }
+        })
+        
         console.log(res, "res");
         return res
     } catch (error) {
@@ -101,6 +113,20 @@ const basicTableQuery = async (data) => {
     }
 }
 
+const monitorChartQuery = async (data) => {    
+    try { 
+        const res = await axios.get(`http://114.215.254.187:8082/api/esAgentStat/search`, {
+            params: {
+                ...data
+            }
+        })
+        console.log(res, "res");
+        return res
+    } catch (error) {
+        console.error("==ERROR==", error)
+    }
+}
+
 
 export {
     getAllOverView,
@@ -110,5 +136,6 @@ export {
     addConfigTable,
     deleteConfigTable,
     logTableQuery,
-    basicTableQuery
+    basicTableQuery,
+    monitorChartQuery
 }

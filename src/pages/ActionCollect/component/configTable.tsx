@@ -179,16 +179,21 @@ export default () => {
             search={false}
             dateFormatter="string"
             actionRef={tableRef} // 添加actionRef以便手动控制表格
-            options={{
-                search: {
-                    name: 'groupName',
-                    placeholder: '请输入采集器组名称',
-                    onSearch: async (value) => {
-                        const res = await getConfigTableList({});
-                        console.log('搜索值:', value, res);
-                    }
-                },
-            }}
+            // options={{
+            //     search: {
+            //         name: 'groupName',
+            //         placeholder: '请输入采集器组名称',
+            //         onSearch: async (value) => {
+            //             const res = await getConfigTableList({});
+            //             console.log('搜索值:', value, res);
+            //             return {
+            //               data: [],
+            //               total: 3 || 0,
+            //               success: true
+            //             }
+            //         }
+            //     },
+            // }}
             toolBarRender={() => [
                 <Button key="addconfig" type="primary" onClick={showDrawer}>
                     新增配置
