@@ -96,12 +96,12 @@ export default [
       {
         path: "/Application/track",
         name: "调用链追踪",
-        component: "./Protocol"
+        component: "./ApplicationTrack"
       },
       {
         path: "/Application/topology",
         name: "调用链拓扑",
-        component: "./Protocol"
+        component: "./ApplicationTopology"
       },
       {
         path: "/Application/log",

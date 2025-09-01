@@ -97,8 +97,10 @@ const ActionCollect = () => {
                 keyword: content
             })
             const { data = [] } = res
+            console.log(res, "logRRR");
+            
             const dataRes = data?.content?.map(item => {
-                return item.logs
+                return item
             })
             setLogTableData(dataRes)
             return {
@@ -113,7 +115,7 @@ const ActionCollect = () => {
                 total: 0,
                 success: false
             };
-        }        
+        }
     }
     const expandedRowRender = (item) => {
         return (
