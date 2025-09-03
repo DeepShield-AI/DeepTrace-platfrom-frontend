@@ -17,7 +17,11 @@ import {
     Row,
     Col,
     Alert,
-    message
+    message,
+    Drawer,
+    Descriptions,
+    Tabs,
+    Timeline
 } from 'antd';
 import {
     CheckCircleOutlined,
@@ -25,12 +29,20 @@ import {
     QuestionCircleOutlined,
     ThunderboltOutlined,
     DashboardOutlined,
-    ReloadOutlined
+    ReloadOutlined,
+    CloseOutlined,
+    InfoCircleOutlined,
+    ProfileOutlined
 } from '@ant-design/icons';
 import { Column, Line, Area } from '@ant-design/plots';
 
 // 导入你的接口
-import { traceTableQuery, traceChartQuery } from '../../services/server.js';
+import { traceTableQuery, traceChartQuery, getFlamegraphDataByTraceId } from '../../services/server.js';
+import GraphVisEGraphVisualizationxample from '../../components/topology/index.jsx';
+
+import {transformToTree} from "../../utils/span2tree.js"
+import {convertToGraphStructure} from "../../utils/convert2graph.js"
+const { TabPane } = Tabs;
 
 // 主监控组件
 const MonitorNative = () => {
@@ -60,11 +72,51 @@ const MonitorNative = () => {
     const [allProtocols, setAllProtocols] = useState([]);
     const [allStatusOptions, setAllStatusOptions] = useState([]);
 
+    // 抽屉状态
+    const [drawerVisible, setDrawerVisible] = useState(false);
+    const [currentTrace, setCurrentTrace] = useState(null);
+    const [traceDetailLoading, setTraceDetailLoading] = useState(false);
+    const [spanData, setSpanData] = useState([]);
+    const [drawerWidth, setDrawerWidth] = useState(1200);
+
+    
+    const [graphData, setGraphData] = useState({})
+    const [relationData, setRelationData] = useState({})
+    const [flameTreeData, setFlameTreeData] = useState([])
+
+
     // 耗时阈值配置（单位：纳秒）
     const DURATION_THRESHOLD = {
         NORMAL: 5 * 1000 * 1000,   // 5ms（正常）
         UNKNOWN: 10 * 1000 * 1000  // 10ms（未知，超过5ms不足10ms）
     };
+
+    const getFlamegraphDataByTraceIdFun = async (traceId) => {
+        const res = await getFlamegraphDataByTraceId(traceId)
+        console.log(res, "rrrrr");
+        
+        const spansList = res?.data?.records
+        const relationData = res?.data?.data
+        
+        const spans = spansList?.map((spans_ori) => {
+            return {
+            ...spans_ori.metric,
+            ...spans_ori.content,
+            ...spans_ori.context,
+            ...spans_ori.tag.ebpf_tag,
+            ...spans_ori.tag.docker_tag
+            }
+        })
+        const spansTree = transformToTree(spans)
+        console.log(spans, spansTree, "火焰图原始数据--");
+        
+        setFlameTreeData(spansTree)
+        
+        setGraphData(convertToGraphStructure(spans))
+        setRelationData(relationData)
+        
+        fetchTraceDetail(traceId);
+    }
 
     // 获取表格数据函数
     const fetchTraceData = async () => {
@@ -74,7 +126,7 @@ const MonitorNative = () => {
                 protocols: protocolFilters,
                 endpoints: endpointFilters,
                 statusCodes: statusFilters,
-                pageNum: pagination.pageNum,
+                pageNo: pagination.pageNum,
                 pageSize: pagination.pageSize
             };
             
@@ -86,19 +138,6 @@ const MonitorNative = () => {
                 ...pagination,
                 total: data.totalElements || 0,
             });
-            // 首次加载时获取所有选项（修复重置问题）
-            // if (allEndpoints.length === 0 || allProtocols.length === 0) {
-            //     const uniqueEndpoints = [...new Set(data.allEndpoints || [])];
-            //     const uniqueProtocols = [...new Set(data.allProtocols || [])];
-                
-            //     setAllEndpoints(uniqueEndpoints);
-            //     setAllProtocols(uniqueProtocols);
-                
-            //     // 初始选中所有选项
-            //     setEndpointFilters(uniqueEndpoints);
-            //     setProtocolFilters(uniqueProtocols);
-            //     setStatusFilters(allStatusOptions.map(opt => opt.value));
-            // }
 
         } catch (error) {
             message.error('Trace监控数据获取失败，请刷新重试');
@@ -169,27 +208,62 @@ const MonitorNative = () => {
         }
     };
 
-    // 当筛选条件或分页变化时重新获取数据
-    // useEffect(() => {
-    //     fetchTraceData();
-    //     fetchChartData();
-    // }, [statusFilters, endpointFilters, protocolFilters, pagination.pageNum, pagination.pageSize]);
+    // 获取Trace详情数据
+    const fetchTraceDetail = async (traceId) => {
+        setTraceDetailLoading(true);
+        try {
+            // 这里模拟获取详情数据，实际应调用API
+            // const response = await getTraceDetail(traceId);
+            // setCurrentTrace(response.data);
+            
+            // 模拟数据
+            const mockDetail = tableListDataSource.find(item => item.trace_id === traceId);
+            setCurrentTrace(mockDetail);
+            
+            // 模拟span数据
+            const mockSpans = [
+                {
+                    id: 'span1',
+                    name: 'API Gateway',
+                    startTime: new Date(Date.now() - 5000).toISOString(),
+                    duration: 1200000,
+                    tags: { component: 'nginx', http_method: 'GET' }
+                },
+                {
+                    id: 'span2',
+                    name: 'User Service',
+                    startTime: new Date(Date.now() - 4000).toISOString(),
+                    duration: 800000,
+                    tags: { component: 'spring-boot', db_query: 'SELECT * FROM users' }
+                },
+                {
+                    id: 'span3',
+                    name: 'Database',
+                    startTime: new Date(Date.now() - 3500).toISOString(),
+                    duration: 500000,
+                    tags: { component: 'mysql', query: 'SELECT * FROM users' }
+                }
+            ];
+            setSpanData(mockSpans);
+            
+        } catch (error) {
+            message.error('获取Trace详情失败');
+            console.error('Trace detail fetch error:', error);
+        } finally {
+            setTraceDetailLoading(false);
+        }
+    };
 
     useEffect(() => {
         fetchFilterOptions();
     }, []);
 
     useEffect(() => {
-        // if (allEndpoints.length > 0) { // 确保选项已加载
-            fetchTraceData();
-            // fetchChartData();
-        // }
+        fetchTraceData();
     }, [statusFilters, endpointFilters, protocolFilters, pagination.pageNum, pagination.pageSize]);
 
     // 筛选逻辑处理
     const handleStatusFilterChange = (checkedValues) => {
-        console.log(checkedValues, "cc");
-        
         setPagination({...pagination, pageNum: 1});
         setStatusFilters(checkedValues);
     };
@@ -210,12 +284,13 @@ const MonitorNative = () => {
         if (duration <= DURATION_THRESHOLD.UNKNOWN) return 'unknown';
         return 'error';
     };
+    
     const getStatusByCode = (code) => {
         const code_num = Number(code)
         if([102,100,101].includes(code_num)) {
             return "handling"
         }
-        if([200, 201, 202].includes(code_num)) {
+        if([200, 201, 202, 205].includes(code_num)) {
             return "success"
         }
     }
@@ -238,7 +313,15 @@ const MonitorNative = () => {
 
     // 详情页跳转处理
     const handleViewDetail = (record) => {
-        // 详情页跳转逻辑
+        getFlamegraphDataByTraceIdFun(record.trace_id)
+        setDrawerVisible(true);
+    };
+
+    // 关闭抽屉
+    const handleCloseDrawer = () => {
+        setDrawerVisible(false);
+        setCurrentTrace(null);
+        setSpanData([]);
     };
 
     // 处理表格分页变化
@@ -249,21 +332,6 @@ const MonitorNative = () => {
             pageSize: pageConfig.pageSize,
         });
     };
-
-    // 统计数据计算（仅当前页）
-    const currentPageData = tableListDataSource || [];
-    
-    const normalCount = currentPageData.filter(item => 
-        getStatusByDuration(item.e2e_duration) === 'normal'
-    ).length;
-    
-    const unknownCount = currentPageData.filter(item => 
-        getStatusByDuration(item.e2e_duration) === 'unknown'
-    ).length;
-    
-    const errorCount = currentPageData.filter(item => 
-        getStatusByDuration(item.e2e_duration) === 'error'
-    ).length;
 
     // 图表配置
     const requestChartConfig = {
@@ -332,6 +400,52 @@ const MonitorNative = () => {
         ? (chartData.latencyData.reduce((sum, item) => sum + item.latency, 0) / chartData.latencyData.length).toFixed(2)
         : 0;
 
+
+    function addNodeLevels(nodes = []) {
+        // 1. 构建span_id到节点的映射（便于快速查找父/子节点）
+        console.log(nodes, "nodes2");
+        
+        const spanToNode = {};
+        nodes.forEach(node => {
+            spanToNode[node.span_id] = { ...node }; // 复制节点，避免修改原对象
+        });
+
+        // 2. 找到根节点（parent_id为null的节点）
+        let root = null;
+        for (const node of nodes) {
+            if (node.parent_id === null) {
+                root = spanToNode[node.span_id];
+                break;
+            }
+        }
+
+        if (!root) {
+            throw new Error("未找到根节点（parent_id为null的节点）");
+        }
+
+        // 3. 根节点层级为0
+        root.level = 0;
+
+        // 4. 广度优先遍历（BFS）计算所有节点的层级
+        const queue = [root];
+        while (queue.length > 0) {
+            const currentNode = queue.shift(); // 取出当前层的节点
+
+            // 遍历当前节点的子节点（child_ids中的span_id）
+            currentNode.child_ids.forEach(childSpanId => {
+                const childNode = spanToNode[childSpanId];
+                if (childNode) {
+                    // 子节点层级 = 父节点层级 + 1
+                    childNode.level = currentNode.level + 1;
+                    queue.push(childNode); // 加入队列，用于遍历其下一级子节点
+                }
+            });
+        }
+
+        // 5. 返回添加了level字段的节点数组（保持原数组顺序）
+        return nodes.map(node => spanToNode[node.span_id]);
+    }
+
     return (
         <PageContainer
             content={
@@ -373,13 +487,6 @@ const MonitorNative = () => {
                                         style={{ width: '100%' }}
                                     >
                                         {option}
-                                        {/* <Badge 
-                                            status={
-                                                option.value === 'normal' ? 'success' : 
-                                                option.value === 'unknown' ? 'warning' : 'error'
-                                            } 
-                                            text={option.label} 
-                                        /> */}
                                     </Checkbox>
                                 ))}
                             </Space>
@@ -505,40 +612,6 @@ const MonitorNative = () => {
                         </Col>
                     </Row>
                     
-                    {/* 顶部统计卡片（当前页数据统计） */}
-                    {/* <Row gutter={16} style={{ marginBottom: 16 }}>
-                        <Col span={8}>
-                            <Card size="small">
-                                <Statistic
-                                    title="正常链路"
-                                    value={normalCount}
-                                    valueStyle={{ color: '#3f8600' }}
-                                    prefix={<CheckCircleOutlined />}
-                                />
-                            </Card>
-                        </Col>
-                        <Col span={8}>
-                            <Card size="small">
-                                <Statistic
-                                    title="待观察链路"
-                                    value={unknownCount}
-                                    valueStyle={{ color: '#faad14' }}
-                                    prefix={<QuestionCircleOutlined />}
-                                />
-                            </Card>
-                        </Col>
-                        <Col span={8}>
-                            <Card size="small">
-                                <Statistic
-                                    title="异常链路"
-                                    value={errorCount}
-                                    valueStyle={{ color: '#cf1322' }}
-                                    prefix={<ExclamationCircleOutlined />}
-                                />
-                            </Card>
-                        </Col>
-                    </Row> */}
-
                     {/* 空数据提示 */}
                     {tableListDataSource.length === 0 && !loading && (
                         <Alert 
@@ -680,6 +753,167 @@ const MonitorNative = () => {
                     />
                 </ProCard>
             </ProCard>
+            
+            {/* Trace详情抽屉 */}
+            <Drawer
+                title={
+                    <div style={{ display: 'flex', alignItems: 'center' }}>
+                        <ProfileOutlined style={{ marginRight: 8, fontSize: 18 }} />
+                        <span style={{ fontSize: 18, fontWeight: 'bold' }}>Trace链路详情</span>
+                    </div>
+                }
+                width={drawerWidth}
+                closable={true}
+                onClose={handleCloseDrawer}
+                open={drawerVisible}
+                extra={
+                    <Button 
+                        icon={<CloseOutlined />} 
+                        onClick={handleCloseDrawer}
+                        style={{ border: 'none', fontSize: 16 }}
+                    />
+                }
+                bodyStyle={{ padding: 24 }}
+            >
+                {traceDetailLoading ? (
+                    <div style={{ textAlign: 'center', padding: '80px 0' }}>
+                        <Spin size="large" />
+                        <p style={{ marginTop: 16 }}>加载Trace详情中...</p>
+                    </div>
+                ) : currentTrace ? (
+                    <Tabs defaultActiveKey="1" type="card" style={{ height: '100%' }}>
+                        {/* Tab 1: 链路基本信息 */}
+                        <TabPane tab="链路基本信息" key="1">
+                            {/* 基本信息卡片 */}
+                            <Card 
+                                title="链路基本信息" 
+                                bordered={false}
+                                style={{ marginBottom: 24 }}
+                                headStyle={{ fontSize: 16, fontWeight: 'bold' }}
+                            >
+                                <Row gutter={24}>
+                                    <Col span={12}>
+                                        <Descriptions column={1} size="middle">
+                                            <Descriptions.Item label="追踪ID">
+                                                <Tag color="blue" style={{ fontSize: 14 }}>{currentTrace.trace_id}</Tag>
+                                            </Descriptions.Item>
+                                            <Descriptions.Item label="状态">
+                                                {renderStatusTag(currentTrace)}
+                                            </Descriptions.Item>
+                                            <Descriptions.Item label="端点">
+                                                <div style={{ fontWeight: 'bold', fontSize: 15 }}>{currentTrace.endpoint}</div>
+                                            </Descriptions.Item>
+                                            <Descriptions.Item label="协议">
+                                                <Tag color="purple" style={{ fontSize: 14 }}>{currentTrace.protocol}</Tag>
+                                            </Descriptions.Item>
+                                        </Descriptions>
+                                    </Col>
+                                    <Col span={12}>
+                                        <Descriptions column={1} size="middle">
+                                            <Descriptions.Item label="客户端">
+                                                <div style={{ fontWeight: 'bold' }}>
+                                                    {currentTrace.client_ip}:{currentTrace.client_port}
+                                                </div>
+                                            </Descriptions.Item>
+                                            <Descriptions.Item label="服务端">
+                                                <div style={{ fontWeight: 'bold' }}>
+                                                    {currentTrace.server_ip}:{currentTrace.server_port}
+                                                </div>
+                                            </Descriptions.Item>
+                                            <Descriptions.Item label="端到端耗时">
+                                                <span style={{ fontWeight: 'bold', fontSize: 16, color: '#1890ff' }}>
+                                                    {(currentTrace.e2e_duration / 1000).toFixed(2)} ms
+                                                </span>
+                                            </Descriptions.Item>
+                                            <Descriptions.Item label="Span数量">
+                                                <span style={{ fontWeight: 'bold', fontSize: 16 }}>
+                                                    {currentTrace.span_num}
+                                                </span>
+                                            </Descriptions.Item>
+                                        </Descriptions>
+                                    </Col>
+                                </Row>
+                            </Card>
+                            
+                            {/* 原始数据卡片 */}
+                            <Card 
+                                title="原始数据" 
+                                bordered={false}
+                                headStyle={{ fontSize: 16, fontWeight: 'bold' }}
+                            >
+                                <pre style={{ 
+                                    background: '#f6f8fa', 
+                                    padding: 16, 
+                                    borderRadius: 4,
+                                    maxHeight: 300,
+                                    overflowY: 'auto',
+                                    fontSize: 13,
+                                    whiteSpace: 'pre-wrap',
+                                    wordBreak: 'break-all'
+                                }}>
+                                    {JSON.stringify(currentTrace, null, 2)}
+                                </pre>
+                            </Card>
+                        </TabPane>
+
+                        {/* Tab 2: 拓扑图 */}
+                        <TabPane tab="拓扑图" key="2">
+                            <Card 
+                                bordered={false}
+                                style={{ height: '100%' }}
+                                bodyStyle={{ 
+                                    height: 'calc(100% - 56px)', 
+                                    display: 'flex', 
+                                    justifyContent: 'center', 
+                                    alignItems: 'center',
+                                    background: '#f9f9f9'
+                                }}
+                            >
+                                <div style={{ textAlign: 'center', width: "100%" }}>
+                                    <GraphVisEGraphVisualizationxample
+                                        nodes={addNodeLevels(graphData.nodes)}
+                                        edges={graphData.edges}
+                                        relationData={relationData}
+                                    ></GraphVisEGraphVisualizationxample> 
+                                </div>
+                            </Card>
+                        </TabPane>
+
+                        {/* Tab 3: 火焰图 */}
+                        <TabPane tab="火焰图" key="3">
+                            <Card 
+                                bordered={false}
+                                style={{ height: '100%' }}
+                                bodyStyle={{ 
+                                    height: 'calc(100% - 56px)', 
+                                    display: 'flex', 
+                                    justifyContent: 'center', 
+                                    alignItems: 'center',
+                                    background: '#f9f9f9'
+                                }}
+                            >
+                                <div style={{ textAlign: 'center' }}>
+                                    <img 
+                                        src="/path/to/flamegraph-placeholder.png" 
+                                        alt="火焰图" 
+                                        style={{ maxWidth: '100%', maxHeight: 500 }}
+                                    />
+                                    <p style={{ marginTop: 16, color: '#666' }}>
+                                        火焰图展示方法调用耗时分布和调用栈深度
+                                    </p>
+                                </div>
+                            </Card>
+                        </TabPane>
+                    </Tabs>
+                ) : (
+                    <Alert 
+                        message="未找到Trace详情信息" 
+                        type="warning" 
+                        showIcon 
+                        style={{ marginTop: 24 }}
+                    />
+                )}
+            </Drawer>
         </PageContainer>
     );
 };

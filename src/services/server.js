@@ -9,6 +9,7 @@ let isMock = true
 
 // const ipAddress = "202.112.237.37"
 const ipAddress = "http://114.215.254.187:8081"
+const flameIpAdress = "http://114.215.254.187:8088"
 
 
 const getAllOverView = async () => {
@@ -177,6 +178,19 @@ const traceChartQuery = async (data) => {
     }
 }
 
+const getFlamegraphDataByTraceId = async (traceId) => {    
+    try { 
+        const res = await axios.get(`${flameIpAdress}/flamegraphList`, {
+            params: {
+                traceId: traceId
+            }
+        })
+        const {data = {}} = res
+        return data
+    } catch (error) {
+        console.error("==ERROR==", error)
+    }
+}
 
 export {
     getAllOverView,
@@ -189,5 +203,6 @@ export {
     basicTableQuery,
     monitorChartQuery,
     traceTableQuery,
-    traceChartQuery
+    traceChartQuery,
+    getFlamegraphDataByTraceId
 }
