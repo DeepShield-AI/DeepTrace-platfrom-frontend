@@ -37,7 +37,7 @@ import {
 import { Column, Line, Area } from '@ant-design/plots';
 
 // 导入你的接口
-import { traceTableQuery, traceChartQuery, getFlamegraphDataByTraceId } from '../../services/server.js';
+import { traceTableQuery, traceChartQuery, getFlamegraphDataByTraceId, getFilters } from '../../services/server.js';
 import GraphVisEGraphVisualizationxample from '../../components/topology/index.jsx';
 
 import {transformToTree} from "../../utils/span2tree.js"
@@ -154,11 +154,15 @@ const MonitorNative = () => {
                 pageNum: 1,
                 pageSize: 10
             });
+
+            const filters = await getFilters()
+            console.log(filters, "filters");
+            
             
             const data = response?.data || {};
-            const uniqueEndpoints = [...new Set(data.allEndpoints || [])];
-            const uniqueProtocols = [...new Set(data.allProtocols || [])];            
-            const uniqueCode = [...new Set(data.allStatusOptions || [])];
+            const uniqueEndpoints = [...new Set(filters.allEndpoints || [])];
+            const uniqueProtocols = [...new Set(filters.allProtocols || [])];            
+            const uniqueCode = [...new Set(filters.allStatusOptions || [])];
 
             
             setAllEndpoints(uniqueEndpoints);
