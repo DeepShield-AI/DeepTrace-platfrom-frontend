@@ -315,7 +315,7 @@ const GraphVisualization = ({ relationData }) => {
 
     return (
         <div className="graph-container" style={{ 
-            height: '400px', 
+            height: '800px', 
             position: 'relative',
             display: 'flex',
             justifyContent: 'center',

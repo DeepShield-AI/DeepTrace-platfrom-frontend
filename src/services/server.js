@@ -204,6 +204,20 @@ const getFilters = async (data) => {
     }
 }
 
+const getTraceDetail = async (traceId) => {    
+    try { 
+        const res = await axios.get(`${ipAddress}/api/esTraces/traceDetail`, {
+            params: {
+                traceId: traceId
+            }
+        })
+        const {data = {}} = res
+        return data
+    } catch (error) {
+        console.error("==ERROR==", error)
+    }
+}
+
 export {
     getAllOverView,
     getIPData,
@@ -217,5 +231,6 @@ export {
     traceTableQuery,
     traceChartQuery,
     getFlamegraphDataByTraceId,
-    getFilters
+    getFilters,
+    getTraceDetail
 }

@@ -21,7 +21,9 @@ import {
     Drawer,
     Descriptions,
     Tabs,
-    Timeline
+    Timeline,
+    Spin,
+    Tooltip
 } from 'antd';
 import {
     CheckCircleOutlined,
@@ -32,13 +34,17 @@ import {
     ReloadOutlined,
     CloseOutlined,
     InfoCircleOutlined,
-    ProfileOutlined
+    ProfileOutlined,
+    UnorderedListOutlined,
+    UpOutlined,
+    DownOutlined
 } from '@ant-design/icons';
 import { Column, Line, Area } from '@ant-design/plots';
 
 // 导入你的接口
-import { traceTableQuery, traceChartQuery, getFlamegraphDataByTraceId, getFilters } from '../../services/server.js';
+import { traceTableQuery, traceChartQuery, getFlamegraphDataByTraceId, getFilters, getTraceDetail } from '../../services/server.js';
 import GraphVisEGraphVisualizationxample from '../../components/topology/index.jsx';
+import FlameGraphMain from "../../components/flamegraph/index.jsx";
 
 import {transformToTree} from "../../utils/span2tree.js"
 import {convertToGraphStructure} from "../../utils/convert2graph.js"
@@ -77,12 +83,17 @@ const MonitorNative = () => {
     const [currentTrace, setCurrentTrace] = useState(null);
     const [traceDetailLoading, setTraceDetailLoading] = useState(false);
     const [spanData, setSpanData] = useState([]);
-    const [drawerWidth, setDrawerWidth] = useState(1200);
+    const [drawerWidth, setDrawerWidth] = useState(1600);
+    const [originalSpanTableHeight, setOriginalSpanTableHeight] = useState(300);
+
 
     
     const [graphData, setGraphData] = useState({})
     const [relationData, setRelationData] = useState({})
     const [flameTreeData, setFlameTreeData] = useState([])
+    
+    const [showSpanTable, setShowSpanTable] = useState(false);
+    const [spanTableHeight, setSpanTableHeight] = useState(300); // 表格高度状态
 
 
     // 耗时阈值配置（单位：纳秒）
@@ -114,8 +125,6 @@ const MonitorNative = () => {
         
         setGraphData(convertToGraphStructure(spans))
         setRelationData(relationData)
-        
-        fetchTraceDetail(traceId);
     }
 
     // 获取表格数据函数
@@ -216,39 +225,33 @@ const MonitorNative = () => {
     const fetchTraceDetail = async (traceId) => {
         setTraceDetailLoading(true);
         try {
-            // 这里模拟获取详情数据，实际应调用API
-            // const response = await getTraceDetail(traceId);
-            // setCurrentTrace(response.data);
+            // 调用接口获取Trace详情
+            const response = await getTraceDetail(traceId);
+            console.log(response, "response");
             
-            // 模拟数据
-            const mockDetail = tableListDataSource.find(item => item.trace_id === traceId);
-            setCurrentTrace(mockDetail);
+            const traceDetail = response?.content[0] || {};
             
-            // 模拟span数据
-            const mockSpans = [
-                {
-                    id: 'span1',
-                    name: 'API Gateway',
-                    startTime: new Date(Date.now() - 5000).toISOString(),
-                    duration: 1200000,
-                    tags: { component: 'nginx', http_method: 'GET' }
-                },
-                {
-                    id: 'span2',
-                    name: 'User Service',
-                    startTime: new Date(Date.now() - 4000).toISOString(),
-                    duration: 800000,
-                    tags: { component: 'spring-boot', db_query: 'SELECT * FROM users' }
-                },
-                {
-                    id: 'span3',
-                    name: 'Database',
-                    startTime: new Date(Date.now() - 3500).toISOString(),
-                    duration: 500000,
-                    tags: { component: 'mysql', query: 'SELECT * FROM users' }
-                }
-            ];
-            setSpanData(mockSpans);
+            // 设置Trace详情
+            setCurrentTrace(traceDetail);
+            
+            // 设置Span数据
+            if (traceDetail.spans && Array.isArray(traceDetail.spans)) {
+                const spans = traceDetail.spans.map((span) => {
+                    return {
+                        ...span.metric,
+                        ...span.content,
+                        ...span.context,
+                        ...span.tag.ebpf_tag,
+                        ...span.tag.docker_tag
+                    }
+                });
+                console.log(spans, "spans");
+                
+                setSpanData(spans);
+            } else {
+                setSpanData([]);
+                message.warning('未找到Span数据');
+            }
             
         } catch (error) {
             message.error('获取Trace详情失败');
@@ -316,9 +319,21 @@ const MonitorNative = () => {
     };
 
     // 详情页跳转处理
-    const handleViewDetail = (record) => {
-        getFlamegraphDataByTraceIdFun(record.trace_id)
+    const handleViewDetail = async (record) => {
+        setTraceDetailLoading(true);
         setDrawerVisible(true);
+        
+        try {
+            // 并行获取火焰图数据和Trace详情
+            await Promise.all([
+                getFlamegraphDataByTraceIdFun(record.trace_id),
+                fetchTraceDetail(record.trace_id)
+            ]);
+        } catch (error) {
+            console.error('获取详情数据失败:', error);
+        } finally {
+            setTraceDetailLoading(false);
+        }
     };
 
     // 关闭抽屉
@@ -326,6 +341,10 @@ const MonitorNative = () => {
         setDrawerVisible(false);
         setCurrentTrace(null);
         setSpanData([]);
+        setShowSpanTable(false);
+        setSpanTableHeight(300); // 重置表格高度
+        setSpanTableHeight(originalSpanTableHeight); // 重置表格高度
+
     };
 
     // 处理表格分页变化
@@ -771,13 +790,21 @@ const MonitorNative = () => {
                 onClose={handleCloseDrawer}
                 open={drawerVisible}
                 extra={
-                    <Button 
-                        icon={<CloseOutlined />} 
-                        onClick={handleCloseDrawer}
-                        style={{ border: 'none', fontSize: 16 }}
-                    />
+                    <Space>
+                        <Button 
+                            icon={<UnorderedListOutlined />} 
+                            onClick={() => setShowSpanTable(!showSpanTable)}
+                            type={showSpanTable ? 'primary' : 'default'}
+                            title={showSpanTable ? "隐藏Span表格" : "显示Span表格"}
+                        />
+                        <Button 
+                            icon={<CloseOutlined />} 
+                            onClick={handleCloseDrawer}
+                            style={{ border: 'none', fontSize: 16 }}
+                        />
+                    </Space>
                 }
-                bodyStyle={{ padding: 24 }}
+                bodyStyle={{ padding: 24, display: 'flex', flexDirection: 'column', height: '100%' }}
             >
                 {traceDetailLoading ? (
                     <div style={{ textAlign: 'center', padding: '80px 0' }}>
@@ -785,130 +812,317 @@ const MonitorNative = () => {
                         <p style={{ marginTop: 16 }}>加载Trace详情中...</p>
                     </div>
                 ) : currentTrace ? (
-                    <Tabs defaultActiveKey="1" type="card" style={{ height: '100%' }}>
-                        {/* Tab 1: 链路基本信息 */}
-                        <TabPane tab="链路基本信息" key="1">
-                            {/* 基本信息卡片 */}
-                            <Card 
-                                title="链路基本信息" 
-                                bordered={false}
-                                style={{ marginBottom: 24 }}
-                                headStyle={{ fontSize: 16, fontWeight: 'bold' }}
-                            >
-                                <Row gutter={24}>
-                                    <Col span={12}>
-                                        <Descriptions column={1} size="middle">
-                                            <Descriptions.Item label="追踪ID">
-                                                <Tag color="blue" style={{ fontSize: 14 }}>{currentTrace.trace_id}</Tag>
-                                            </Descriptions.Item>
-                                            <Descriptions.Item label="状态">
-                                                {renderStatusTag(currentTrace)}
-                                            </Descriptions.Item>
-                                            <Descriptions.Item label="端点">
-                                                <div style={{ fontWeight: 'bold', fontSize: 15 }}>{currentTrace.endpoint}</div>
-                                            </Descriptions.Item>
-                                            <Descriptions.Item label="协议">
-                                                <Tag color="purple" style={{ fontSize: 14 }}>{currentTrace.protocol}</Tag>
-                                            </Descriptions.Item>
-                                        </Descriptions>
-                                    </Col>
-                                    <Col span={12}>
-                                        <Descriptions column={1} size="middle">
-                                            <Descriptions.Item label="客户端">
-                                                <div style={{ fontWeight: 'bold' }}>
-                                                    {currentTrace.client_ip}:{currentTrace.client_port}
-                                                </div>
-                                            </Descriptions.Item>
-                                            <Descriptions.Item label="服务端">
-                                                <div style={{ fontWeight: 'bold' }}>
-                                                    {currentTrace.server_ip}:{currentTrace.server_port}
-                                                </div>
-                                            </Descriptions.Item>
-                                            <Descriptions.Item label="端到端耗时">
-                                                <span style={{ fontWeight: 'bold', fontSize: 16, color: '#1890ff' }}>
-                                                    {(currentTrace.e2e_duration / 1000).toFixed(2)} ms
-                                                </span>
-                                            </Descriptions.Item>
-                                            <Descriptions.Item label="Span数量">
-                                                <span style={{ fontWeight: 'bold', fontSize: 16 }}>
-                                                    {currentTrace.span_num}
-                                                </span>
-                                            </Descriptions.Item>
-                                        </Descriptions>
-                                    </Col>
-                                </Row>
-                            </Card>
-                            
-                            {/* 原始数据卡片 */}
-                            <Card 
-                                title="原始数据" 
-                                bordered={false}
-                                headStyle={{ fontSize: 16, fontWeight: 'bold' }}
-                            >
-                                <pre style={{ 
-                                    background: '#f6f8fa', 
-                                    padding: 16, 
-                                    borderRadius: 4,
-                                    maxHeight: 300,
-                                    overflowY: 'auto',
-                                    fontSize: 13,
-                                    whiteSpace: 'pre-wrap',
-                                    wordBreak: 'break-all'
-                                }}>
-                                    {JSON.stringify(currentTrace, null, 2)}
-                                </pre>
-                            </Card>
-                        </TabPane>
-
-                        {/* Tab 2: 拓扑图 */}
-                        <TabPane tab="拓扑图" key="2">
-                            <Card 
-                                bordered={false}
+                    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+                        <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
+                            <Tabs 
+                                defaultActiveKey="1" 
+                                type="card" 
                                 style={{ height: '100%' }}
-                                bodyStyle={{ 
-                                    height: 'calc(100% - 56px)', 
-                                    display: 'flex', 
-                                    justifyContent: 'center', 
-                                    alignItems: 'center',
-                                    background: '#f9f9f9'
-                                }}
+                                tabBarStyle={{ marginBottom: 0 }}
                             >
-                                <div style={{ textAlign: 'center', width: "100%" }}>
-                                    <GraphVisEGraphVisualizationxample
-                                        nodes={addNodeLevels(graphData.nodes)}
-                                        edges={graphData.edges}
-                                        relationData={relationData}
-                                    ></GraphVisEGraphVisualizationxample> 
-                                </div>
-                            </Card>
-                        </TabPane>
+                                {/* Tab 1: 链路基本信息 */}
+                                <TabPane tab="链路基本信息" key="1">
+                                    <div style={{ height: '100%', overflowY: 'auto' }}>
+                                        {/* 基本信息卡片 */}
+                                        <Card 
+                                            title="链路基本信息" 
+                                            bordered={false}
+                                            style={{ marginBottom: 24 }}
+                                            headStyle={{ fontSize: 16, fontWeight: 'bold' }}
+                                        >
+                                            <Row gutter={24}>
+                                                <Col span={12}>
+                                                    <Descriptions column={1} size="middle">
+                                                        <Descriptions.Item label="追踪ID">
+                                                            <Tag color="blue" style={{ fontSize: 14 }}>{currentTrace.trace_id}</Tag>
+                                                        </Descriptions.Item>
+                                                        <Descriptions.Item label="状态">
+                                                            {/* {renderStatusTag(currentTrace)} */}
+                                                        </Descriptions.Item>
+                                                        <Descriptions.Item label="端点">
+                                                            <div style={{ fontWeight: 'bold', fontSize: 15 }}>{currentTrace.endpoint}</div>
+                                                        </Descriptions.Item>
+                                                        <Descriptions.Item label="协议">
+                                                            <Tag color="purple" style={{ fontSize: 14 }}>{currentTrace.protocol}</Tag>
+                                                        </Descriptions.Item>
+                                                    </Descriptions>
+                                                </Col>
+                                                <Col span={12}>
+                                                    <Descriptions column={1} size="middle">
+                                                        <Descriptions.Item label="客户端">
+                                                            <div style={{ fontWeight: 'bold' }}>
+                                                                {currentTrace.client_ip}:{currentTrace.client_port}
+                                                            </div>
+                                                        </Descriptions.Item>
+                                                        <Descriptions.Item label="服务端">
+                                                            <div style={{ fontWeight: 'bold' }}>
+                                                                {currentTrace.server_ip}:{currentTrace.server_port}
+                                                            </div>
+                                                        </Descriptions.Item>
+                                                        <Descriptions.Item label="端到端耗时">
+                                                            <span style={{ fontWeight: 'bold', fontSize: 16, color: '#1890ff' }}>
+                                                                {(currentTrace.e2e_duration / 1000).toFixed(2)} ms
+                                                            </span>
+                                                        </Descriptions.Item>
+                                                        <Descriptions.Item label="Span数量">
+                                                            <span style={{ fontWeight: 'bold', fontSize: 16 }}>
+                                                                {currentTrace.span_num}
+                                                            </span>
+                                                        </Descriptions.Item>
+                                                    </Descriptions>
+                                                </Col>
+                                            </Row>
+                                        </Card>
+                                        
+                                        {/* 原始数据卡片 */}
+                                        <Card 
+                                            title="原始数据" 
+                                            bordered={false}
+                                            headStyle={{ fontSize: 16, fontWeight: 'bold' }}
+                                        >
+                                            <pre style={{ 
+                                                background: '#f6f8fa', 
+                                                padding: 16, 
+                                                borderRadius: 4,
+                                                maxHeight: 300,
+                                                overflowY: 'auto',
+                                                fontSize: 13,
+                                                whiteSpace: 'pre-wrap',
+                                                wordBreak: 'break-all'
+                                            }}>
+                                                {JSON.stringify(currentTrace, null, 2)}
+                                            </pre>
+                                        </Card>
+                                    </div>
+                                </TabPane>
 
-                        {/* Tab 3: 火焰图 */}
-                        <TabPane tab="火焰图" key="3">
+                                {/* Tab 2: 拓扑图 */}
+                                <TabPane tab="拓扑图" key="2">
+                                    <div style={{ height: '100%', overflowY: 'auto' }}>
+                                        <Card 
+                                            bordered={false}
+                                            style={{ 
+                                                height: '100%', 
+                                                minHeight: "600px" 
+                                            }}
+                                            bodyStyle={{ 
+                                                height: 'calc(100% - 6px)', 
+                                                display: 'flex', 
+                                                justifyContent: 'center', 
+                                                alignItems: 'center',
+                                                background: '#f9f9f9'
+                                            }}
+                                        >
+                                            <div style={{ textAlign: 'center', width: "100%" }}>
+                                                <GraphVisEGraphVisualizationxample
+                                                    nodes={addNodeLevels(graphData.nodes)}
+                                                    edges={graphData.edges}
+                                                    relationData={relationData}
+                                                ></GraphVisEGraphVisualizationxample> 
+                                            </div>
+                                        </Card>
+                                    </div>
+                                </TabPane>
+
+                                {/* Tab 3: 火焰图 */}
+                                <TabPane tab="火焰图" key="3">
+                                    <div style={{ height: '100%', overflowY: 'auto' }}>
+                                        <Card 
+                                            bordered={false}
+                                            style={{ height: '100%' }}
+                                            bodyStyle={{ 
+                                                height: 'calc(100% - 56px)', 
+                                                display: 'flex', 
+                                                justifyContent: 'center', 
+                                                alignItems: 'center',
+                                                background: '#f9f9f9'
+                                            }}
+                                        >
+                                            <div style={{ width: "100%"  }}>
+                                                <FlameGraphMain
+                                                    data={flameTreeData}
+                                                ></FlameGraphMain>
+                                            </div>
+                                        </Card>
+                                    </div>
+                                </TabPane>
+                            </Tabs>
+                        </div>
+                        
+                        {/* 可展开的Span表格 */}
+                        {showSpanTable && (
                             <Card 
+                                title="调用详情" 
                                 bordered={false}
-                                style={{ height: '100%' }}
-                                bodyStyle={{ 
-                                    height: 'calc(100% - 56px)', 
-                                    display: 'flex', 
-                                    justifyContent: 'center', 
-                                    alignItems: 'center',
-                                    background: '#f9f9f9'
-                                }}
+                                style={{ marginTop: 16, flexShrink: 0, height: spanTableHeight }}
+                                headStyle={{ fontSize: 16, fontWeight: 'bold' }}
+                                extra={
+                                    <Space>
+                                        <Button 
+                                            icon={<UpOutlined />} 
+                                            size="small"
+                                            onClick={() => {
+                                                // 保存当前高度作为原始高度
+                                                if (spanTableHeight === originalSpanTableHeight) {
+                                                setOriginalSpanTableHeight(spanTableHeight);
+                                                }
+                                                setSpanTableHeight(800);
+                                            }}
+                                            title="增加高度"
+                                        />
+                                        <Button 
+                                            icon={<DownOutlined />} 
+                                            size="small"
+                                            onClick={() => setSpanTableHeight(originalSpanTableHeight)}
+                                            title="恢复高度"
+                                        />
+                                        <Button 
+                                            icon={<CloseOutlined />} 
+                                            size="small"
+                                            onClick={() => setShowSpanTable(false)}
+                                            title="关闭表格"
+                                        />
+                                    </Space>
+                                }
                             >
-                                <div style={{ textAlign: 'center' }}>
-                                    <img 
-                                        src="/path/to/flamegraph-placeholder.png" 
-                                        alt="火焰图" 
-                                        style={{ maxWidth: '100%', maxHeight: 500 }}
-                                    />
-                                    <p style={{ marginTop: 16, color: '#666' }}>
-                                        火焰图展示方法调用耗时分布和调用栈深度
-                                    </p>
-                                </div>
+                                <ProTable
+                                    columns={[
+                                        {
+                                        title: 'Span ID',
+                                        dataIndex: 'span_id',
+                                        key: 'span_id',
+                                        width: 180,
+                                        render: (id) => 
+                                            {
+                                                    return (<Tooltip title={id}>
+                                                        <Tag color="blue" style={{ maxWidth: 150, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                                        {id}
+                                                        </Tag>
+                                                    </Tooltip>)
+                                            }
+                                        },
+                                        {
+                                        title: '组件',
+                                        dataIndex: 'component',
+                                        key: 'component',
+                                        width: 150,
+                                        render: (component) => <Tag color="purple">{component}</Tag>,
+                                        },
+                                        {
+                                        title: '端点',
+                                        dataIndex: 'endpoint',
+                                        key: 'endpoint',
+                                        width: 120,
+                                        },
+                                        {
+                                        title: '协议',
+                                        dataIndex: 'protocol',
+                                        key: 'protocol',
+                                        width: 100,
+                                        render: (protocol) => <Tag color="cyan">{protocol}</Tag>,
+                                        },
+                                        {
+                                        title: '方向',
+                                        dataIndex: 'direction',
+                                        key: 'direction',
+                                        width: 100,
+                                        render: (direction) => (
+                                            <Tag color={direction === 'Ingress' ? 'green' : 'orange'}>
+                                            {direction}
+                                            </Tag>
+                                        ),
+                                        },
+                                        {
+                                        title: '耗时',
+                                        dataIndex: 'duration',
+                                        key: 'duration',
+                                        width: 100,
+                                        render: (duration) => (
+                                            <span style={{ fontWeight: 'bold' }}>
+                                            {(duration / 1000000).toFixed(2)}ms
+                                            </span>
+                                        ),
+                                        },
+                                        {
+                                        title: '开始时间',
+                                        dataIndex: 'start_time',
+                                        key: 'start_time',
+                                        width: 180,
+                                        render: (time) => new Date(time).toLocaleString(),
+                                        },
+                                        {
+                                        title: '结束时间',
+                                        dataIndex: 'end_time',
+                                        key: 'end_time',
+                                        width: 180,
+                                        render: (time) => new Date(time).toLocaleString(),
+                                        },
+                                        {
+                                        title: '源地址',
+                                        key: 'source',
+                                        width: 180,
+                                        render: (_, record) => (
+                                            <div>
+                                            <div>{record.src_ip}</div>
+                                            <Tag color="geekblue">端口: {record.src_port}</Tag>
+                                            </div>
+                                        ),
+                                        },
+                                        {
+                                        title: '目标地址',
+                                        key: 'destination',
+                                        width: 180,
+                                        render: (_, record) => (
+                                            <div>
+                                            <div>{record.dst_ip}</div>
+                                            <Tag color="geekblue">端口: {record.dst_port}</Tag>
+                                            </div>
+                                        ),
+                                        },
+                                        {
+                                        title: '容器',
+                                        key: 'container',
+                                        width: 200,
+                                        render: (_, record) => (
+                                            <div>
+                                            <div>{record.container_name}</div>
+                                            <Tag color="volcano" title="容器ID">{record.container_id.slice(0, 12)}...</Tag>
+                                            </div>
+                                        ),
+                                        },
+                                        {
+                                        title: '请求/响应',
+                                        key: 'sizes',
+                                        width: 120,
+                                        render: (_, record) => (
+                                            <div>
+                                            <Tag color="blue">请求: {record.req_size}字节</Tag>
+                                            <Tag color="green">响应: {record.resp_size}字节</Tag>
+                                            </div>
+                                        ),
+                                        },
+                                        {
+                                        title: '序列号',
+                                        key: 'sequences',
+                                        width: 120,
+                                        render: (_, record) => (
+                                            <div>
+                                            <Tag color="gold">请求: {record.req_seq}</Tag>
+                                            <Tag color="lime">响应: {record.resp_seq}</Tag>
+                                            </div>
+                                        ),
+                                        },
+                                    ]}
+                                    dataSource={spanData}
+                                    pagination={false}
+                                    rowKey="id"
+                                    search={false}
+                                    toolBarRender={false}
+                                    scroll={{ y: spanTableHeight - 100 }} // 根据高度调整滚动区域
+                                />
                             </Card>
-                        </TabPane>
-                    </Tabs>
+                        )}
+                    </div>
                 ) : (
                     <Alert 
                         message="未找到Trace详情信息" 
