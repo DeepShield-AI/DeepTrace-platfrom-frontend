@@ -39,18 +39,127 @@ import {
     UpOutlined,
     DownOutlined
 } from '@ant-design/icons';
-import { Column, Line, Area } from '@ant-design/plots';
+import { Line, Area } from '@ant-design/plots';
+
+// import { Line, Area } from '@ant-design/charts';
 
 // 导入你的接口
-import { traceTableQuery, traceChartQuery, getFlamegraphDataByTraceId, getFilters, getTraceDetail } from '../../services/server.js';
+import { 
+    traceTableQuery, 
+    traceChartQuery, 
+    getFlamegraphDataByTraceId, 
+    getFilters, 
+    getTraceDetail,
+    getTraceCharts
+
+} from '../../services/server.js';
 import GraphVisEGraphVisualizationxample from '../../components/topology/index.jsx';
 import FlameGraphMain from "../../components/flamegraph/index.jsx";
 
 import {transformToTree} from "../../utils/span2tree.js"
 import {convertToGraphStructure} from "../../utils/convert2graph.js"
+
 const { TabPane } = Tabs;
 
-// 主监控组件
+const requestData = 
+    [
+        {
+            "timeKey": 1755926160000,
+            "docCount": 166,
+        },
+        {
+            "timeKey": 1755926220000,
+            "docCount": 142,
+        },
+        {
+            "timeKey": 1755926340000,
+            "docCount": 217,
+        },
+        {
+            "timeKey": 1755926460000,
+            "docCount": 98,
+        },
+        {
+            "timeKey": 1755926580000,
+            "docCount": 183,
+        },
+        {
+            "timeKey": 1755926700000,
+            "docCount": 205,
+        }
+    ]
+
+    const errorData = [
+        {
+            "statusCode": "200",
+            "timeBuckets": [
+                {
+                    "timeKey": 1726058800000,
+                    "docCount": 166,
+                },
+                {
+                    "timeKey": 1726059400000,
+                    "docCount": 142,
+                },
+                {
+                    "timeKey": 1726060000000,
+                    "docCount": 217,
+                },
+                {
+                    "timeKey": 1726060600000,
+                    "docCount": 98,
+                },
+                {
+                    "timeKey": 1726061200000,
+                    "docCount": 183,
+                },
+                {
+                    "timeKey": 1726061800000,
+                    "docCount": 205,
+                }
+            ]
+        },
+        {
+            "statusCode": "201",
+            "timeBuckets": [
+                {
+                    "timeKey": 1726058800000,
+                    "docCount": 121,
+                },
+                {
+                    "timeKey": 1726059400000,
+                    "docCount": 124,
+                },
+                {
+                    "timeKey": 1726060000000,
+                    "docCount": 253,
+                },
+                {
+                    "timeKey": 1726060600000,
+                    "docCount": 123,
+                },
+                {
+                    "timeKey": 1726061200000,
+                    "docCount": 214,
+                },
+                {
+                    "timeKey": 1726061800000,
+                    "docCount": 100,
+                }
+            ]
+        }
+    ]
+
+    const latencyData = [
+        {
+            "timeKey": 1755926160000,
+            "avgDuration": 6196366.753012048,
+            "p75Duration": 0,
+            "p90Duration": "8239017.699999997",
+            "p99Duration": 0
+        }
+    ]
+    // 主监控组件
 const MonitorNative = () => {
     const navigate = useNavigate();
     const [loading, setLoading] = useState(false);
@@ -62,7 +171,7 @@ const MonitorNative = () => {
     
     // 图表数据状态
     const [chartData, setChartData] = useState({
-        requestData: [],   // type=count
+        requestData,   // type=count
         errorData: [],     // type=statusCount
         latencyData: []    // type=latencyStats
     });
@@ -188,30 +297,49 @@ const MonitorNative = () => {
         }
     };
 
+    function transformData(originalData) {
+        // 创建一个空数组来存储转换后的结果
+        const transformedData = [];
+        
+        // 遍历原始数据中的每个状态码对象
+        for (const statusObj of originalData) {
+            const statusCode = statusObj.statusCode;
+            
+            // 遍历该状态码下的每个时间桶数据
+            for (const timeBucket of statusObj.timeBuckets) {
+            // 创建一个新对象，将状态码作为 type，并包含时间戳和文档计数
+            const newObj = {
+                type: statusCode,
+                timeKey: timeBucket.timeKey,
+                docCount: timeBucket.docCount
+            };
+            
+            // 将新对象添加到结果数组中
+            transformedData.push(newObj);
+            }
+        }
+        
+        return transformedData;
+    }
     // 获取图表数据函数
     const fetchChartData = async () => {
         setChartLoading(true);
-        try {
-            // 准备筛选参数
-            const params = {
-                protocols: protocolFilters,
-                endpoints: endpointFilters,
-                statusCodes: statusFilters
-            };
-            
+        try {            
             // 使用Promise.all并行请求三个图表数据
             const [requestResponse, errorResponse, latencyResponse] = await Promise.all([
-                traceChartQuery({ ...params, type: 'count' }),           // 请求数
-                traceChartQuery({ ...params, type: 'statusCount' }),      // 错误数
-                traceChartQuery({ ...params, type: 'latencyStats' })      // 响应时延
+                traceChartQuery('count'),           // 请求数
+                traceChartQuery('statusCount'),      // 错误数
+                traceChartQuery('latencyStats')      // 响应时延
             ]);
-            console.log(requestResponse, errorResponse, latencyResponse, "0000");
+            console.log(requestResponse.data, errorResponse.data, latencyResponse.data, "0000");
             
-            setChartData({
-                requestData: requestResponse?.data || [],
-                errorData: errorResponse?.data || [],
-                latencyData: latencyResponse?.data || []
-            });
+            // TODO 测试
+            // setChartData({
+            //     requestData: requestResponse?.data || [],
+            //     errorData: errorResponse?.data || [],
+            //     latencyData: latencyResponse?.data || []
+            // });
+            
 
         } catch (error) {
             message.error('图表数据获取失败');
@@ -263,6 +391,7 @@ const MonitorNative = () => {
 
     useEffect(() => {
         fetchFilterOptions();
+        fetchChartData();
     }, []);
 
     useEffect(() => {
@@ -356,45 +485,175 @@ const MonitorNative = () => {
         });
     };
 
+    
     // 图表配置
     const requestChartConfig = {
-        data: chartData.requestData,
-        xField: 'time',
-        yField: 'count',
-        seriesField: 'endpoint',
-        isStack: true,
+        data: requestData,
+        xField: 'timeKey',
+        yField: 'docCount',
         height: 200,
-        legend: {
-            position: 'top',
-        },
+        // 新增：配置x轴为时间类型，并格式化显示
         xAxis: {
+            type: 'time', // 指定为时间类型
             label: {
-                autoRotate: false,
+                formatter: (v) => {
+                    // 将时间戳转换为可读格式
+                    return new Date(v).toLocaleTimeString('zh-CN', {
+                        hour: '2-digit',
+                        minute: '2-digit'
+                    });
+                }
+            }
+        },
+        yAxis: {
+            label: {
+            style: { fontSize: 12 },
+            formatter: (value) => `${value} 次`, // y轴标签添加单位（如 "166 次"）
             },
         },
-        tooltip: {
+        point: {
+            shapeField: 'square',
+            sizeField: 4,
+        },
+        interaction: {
+            tooltip: {
+            marker: false,
+            // 优化tooltip：显示格式化时间和请求数
             formatter: (datum) => {
-                return { name: datum.endpoint, value: datum.count };
+                const formatTime = new Date(datum.timeKey).toLocaleString('zh-CN', {
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                });
+                return [
+                { name: '时间', value: formatTime },
+                { name: '请求数', value: `${datum.docCount} 次` },
+                ];
+            },
             },
         },
-    };
+        style: {
+            lineWidth: 2,
+        },
+    };    
+    // 1. 先确保转换后的数据格式正确（复用你的 transformData 函数，无需修改）
+    const transformedErrorData = transformData(errorData);
 
+    // 2. 优化后的错误数图表配置（多线折线图）
     const errorChartConfig = {
-        data: chartData.errorData,
-        xField: 'time',
-        yField: 'count',
+        data: transformedErrorData, // 转换后的数据（含 type、timeKey、docCount）
+        xField: 'timeKey',          // X轴：时间戳
+        yField: 'docCount',         // Y轴：错误数
+        seriesField: 'type',        // 核心：按状态码（type）分组，生成多条线
         height: 200,
-        color: '#ff4d4f',
+        // 3. 自定义每条线的颜色（按状态码分配，区分明显）
+        color: ({ type }) => {
+            const colorMap = {
+            '200': '#1890ff', // 200状态码：蓝色
+            '201': '#52c41a', // 201状态码：绿色
+            '404': '#faad14', // 若后续有404：橙色（提前预留）
+            '500': '#ff4d4f'  // 若后续有500：红色（提前预留）
+            };
+            return colorMap[type] || '#8c8c8c'; // 默认：灰色
+        },
+        // 4. 折线样式优化（线条宽度、点样式）
+        line: {
+            style: {
+            lineWidth: 2, // 线条宽度，确保清晰
+            },
+        },
+        // 5. 数据点样式（统一形状，按分组区分颜色）
+        point: {
+            shape: 'circle', // 点形状：圆形（比方形更友好）
+            size: 4,         // 点大小：适中，避免遮挡
+            fill: ({ type }) => { // 点填充色与线条色一致
+            const colorMap = {
+                '200': '#1890ff',
+                '201': '#52c41a',
+                '404': '#faad14',
+                '500': '#ff4d4f'
+            };
+            return colorMap[type] || '#8c8c8c';
+            },
+            stroke: '#fff', // 点边框：白色，增强立体感
+            strokeWidth: 1,
+        },
+        // 6. X轴配置（时间格式化，与请求数图表保持一致）
         xAxis: {
+            type: 'time',
+            tickCount: 5, // 控制刻度数量，避免标签重叠
             label: {
-                autoRotate: false,
+            fontSize: 12,
+            formatter: (timestamp) => {
+                // 时间格式：仅显示时分（适合当天内数据，若跨天可加年月日）
+                return new Date(timestamp).toLocaleTimeString('zh-CN', {
+                hour: '2-digit',
+                minute: '2-digit'
+                });
+            }
             },
+            range: [0.05, 0.95] // 轴两端留空白，避免数据贴边
         },
-        tooltip: {
+        // 7. Y轴配置（从0开始，添加单位）
+        yAxis: {
+            label: {
+            fontSize: 12,
+            formatter: (value) => `${value} 次` // 单位：次
+            },
+            min: 0, // Y轴从0开始，避免数据比例失真
+            tickCount: 4 // 控制Y轴刻度数量
+        },
+        // 8. 图例配置（显示状态码，支持交互）
+        legend: {
+            position: 'top', // 图例位置：顶部（可选 right/left/bottom）
+            title: {
+            text: '响应状态码', // 图例标题，明确含义
+            fontSize: 12,
+            padding: [0, 0, 4, 0] // 标题与图例间距
+            },
+            label: {
+            fontSize: 12,
+            formatter: (type) => `状态码 ${type}` // 图例文本：优化为“状态码 200”
+            },
+            interactive: true // 支持点击图例隐藏/显示对应线条
+        },
+        // 9. Tooltip 配置（显示完整信息）
+        interaction: {
+            tooltip: {
+            marker: true, // 显示 tooltip 对应的点标记
             formatter: (datum) => {
-                return { name: '错误数', value: datum.count };
-            },
+                // 格式化时间：显示完整年月日时分秒
+                const fullTime = new Date(datum.timeKey).toLocaleString('zh-CN', {
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+                });
+                return [
+                { name: '时间', value: fullTime },
+                { name: '响应状态码', value: datum.type },
+                { name: '错误数', value: `${datum.docCount} 次` }
+                ];
+            }
+            }
         },
+        // 10. 网格线配置（辅助读数，降低透明度避免干扰）
+        grid: {
+            horizontal: {
+            visible: true,
+            style: {
+                stroke: '#e8e8e8',
+                opacity: 0.5
+            }
+            },
+            vertical: {
+            visible: false // 隐藏垂直网格线，保持图表简洁
+            }
+        }
     };
 
     const latencyChartConfig = {
@@ -468,7 +727,6 @@ const MonitorNative = () => {
         // 5. 返回添加了level字段的节点数组（保持原数组顺序）
         return nodes.map(node => spanToNode[node.span_id]);
     }
-
     return (
         <PageContainer
             content={
@@ -600,11 +858,14 @@ const MonitorNative = () => {
                                 size="small"
                                 extra={<span style={{ color: '#1890ff' }}>总数: {totalRequests}</span>}
                             >
-                                <Column 
-                                    {...requestChartConfig} 
-                                    loading={chartLoading}
-                                    style={{ height: 200 }}
-                                />
+                                {/* <div style={{ width: '100%', height: '100%' }}> */}
+
+                                    <Line 
+                                        {...requestChartConfig} 
+                                        loading={chartLoading}
+                                        style={{ height: 200 }}
+                                    />
+                                {/* </div> */}
                             </Card>
                         </Col>
                         <Col span={8}>

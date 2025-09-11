@@ -164,11 +164,11 @@ const traceTableQuery = async (data) => {
     }
 }
 
-const traceChartQuery = async (data) => {    
+const traceChartQuery = async (type) => {    
     try { 
         const res = await axios.get(`${ipAddress}/api/esTraces/statistic`, {
             params: {
-                ...data
+                type
             }
         })
         console.log(res, "ressssss");
@@ -218,6 +218,20 @@ const getTraceDetail = async (traceId) => {
     }
 }
 
+const getTraceCharts = async (type) => {    
+    try { 
+        const res = await axios.get(`${ipAddress}/api/esTraces/statistic`, {
+            params: {
+                type: type
+            }
+        })
+        const {data = {}} = res
+        return data
+    } catch (error) {
+        console.error("==ERROR==", error)
+    }
+}
+
 export {
     getAllOverView,
     getIPData,
@@ -232,5 +246,6 @@ export {
     traceChartQuery,
     getFlamegraphDataByTraceId,
     getFilters,
-    getTraceDetail
+    getTraceDetail,
+    getTraceCharts
 }

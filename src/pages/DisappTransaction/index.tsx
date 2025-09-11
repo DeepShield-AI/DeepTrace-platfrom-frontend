@@ -15,7 +15,6 @@ import {
     Table,
     TreeSelect
 } from 'antd'
-import * as echarts from 'echarts';
 import axios from 'axios';
 const $ = require('jquery')
 import {data, treeData} from "./data.js"

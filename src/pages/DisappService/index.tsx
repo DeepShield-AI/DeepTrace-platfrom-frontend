@@ -14,7 +14,6 @@ import {
     Button,
     DatePicker
 } from 'antd'
-import * as echarts from 'echarts';
 import axios from 'axios';
 const $ = require('jquery')
 import {data} from "./data.js"
