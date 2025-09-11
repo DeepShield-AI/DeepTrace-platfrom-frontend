@@ -163,7 +163,15 @@ const ApplicationTopology = () => {
         { "nodeId": "1691817", "containerName": "/service_1", "avgDuration": 1525972.3423831072, "errorCount": 123, "totalCount": 1326.0, "errorRate": 0.1, "qps": 0.3684 },
         { "nodeId": "1691818", "containerName": "/service_2", "avgDuration": 1398902.0, "errorCount": 0, "totalCount": 496.0, "errorRate": 0.0, "qps": 0.1377 },
         { "nodeId": "1691819", "containerName": "/service_3", "avgDuration": 1398902.0, "errorCount": 0, "totalCount": 496.0, "errorRate": 0.0, "qps": 0.1377 },
-        { "nodeId": "1691827", "containerName": "/service_4", "avgDuration": 1398902.0, "errorCount": 0, "totalCount": 496.0, "errorRate": 0.0, "qps": 0.1377 }
+        { "nodeId": "1691827", "containerName": "/service_4", "avgDuration": 1398902.0, "errorCount": 0, "totalCount": 496.0, "errorRate": 0.0, "qps": 0.1377 },
+        { "nodeId": "1691828", "containerName": "/service_5", "avgDuration": 1398902.0, "errorCount": 0, "totalCount": 496.0, "errorRate": 0.0, "qps": 0.1377 },
+        { "nodeId": "1691829", "containerName": "/service_6", "avgDuration": 1398902.0, "errorCount": 0, "totalCount": 496.0, "errorRate": 0.0, "qps": 0.1377 },
+        // { "nodeId": "1691830", "containerName": "/service_7", "avgDuration": 1398902.0, "errorCount": 0, "totalCount": 496.0, "errorRate": 0.0, "qps": 0.1377 },
+        // { "nodeId": "1691831", "containerName": "/service_8", "avgDuration": 1398902.0, "errorCount": 0, "totalCount": 496.0, "errorRate": 0.0, "qps": 0.1377 },
+        // { "nodeId": "1691832", "containerName": "/service_9", "avgDuration": 1398902.0, "errorCount": 0, "totalCount": 496.0, "errorRate": 0.0, "qps": 0.1377 },
+        // { "nodeId": "1691833", "containerName": "/service_10", "avgDuration": 1398902.0, "errorCount": 0, "totalCount": 496.0, "errorRate": 0.0, "qps": 0.1377 },
+        // { "nodeId": "1691834", "containerName": "/service_11", "avgDuration": 1398902.0, "errorCount": 0, "totalCount": 496.0, "errorRate": 0.0, "qps": 0.1377 },
+        // { "nodeId": "1691835", "containerName": "/service_12", "avgDuration": 1398902.0, "errorCount": 0, "totalCount": 496.0, "errorRate": 0.0, "qps": 0.1377 },
     ];
 
     // 边数据
@@ -175,7 +183,16 @@ const ApplicationTopology = () => {
         "1691827": [
             { "srcNodeId": "1691827", "dstNodeId": "1691818", "avgDuration": 11111111, "totalCount": 111, "errorRate": 0.0, "qps": 31333 },
             { "srcNodeId": "1691827", "dstNodeId": "1691819", "avgDuration": 222222, "totalCount": 2222, "errorRate": 0.0, "qps": 0.222 }
-        ]
+        ],
+        "1691819": [
+            { "srcNodeId": "1691819", "dstNodeId": "1691828", "avgDuration": 11111111, "totalCount": 111, "errorRate": 0.0, "qps": 31333 },
+        ],
+        "1691828": [
+            { "srcNodeId": "1691828", "dstNodeId": "1691829", "avgDuration": 11111111, "totalCount": 111, "errorRate": 0.0, "qps": 31333 },
+        ],
+        "1691829": [
+            { "srcNodeId": "1691829", "dstNodeId": "1691817", "avgDuration": 11111111, "totalCount": 111, "errorRate": 0.0, "qps": 31333 },
+        ],
     };
 
     // 统计边总数
