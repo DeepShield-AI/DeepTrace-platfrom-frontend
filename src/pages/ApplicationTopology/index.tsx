@@ -32,7 +32,6 @@ import 'react-flow-renderer/dist/style.css';
 import dagre from 'dagre';
 import TopologyGraph from "./component/TopologyGraph.jsx"
 import { traceTableQuery, traceChartQuery, getFlamegraphDataByTraceId, getFilters, getTraceDetail } from '../../services/server.js';
-
 // 自定义节点组件
 const CustomNode = ({ data, selected }) => {
     const formatNumber = (num) => {

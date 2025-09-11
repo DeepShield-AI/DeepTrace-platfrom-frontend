@@ -12,6 +12,7 @@ import ReactFlow, {
 import 'react-flow-renderer/dist/style.css';
 import dagre from 'dagre';
 import { Drawer } from 'antd'; // 引入抽屉组件
+import PointDrawer from './PointDrawer';
 
 // 自定义节点组件
 const CustomNode = ({ data }) => {
@@ -525,36 +526,6 @@ const TopologyGraph = ({ nodeData, edgeData }) => {
       >
         {selectedEdge && (
           <div>
-            <h3>连接信息</h3>
-            <p><strong>源节点:</strong> {selectedEdge.source}</p>
-            <p><strong>目标节点:</strong> {selectedEdge.target}</p>
-            <p><strong>QPS:</strong> {selectedEdge.data?.qps?.toFixed(2)}</p>
-            <p><strong>平均耗时:</strong> {selectedEdge.data?.avgDuration?.toFixed(2)}μs</p>
-            <p><strong>错误率:</strong> {(selectedEdge.data?.errorRate * 100).toFixed(2)}%</p>
-            <p><strong>错误次数:</strong> {selectedEdge.data?.errorCount}</p>
-            
-            <div style={{ marginTop: 20 }}>
-              <h4>流量趋势</h4>
-              <div style={{ 
-                height: 100, 
-                background: '#f0f2f5', 
-                display: 'flex', 
-                alignItems: 'center', 
-                justifyContent: 'center',
-                borderRadius: 4
-              }}>
-                <span style={{ color: '#999' }}>流量趋势图表区域</span>
-              </div>
-            </div>
-            
-            <div style={{ marginTop: 20 }}>
-              <h4>错误详情</h4>
-              <ul>
-                <li>错误类型1: 10次</li>
-                <li>错误类型2: 5次</li>
-                <li>其他错误: 3次</li>
-              </ul>
-            </div>
           </div>
         )}
       </Drawer>
@@ -562,7 +533,7 @@ const TopologyGraph = ({ nodeData, edgeData }) => {
       {/* 节点详情抽屉 */}
       <Drawer
         title="节点详情"
-        width={500}
+        width={1500}
         placement="right"
         closable={true}
         onClose={() => setNodeDrawerVisible(false)}
@@ -570,68 +541,7 @@ const TopologyGraph = ({ nodeData, edgeData }) => {
       >
         {selectedNode && (
           <div>
-            <h3>节点信息</h3>
-            <p><strong>节点ID:</strong> {selectedNode.id}</p>
-            <p><strong>容器名称:</strong> {selectedNode.data?.containerName?.replace('/', '')}</p>
-            <p><strong>QPS:</strong> {selectedNode.data?.qps?.toFixed(2)}</p>
-            <p><strong>平均耗时:</strong> {selectedNode.data?.avgDuration?.toFixed(2)}μs</p>
-            <p><strong>错误率:</strong> {(selectedNode.data?.errorRate * 100).toFixed(2)}%</p>
-            <p><strong>错误次数:</strong> {selectedNode.data?.errorCount}</p>
-            
-            <div style={{ marginTop: 20 }}>
-              <h4>资源使用情况</h4>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <div>
-                  <h5>CPU使用率</h5>
-                  <div style={{ 
-                    width: 100, 
-                    height: 100, 
-                    background: 'conic-gradient(#1890ff 75%, #f0f0f0 0)',
-                    borderRadius: '50%',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center'
-                  }}>
-                    <span>75%</span>
-                  </div>
-                </div>
-                <div>
-                  <h5>内存使用</h5>
-                  <div style={{ 
-                    width: 100, 
-                    height: 100, 
-                    background: 'conic-gradient(#52c41a 60%, #f0f0f0 0)',
-                    borderRadius: '50%',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center'
-                  }}>
-                    <span>60%</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-            
-            <div style={{ marginTop: 20 }}>
-              <h4>关联连接</h4>
-              <ul>
-                {edges
-                  .filter(edge => 
-                    edge.source === selectedNode.id || edge.target === selectedNode.id
-                  )
-                  .map(edge => (
-                    <li key={edge.id} style={{ marginBottom: 8 }}>
-                      <div>
-                        <strong>{edge.source === selectedNode.id ? '出站' : '入站'}:</strong> 
-                        {edge.source === selectedNode.id ? edge.target : edge.source}
-                      </div>
-                      <div>QPS: {edge.data?.qps?.toFixed(2)}</div>
-                      <div>错误率: {(edge.data?.errorRate * 100).toFixed(2)}%</div>
-                    </li>
-                  ))
-                }
-              </ul>
-            </div>
+            {/* <PointDrawer></PointDrawer> */}
           </div>
         )}
       </Drawer>
