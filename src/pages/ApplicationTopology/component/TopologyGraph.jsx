@@ -11,17 +11,17 @@ import ReactFlow, {
 } from 'react-flow-renderer';
 import 'react-flow-renderer/dist/style.css';
 import dagre from 'dagre';
-import { Drawer } from 'antd'; // 引入抽屉组件
+import { Drawer,Tabs, Select } from 'antd'; // 引入抽屉组件
 import PointDrawer from './PointDrawer';
 
-// 自定义节点组件
-const CustomNode = ({ data }) => {
-  const formatNumber = (num) => {
+const formatNumber = (num) => {
     if (num >= 1000000) return (num / 1000000).toFixed(2) + 'm';
     if (num >= 1000) return (num / 1000).toFixed(2) + 'k';
     return num.toFixed(2);
-  };
+};
 
+// 自定义节点组件
+const CustomNode = ({ data }) => {
   return (
     <div style={{ 
       padding: '10px', 
@@ -142,6 +142,18 @@ const TopologyGraph = ({ nodeData, edgeData }) => {
   // 边的悬停状态
   const [hoveredEdge, setHoveredEdge] = useState(null);
   const [edgeTooltipPosition, setEdgeTooltipPosition] = useState({ x: 0, y: 0 });
+  // 活跃Tab状态
+  const [activeTab, setActiveTab] = useState('metrics');
+
+  // 时间段选择状态
+  const [timeRange, setTimeRange] = useState('lastHour');
+  
+  // 处理时间段变化
+  const handleTimeRangeChange = (value) => {
+    setTimeRange(value);
+    // 这里可以添加根据时间段重新获取数据的逻辑
+    console.log(`时间段已更改为: ${value}`);
+  };
   
   // 初始化节点和边数据
   useEffect(() => {
@@ -242,10 +254,10 @@ const TopologyGraph = ({ nodeData, edgeData }) => {
       // 适配视图
       setTimeout(() => {
         if (fitView) {
-          fitView({ padding: 0.2, duration: 500 });
+          fitView({ padding: 0.2, duration: 500 }); 
         }
       }, 100);
-    }
+    } 
   }, [nodes, edges]);
 
   // 重新布局函数
@@ -427,7 +439,7 @@ const TopologyGraph = ({ nodeData, edgeData }) => {
             </span>
             <div className="ant-spin-text">正在生成拓扑图...</div>
           </div>
-        </div>
+        </div> 
       )}
       
       {error && (
@@ -541,7 +553,208 @@ const TopologyGraph = ({ nodeData, edgeData }) => {
       >
         {selectedNode && (
           <div>
-            {/* <PointDrawer></PointDrawer> */}
+            {/* 在Tabs上方添加时间段选择器 */}
+            <div style={{ 
+              display: 'flex', 
+              justifyContent: 'flex-end', 
+              marginBottom: 16,
+              padding: '0 20px'
+            }}>
+              <Select
+                value={timeRange}
+                onChange={handleTimeRangeChange}
+                style={{ width: 200 }}
+              >
+                <Select.Option value="lastHour">最近1小时</Select.Option>
+                <Select.Option value="lastDay">最近1天</Select.Option>
+                <Select.Option value="lastWeek">最近1周</Select.Option>
+                <Select.Option value="lastMonth">最近1月</Select.Option>
+                <Select.Option value="custom">自定义时间段</Select.Option>
+              </Select>
+            </div>
+            
+            <Tabs 
+              activeKey={activeTab} 
+              onChange={setActiveTab}
+              tabPosition="top"
+              style={{ marginTop: -16 }}
+            >
+              <Tabs.TabPane tab="应用指标" key="metrics">
+                {/* <div style={{ padding: '20px' }}>
+                  <h3>性能指标</h3>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '20px' }}>
+                    <div style={{ 
+                      backgroundColor: '#f0f9ff', 
+                      padding: '15px', 
+                      borderRadius: '8px',
+                      width: '200px'
+                    }}>
+                      <div style={{ fontSize: '14px', color: '#666' }}>平均耗时</div>
+                      <div style={{ fontSize: '24px', fontWeight: 'bold', marginTop: '5px' }}>
+                        {formatNumber(selectedNode.data.avgDuration)}μs
+                      </div>
+                    </div>
+                    
+                    <div style={{ 
+                      backgroundColor: '#f6ffed', 
+                      padding: '15px', 
+                      borderRadius: '8px',
+                      width: '200px'
+                    }}>
+                      <div style={{ fontSize: '14px', color: '#666' }}>QPS</div>
+                      <div style={{ fontSize: '24px', fontWeight: 'bold', marginTop: '5px' }}>
+                        {selectedNode.data.qps.toFixed(2)}
+                      </div>
+                    </div>
+                    
+                    <div style={{ 
+                      backgroundColor: selectedNode.data.errorRate > 0 ? '#fff1f0' : '#f6ffed', 
+                      padding: '15px', 
+                      borderRadius: '8px',
+                      width: '200px'
+                    }}>
+                      <div style={{ fontSize: '14px', color: '#666' }}>错误率</div>
+                      <div style={{ 
+                        fontSize: '24px', 
+                        fontWeight: 'bold', 
+                        marginTop: '5px',
+                        color: selectedNode.data.errorRate > 0 ? '#f5222d' : '#52c41a'
+                      }}>
+                        {(selectedNode.data.errorRate * 100).toFixed(1)}%
+                      </div>
+                    </div>
+                    
+                    <div style={{ 
+                      backgroundColor: '#fff7e6', 
+                      padding: '15px', 
+                      borderRadius: '8px',
+                      width: '200px'
+                    }}>
+                      <div style={{ fontSize: '14px', color: '#666' }}>错误数</div>
+                      <div style={{ fontSize: '24px', fontWeight: 'bold', marginTop: '5px' }}>
+                        {selectedNode.data.errorCount}
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <h3 style={{ marginTop: '30px' }}>资源使用</h3>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '20px' }}>
+                    <div style={{ 
+                      backgroundColor: '#f0f9ff', 
+                      padding: '15px', 
+                      borderRadius: '8px',
+                      width: '200px'
+                    }}>
+                      <div style={{ fontSize: '14px', color: '#666' }}>CPU使用率</div>
+                      <div style={{ fontSize: '24px', fontWeight: 'bold', marginTop: '5px' }}>
+                        45.2%
+                      </div>
+                    </div>
+                    
+                    <div style={{ 
+                      backgroundColor: '#f6ffed', 
+                      padding: '15px', 
+                      borderRadius: '8px',
+                      width: '200px'
+                    }}>
+                      <div style={{ fontSize: '14px', color: '#666' }}>内存使用</div>
+                      <div style={{ fontSize: '24px', fontWeight: 'bold', marginTop: '5px' }}>
+                        1.2GB
+                      </div>
+                    </div>
+                    
+                    <div style={{ 
+                      backgroundColor: '#fff7e6', 
+                      padding: '15px', 
+                      borderRadius: '8px',
+                      width: '200px'
+                    }}>
+                      <div style={{ fontSize: '14px', color: '#666' }}>网络流量</div>
+                      <div style={{ fontSize: '24px', fontWeight: 'bold', marginTop: '5px' }}>
+                        12.4MB/s
+                      </div>
+                    </div>
+                  </div>
+                </div> */}
+              </Tabs.TabPane>
+              
+              <Tabs.TabPane tab="端点列表" key="endpoints">
+                <div style={{ padding: '20px' }}>
+                  <h3>服务端点</h3>
+                  <div style={{ 
+                    backgroundColor: '#fff', 
+                    border: '1px solid #f0f0f0', 
+                    borderRadius: '4px',
+                    overflow: 'hidden'
+                  }}>
+                    <div style={{ 
+                      display: 'grid', 
+                      gridTemplateColumns: '1fr 1fr 1fr 1fr',
+                      backgroundColor: '#fafafa',
+                      padding: '12px 16px',
+                      borderBottom: '1px solid #f0f0f0',
+                      fontWeight: 'bold'
+                    }}>
+                      <div>端点名称</div>
+                      <div>平均耗时</div>
+                      <div>QPS</div>
+                      <div>错误率</div>
+                    </div>
+                    
+                    <div style={{ 
+                      display: 'grid', 
+                      gridTemplateColumns: '1fr 1fr 1fr 1fr',
+                      padding: '12px 16px',
+                      borderBottom: '1px solid #f0f0f0'
+                    }}>
+                      <div>/api/v1/users</div>
+                      <div>125ms</div>
+                      <div>342.5</div>
+                      <div>0.2%</div>
+                    </div>
+                    
+                    <div style={{ 
+                      display: 'grid', 
+                      gridTemplateColumns: '1fr 1fr 1fr 1fr',
+                      padding: '12px 16px',
+                      borderBottom: '1px solid #f0f0f0'
+                    }}>
+                      <div>/api/v1/products</div>
+                      <div>87ms</div>
+                      <div>512.3</div>
+                      <div>0.1%</div>
+                    </div>
+                    
+                    <div style={{ 
+                      display: 'grid', 
+                      gridTemplateColumns: '1fr 1fr 1fr 1fr',
+                      padding: '12px 16px',
+                      borderBottom: '1px solid #f0f0f0'
+                    }}>
+                      <div>/api/v1/orders</div>
+                      <div>210ms</div>
+                      <div>124.7</div>
+                      <div>1.5%</div>
+                    </div>
+                    
+                    <div style={{ 
+                      display: 'grid', 
+                      gridTemplateColumns: '1fr 1fr 1fr 1fr',
+                      padding: '12px 16px'
+                    }}>
+                      <div>/api/v1/payments</div>
+                      <div>156ms</div>
+                      <div>87.2</div>
+                      <div>0.8%</div>
+                    </div>
+                  </div>
+                </div>
+              </Tabs.TabPane>
+              
+              <Tabs.TabPane tab="调用日志" key="logs">
+                <PointDrawer />
+              </Tabs.TabPane>
+            </Tabs>
           </div>
         )}
       </Drawer>
