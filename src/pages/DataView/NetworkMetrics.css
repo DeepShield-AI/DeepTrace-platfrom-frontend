@@ -1,0 +1,174 @@
+.network-metrics-dark {
+  background-color: #0f1a2a;
+  min-height: 100vh;
+  padding: 15px;
+  color: #ffffff;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+}
+
+/* 头部样式 */
+.metrics-header {
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  padding: 16px 24px;
+  margin-bottom: 15px;
+}
+
+.header-content {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.header-title {
+  color: #ffffff !important;
+  margin: 0 !important;
+  font-size: 18px !important;
+}
+
+.header-title .anticon {
+  color: #1890ff;
+  margin-right: 8px;
+}
+
+.time-select .ant-select-selector {
+  background: rgba(255, 255, 255, 0.1) !important;
+  border: 1px solid rgba(255, 255, 255, 0.3) !important;
+  color: #ffffff !important;
+  width: 120px;
+}
+
+.auto-refresh-btn.ant-btn-primary {
+  background: #1890ff;
+  border-color: #1890ff;
+}
+
+.close-btn {
+  color: #ff4d4f;
+  border-color: #ff4d4f;
+}
+
+.close-btn:hover {
+  background: #ff4d4f;
+  color: #fff;
+}
+
+.add-query-btn {
+  background: #722ed1;
+  border-color: #722ed1;
+}
+
+.add-query-btn:hover {
+  background: #5c1da8;
+  border-color: #5c1da8;
+}
+
+/* 主内容区域 */
+.metrics-content {
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+}
+
+.metrics-content .ant-card-body {
+  padding: 20px;
+}
+
+/* 配置区域样式 */
+.config-section {
+  margin-bottom: 15px;
+}
+
+.config-item {
+  display: flex;
+  flex-direction: column;
+}
+
+.config-label {
+  color: #aaa !important;
+  font-size: 12px;
+  margin-bottom: 8px;
+  white-space: nowrap;
+}
+
+.config-select {
+  width: 200px;
+}
+
+.config-select .ant-select-selector {
+  background: rgba(255, 255, 255, 0.1) !important;
+  border: 1px solid rgba(255, 255, 255, 0.3) !important;
+  color: #ffffff !important;
+  height: 32px;
+}
+
+/* 数据表格样式 */
+.data-table-section {
+  margin-bottom: 15px;
+}
+
+.table-title {
+  color: #ffffff !important;
+  margin-bottom: 15px !important;
+  font-size: 14px !important;
+}
+
+.ant-table {
+  background: rgba(255, 255, 255, 0.02) !important;
+  color: #ffffff !important;
+}
+
+.ant-table-thead > tr > th {
+  background: rgba(255, 255, 255, 0.05) !important;
+  color: #aaa !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+.ant-table-tbody > tr > td {
+  border-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+.ant-table-tbody > tr:hover > td {
+  background: rgba(255, 255, 255, 0.05) !important;
+}
+
+/* 图表区域样式 */
+.chart-section {
+  margin-top: 15px;
+}
+
+.chart-header {
+  margin-bottom: 15px;
+}
+
+.chart-title {
+  color: #ffffff !important;
+  margin: 0 !important;
+  font-size: 14px !important;
+  font-weight: 500;
+}
+
+.chart-container {
+  height: 300px;
+  position: relative;
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .header-content {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 15px;
+  }
+  
+  .header-right {
+    width: 100%;
+  }
+  
+  .config-select {
+    width: 100%;
+  }
+}

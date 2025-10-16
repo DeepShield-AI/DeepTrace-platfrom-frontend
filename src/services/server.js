@@ -9,7 +9,9 @@ let isMock = true
 
 // const ipAddress = "202.112.237.37"
 const ipAddress = "http://114.215.254.187:8081"
-const flameIpAdress = "http://114.215.254.187:8088"
+// const flameIpAdress = "http://114.215.254.187:8088"
+const flameIpAdress = "http://localhost:8080"
+
 
 
 const getAllOverView = async () => {
@@ -216,6 +218,18 @@ const getTraceDetail = async (traceId) => {
     } catch (error) {
         console.error("==ERROR==", error)
     }
+    
+    // try { 
+    //     const res = await axios.get(`${flameIpAdress}/flamegraphList`, {
+    //         params: {
+    //             traceId: traceId
+    //         }
+    //     })
+    //     const {data = {}} = res
+    //     return data
+    // } catch (error) {
+    //     console.error("==ERROR==", error)
+    // }
 }
 
 const getTraceCharts = async (type) => {    
@@ -225,6 +239,78 @@ const getTraceCharts = async (type) => {
                 type: type
             }
         })
+        const {data = {}} = res
+        return data
+    } catch (error) {
+        console.error("==ERROR==", error)
+    }
+}
+
+const getEsTracesGraphNodes = async () => { 
+    try { 
+        const res = await axios.get(`${ipAddress}/api/esTracesGraph/nodes`)
+        const {data = {}} = res
+        return data
+    } catch (error) {
+        console.error("==ERROR==", error)
+    }
+}
+
+//调用日志
+const getEsNodesLog = async () => { 
+    try { 
+        const res = await axios.get(`${ipAddress}/api/esNodes/log/queryByPage`)
+        const {data = {}} = res
+        return data
+    } catch (error) {
+        console.error("==ERROR==", error)
+    }
+}
+//调用日志，状态码分组统计
+const getEsNodesLogStatus = async () => { 
+    try { 
+        const res = await axios.get(`${ipAddress}/api/esNodes/statistic/status`)
+        const {data = {}} = res
+        return data
+    } catch (error) {
+        console.error("==ERROR==", error)
+    }
+}
+//端点列表
+const getEsEndpointList = async () => { 
+    try { 
+        const res = await axios.get(`${ipAddress}/api/esNodes/queryEndpoint`)
+        const {data = {}} = res
+        return data
+    } catch (error) {
+        console.error("==ERROR==", error)
+    }
+}
+
+//应用指标 - 请求速率
+const getEsNodesQps = async () => { 
+    try { 
+        const res = await axios.get(`${ipAddress}/api/esNodes/kpi/qps`)
+        const {data = {}} = res
+        return data
+    } catch (error) {
+        console.error("==ERROR==", error)
+    }
+}
+//应用指标 - 异常比例
+const getEsErrorRate = async () => { 
+    try { 
+        const res = await axios.get(`${ipAddress}/api/esNodes/kpi/errorRate`)
+        const {data = {}} = res
+        return data
+    } catch (error) {
+        console.error("==ERROR==", error)
+    }
+}
+//应用指标 - 响应时延
+const getEsDuration = async () => { 
+    try { 
+        const res = await axios.get(`${ipAddress}/api/esNodes/kpi/duration`)
         const {data = {}} = res
         return data
     } catch (error) {

@@ -111,6 +111,28 @@ export default [
     ]
   },
   {
+    path: '/Data',
+    name: '指标中心',
+    icon: "BarChartOutlined",
+    routes: [
+      {
+        path: "/Data/view",
+        name: "指标查看",
+        component: "./DataView"
+      },
+      {
+        path: "/Data/summary",
+        name: "指标摘要",
+        component: "./ApplicationTopology"
+      },
+      {
+        path: "/Data/template",
+        name: "指标模版",
+        component: "./Protocol"
+      },
+    ]
+  },
+  {
     path: '/Action',
     name: '系统管理',
     icon: "SettingOutlined",

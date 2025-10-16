@@ -332,6 +332,7 @@ const PointDrawer = () => {
 
   // 获取Trace详情数据
   const fetchTraceDetail = async (traceId) => {
+
     setTraceDetailLoading(true);
     try {
       // 调用接口获取Trace详情
