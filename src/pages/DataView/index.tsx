@@ -9,7 +9,10 @@ import {
   ConfigProvider,
   Table,
   Input,
-  Alert
+  Alert,
+  Modal,
+  Form,
+  Checkbox
 } from 'antd';
 import { Line } from '@ant-design/plots';
 import { 
@@ -22,8 +25,6 @@ import {
   
 } from '@ant-design/icons';
 import { ProCard, PageContainer } from '@ant-design/pro-components';
-
-// import "./NetworkMetrics.css"
 
 const { Title, Text } = Typography;
 const { Option } = Select;
@@ -42,6 +43,11 @@ const NetworkMetrics = () => {
     pageSize: 10,
     total: 0
   });
+  const [isModalVisible, setIsModalVisible] = useState(false);
+  const [selectedFields, setSelectedFields] = useState([]);
+  const [selectedTable, setSelectedTable] = useState('应用');
+  const [queries, setQueries] = useState([]);
+  const [form] = Form.useForm();
 
   // 生成图表数据
   const generateMockData = () => {
@@ -370,6 +376,50 @@ const NetworkMetrics = () => {
     }
   };
 
+  // 显示添加查询的模态框
+  const showAddQueryModal = () => {
+    setIsModalVisible(true);
+    setSelectedTable('应用');
+    setSelectedFields([]);
+    form.resetFields();
+  };
+
+  // 处理模态框确认
+  const handleModalOk = () => {
+    form.validateFields().then(values => {
+      const { table, fields } = values;
+      const newQuery = {
+        id: Date.now(),
+        table,
+        fields,
+        data: generateTableData(table),
+        metrics: generateMockData()
+      };
+      setQueries([...queries, newQuery]);
+      setIsModalVisible(false);
+    });
+  };
+
+  // 处理模态框取消
+  const handleModalCancel = () => {
+    setIsModalVisible(false);
+  };
+
+  // 根据表类型获取可选的字段
+  const getAvailableFields = (tableType) => {
+    const fieldsMap = {
+      '应用': ['name', 'status', 'qps', 'errorRate', 'responseTime'],
+      '网络': ['name', 'status', 'throughput', 'latency', 'connections'],
+      '安全': ['name', 'status', 'blocked', 'alerts', 'lastScan']
+    };
+    return fieldsMap[tableType] || [];
+  };
+
+  // 删除查询
+  const removeQuery = (id) => {
+    setQueries(queries.filter(query => query.id !== id));
+  };
+
   return (
     <PageContainer
         content={
@@ -397,6 +447,7 @@ const NetworkMetrics = () => {
                   type="primary" 
                   icon={<PlusOutlined />}
                   className="add-query-btn"
+                  onClick={showAddQueryModal}
                 >
                   添加查询
                 </Button>
@@ -436,7 +487,6 @@ const NetworkMetrics = () => {
             className="metrics-content"
             style={{backgroundColor: "#DCDCDC", marginTop: "20px"}}
             direction="column"
-            
         >
           {/* 数据表配置 */}
           <ProCard className="config-section" bordered={false}>
@@ -503,6 +553,115 @@ const NetworkMetrics = () => {
             </div>
           </ProCard>
         </ProCard>
+
+        {/* 新增的查询区域 */}
+        {queries.map((query) => (
+          <ProCard 
+            key={query.id}
+            className="metrics-content"
+            style={{backgroundColor: "#DCDCDC", marginTop: "20px"}}
+            direction="column"
+          >
+            <ProCard 
+              extra={
+                <Button 
+                  icon={<CloseOutlined />} 
+                  onClick={() => removeQuery(query.id)}
+                  size="small"
+                />
+              }
+              title={`自定义查询 - ${query.table}`}
+              bordered={false}
+              direction='column'
+            >
+              {/* 数据表格 */}
+              <ProCard 
+                className="data-table-section" 
+                bordered={false} 
+                collapsible={true}
+                title={`${query.table}数据`}
+              >
+                <Table
+                  columns={tableColumns[query.table].filter(col => query.fields.includes(col.key || col.dataIndex))} 
+                  dataSource={query.data}
+                  size="small"
+                  pagination={{
+                    pageSize: 10,
+                    showSizeChanger: false,
+                    showTotal: (total) => `共 ${total} 条`,
+                    position: ['bottomRight']
+                  }}
+                  bordered
+                  loading={loading}
+                  rowKey="id"
+                />
+              </ProCard>
+
+              {/* 图表区域 */}
+              <ProCard 
+                className="chart-section" 
+                bordered={false}
+                title="请求数据"
+              >
+                <div className="chart-container">
+                  <Line {...{
+                    ...chartConfig,
+                    data: query.metrics,
+                    color: '#13c2c2'
+                  }} />
+                </div>
+              </ProCard>
+            </ProCard>
+          </ProCard>
+        ))}
+
+        {/* 添加查询的模态框 */}
+        <Modal
+          title="添加新查询"
+          visible={isModalVisible}
+          onOk={handleModalOk}
+          onCancel={handleModalCancel}
+          width={600}
+        >
+          <Form
+            form={form}
+            layout="vertical"
+            initialValues={{
+              table: '应用',
+              fields: []
+            }}
+          >
+            <Form.Item
+              name="table"
+              label="选择数据表"
+              rules={[{ required: true, message: '请选择数据表' }]}
+            >
+              <Select onChange={(value) => setSelectedTable(value)}>
+                <Option value="应用">应用</Option>
+                <Option value="网络">网络</Option>
+                <Option value="安全">安全</Option>
+              </Select>
+            </Form.Item>
+            
+            <Form.Item
+              name="fields"
+              label="选择关注的字段"
+              rules={[{ required: true, message: '请至少选择一个字段' }]}
+            >
+              <Checkbox.Group style={{ width: '100%' }}>
+                <Row gutter={[16, 16]}>
+                  {getAvailableFields(selectedTable).map(field => (
+                    <Col span={8} key={field}>
+                      <Checkbox value={field}>
+                        {tableColumns[selectedTable].find(col => col.dataIndex === field)?.title || field}
+                      </Checkbox>
+                    </Col>
+                  ))}
+                </Row>
+              </Checkbox.Group>
+            </Form.Item>
+          </Form>
+        </Modal>
       </div>
     </PageContainer>
   );
