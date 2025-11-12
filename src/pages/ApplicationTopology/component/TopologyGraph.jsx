@@ -128,7 +128,7 @@ const getLayoutedElements = (nodes, edges, direction = 'LR') => {
 };
 
 // 拓扑图组件
-const TopologyGraph = ({ nodeData, edgeData }) => {
+const TopologyGraph = ({ nodeData, edgeData, startTime, endTime }) => {
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const [loading, setLoading] = useState(true);
@@ -278,13 +278,23 @@ const TopologyGraph = ({ nodeData, edgeData }) => {
 
   // 处理边点击事件
   const handleEdgeClick = (event, edge) => {
-    setSelectedEdge(edge);
+    // 为边对象添加 pointType 字段
+    const edgeWithType = {
+      ...edge,
+      pointType: 'edge'
+    };
+    setSelectedEdge(edgeWithType);
     setEdgeDrawerVisible(true);
   };
 
   // 处理节点点击事件
   const handleNodeClick = (event, node) => {
-    setSelectedNode(node);
+    // 为节点对象添加 pointType 字段
+    const nodeWithType = {
+      ...node,
+      pointType: 'node'
+    };
+    setSelectedNode(nodeWithType);
     setNodeDrawerVisible(true);
   };
 
@@ -573,11 +583,13 @@ const TopologyGraph = ({ nodeData, edgeData }) => {
         onClose={() => setEdgeDrawerVisible(false)}
         visible={edgeDrawerVisible}
       >
-        {selectedEdge && <div>
+        {selectedEdge && (
+          <div>
             <PointDetailDrawer
               selectedObj={selectedEdge}
-            ></PointDetailDrawer>
-          </div>}
+            />
+          </div>
+        )}
       </Drawer>
 
       {/* 节点详情抽屉 */}
@@ -593,7 +605,7 @@ const TopologyGraph = ({ nodeData, edgeData }) => {
           <div>
             <PointDetailDrawer
               selectedObj={selectedNode}
-            ></PointDetailDrawer>
+            />
           </div>
         )}
       </Drawer>

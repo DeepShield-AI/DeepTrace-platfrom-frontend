@@ -1,7 +1,6 @@
-
 import { errorData, requestData } from '@/services/mock';
 import { Area, Line } from '@ant-design/plots';
-import { Card, Col, Drawer, Row, Select, Tabs } from 'antd'; // 引入抽屉组件
+import { Card, Col, Drawer, Row, Tabs, message, DatePicker, Button, Space } from 'antd';
 import dagre from 'dagre';
 import { useEffect, useRef, useState } from 'react';
 import ReactFlow, {
@@ -16,10 +15,22 @@ import ReactFlow, {
 import 'react-flow-renderer/dist/style.css';
 import EndpointMonitoringTable from './components/endpointTable.jsx';
 import PointDrawer from './PointDrawer';
+import { 
+    getEsEdgeEndpointList,
+    getEsNodeEndpointList
+} from '../../../services/server.js';
+import moment from 'moment';
+
+const { RangePicker } = DatePicker;
 
 const PointDetailDrawer = ({selectedObj = {}}) => {
 
-    const [timeRange, setTimeRange] = useState('lastHour');
+    // 时间范围状态
+    const [timeRange, setTimeRange] = useState({
+        startTime: moment().subtract(1, 'hour').valueOf(), // 默认最近1小时
+        endTime: moment().valueOf()
+    });
+    
     const [activeTab, setActiveTab] = useState('metrics');
     const [chartData, setChartData] = useState({
         requestData, // type=count
@@ -34,16 +45,161 @@ const PointDetailDrawer = ({selectedObj = {}}) => {
     const [selectedEdge, setSelectedEdge] = useState(null);
     const [selectedNode, setSelectedNode] = useState(null);
 
+    // 默认的端点数据（兜底数据）
+    const defaultEndpointData = [
+        {
+            "endpoint": "ComposeCreatorWithUserId",
+            "protocol": "Thrift",
+            "totalCount": 328.0,
+            "minTime": "1755926183984",
+            "maxTime": "1755926187091",
+            "qps": 105.56807209526875,
+            "avgDuration": 194011.57012195123,
+            "p75Duration": "246864.5",
+            "p99Duration": "347781.6000000001",
+            "errorCount": 0.0,
+            "errorRate": 0.0
+        },
+        {
+            "endpoint": "ComposeMedia",
+            "protocol": "Thrift",
+            "totalCount": 328.0,
+            "minTime": "1755926183984",
+            "maxTime": "1755926187091",
+            "qps": 105.56807209526875,
+            "avgDuration": 198016.17073170733,
+            "p75Duration": "245628.25",
+            "p99Duration": "387430.46",
+            "errorCount": 0.0,
+            "errorRate": 0.0
+        }
+    ];
+
+    // 端点Data
+    const [endpointData, setEndpointData] = useState(defaultEndpointData);
+    const [endpointLoading, setEndpointLoading] = useState(false);
+
+    // 获取端点列表数据 - 根据 pointType 选择不同的 API
+    const fetchEndpointData = async () => {
+        setEndpointLoading(true);
+        try {
+            // 构建请求参数
+            const params = {
+                startTime: timeRange.startTime,
+                endTime: timeRange.endTime
+            };
+            
+            console.log('请求参数:', params);
+            
+            let response;
+            
+            // 根据 pointType 选择不同的 API
+            if (selectedObj.pointType === 'node') {
+                // 节点相关的端点数据
+                response = await getEsNodeEndpointList(params);
+                console.log('调用节点端点API');
+            } else if (selectedObj.pointType === 'edge') {
+                // 边相关的端点数据
+                response = await getEsEdgeEndpointList(params);
+                console.log('调用边端点API');
+            } else {
+                // 默认情况，使用节点API
+                response = await getEsNodeEndpointList(params);
+                console.log('使用默认节点端点API');
+            }
+            
+            // 根据实际API响应结构调整
+            if (response && response.success && response.data) {
+                setEndpointData(response.data);
+                message.success('端点数据加载成功');
+            } else {
+                // 如果响应结构不符合预期，使用兜底数据
+                console.warn('API响应格式不符合预期，使用兜底数据');
+                setEndpointData(defaultEndpointData);
+                message.warning('使用默认端点数据');
+            }
+        } catch (error) {
+            console.error('获取端点数据失败:', error);
+            setEndpointData(defaultEndpointData);
+            message.error('端点数据加载失败，使用默认数据');
+        } finally {
+            setEndpointLoading(false);
+        }
+    };
+
+    // 监听activeTab变化，当切换到端点列表时获取数据
+    useEffect(() => {
+        if (activeTab === 'endpoints') {
+            fetchEndpointData();
+        }
+    }, [activeTab]);
+
+    // 监听selectedObj变化，当selectedObj变化时重新获取数据
+    useEffect(() => {
+        if (activeTab === 'endpoints' && selectedObj.pointType) {
+            fetchEndpointData();
+        }
+    }, [selectedObj]);
+
+    // 监听timeRange变化，重新获取数据
+    useEffect(() => {
+        if (activeTab === 'endpoints') {
+            fetchEndpointData();
+        }
+    }, [timeRange]);
+
+    // 处理时间范围选择
+    const handleTimeChange = (dates) => {
+        if (dates && dates.length === 2) {
+            setTimeRange({
+                startTime: dates[0].valueOf(),
+                endTime: dates[1].valueOf()
+            });
+        }
+    };
+
+    // 应用时间范围并重新获取数据
+    const applyTimeRange = () => {
+        if (!timeRange.startTime || !timeRange.endTime) {
+            message.warning('请选择完整的时间范围');
+            return;
+        }
+        
+        if (timeRange.endTime <= timeRange.startTime) {
+            message.error('结束时间必须大于开始时间');
+            return;
+        }
+        
+        // 如果当前在端点列表tab，则重新获取数据
+        if (activeTab === 'endpoints') {
+            fetchEndpointData();
+        }
+        
+        message.success('时间范围已更新');
+    };
+
     const formatNumber = (num) => {
         if (num >= 1000000) return (num / 1000000).toFixed(2) + 'm';
         if (num >= 1000) return (num / 1000).toFixed(2) + 'k';
         return num.toFixed(2);
     };
 
-    const handleTimeRangeChange = (value) => {
-        setTimeRange(value);
-        // 这里可以添加根据时间段重新获取数据的逻辑
-        console.log(`时间段已更改为: ${value}`);
+    // 格式化时间显示
+    const formatTimeDisplay = () => {
+        if (timeRange.startTime && timeRange.endTime) {
+            return `${moment(timeRange.startTime).format('YYYY-MM-DD HH:mm')} 至 ${moment(timeRange.endTime).format('YYYY-MM-DD HH:mm')}`;
+        }
+        return '请选择时间范围';
+    };
+
+    // 获取当前对象的显示名称
+    const getObjectDisplayName = () => {
+        if (selectedObj.pointType === 'node') {
+            return selectedObj.data?.containerName || '节点';
+        } else if (selectedObj.pointType === 'edge') {
+            return `连接 ${selectedObj.source} → ${selectedObj.target}`;
+        }
+        return '对象';
     };
 
     function transformData(originalData) {
@@ -123,6 +279,7 @@ const PointDetailDrawer = ({selectedObj = {}}) => {
         lineWidth: 2,
         },
     };
+    
     // 1. 先确保转换后的数据格式正确（复用你的 transformData 函数，无需修改）
     const transformedErrorData = transformData(errorData);
 
@@ -201,7 +358,7 @@ const PointDetailDrawer = ({selectedObj = {}}) => {
         },
         label: {
             fontSize: 12,
-            formatter: (type) => `状态码 ${type}`, // 图例文本：优化为“状态码 200”
+            formatter: (type) => `状态码 ${type}`, // 图例文本：优化为"状态码 200"
         },
         interactive: true, // 支持点击图例隐藏/显示对应线条
         },
@@ -270,15 +427,37 @@ const PointDetailDrawer = ({selectedObj = {}}) => {
                     justifyContent: 'flex-end',
                     marginBottom: 16,
                     padding: '0 20px',
+                    alignItems: 'center',
+                    gap: '12px'
                 }}
                 >
-                <Select value={timeRange} onChange={handleTimeRangeChange} style={{ width: 200 }}>
-                    <Select.Option value="lastHour">最近1小时</Select.Option>
-                    <Select.Option value="lastDay">最近1天</Select.Option>
-                    <Select.Option value="lastWeek">最近1周</Select.Option>
-                    <Select.Option value="lastMonth">最近1月</Select.Option>
-                    <Select.Option value="custom">自定义时间段</Select.Option>
-                </Select>
+                <div style={{ fontSize: '14px', color: '#666' }}>
+                    当前对象: {getObjectDisplayName()} | 时间段: {formatTimeDisplay()}
+                </div>
+                
+                <Space>
+                    <RangePicker
+                        showTime={{ 
+                            format: 'HH:mm',
+                            defaultValue: [moment('00:00', 'HH:mm'), moment('23:59', 'HH:mm')]
+                        }}
+                        format="YYYY-MM-DD HH:mm"
+                        onChange={handleTimeChange}
+                        value={[
+                            timeRange.startTime ? moment(timeRange.startTime) : null,
+                            timeRange.endTime ? moment(timeRange.endTime) : null
+                        ]}
+                        style={{ width: 360 }}
+                        placeholder={['开始时间', '结束时间']}
+                    />
+                    <Button 
+                        type="primary" 
+                        onClick={applyTimeRange}
+                        disabled={!timeRange.startTime || !timeRange.endTime}
+                    >
+                        应用
+                    </Button>
+                </Space>
                 </div>
 
                 <Tabs
@@ -347,7 +526,7 @@ const PointDetailDrawer = ({selectedObj = {}}) => {
                         >
                         <div style={{ fontSize: '14px', color: '#666' }}>平均耗时</div>
                         <div style={{ fontSize: '24px', fontWeight: 'bold', marginTop: '5px' }}>
-                            {formatNumber(selectedObj.data.avgDuration)}μs
+                            {formatNumber(selectedObj.data?.avgDuration || 0)}μs
                         </div>
                         </div>
 
@@ -361,13 +540,13 @@ const PointDetailDrawer = ({selectedObj = {}}) => {
                         >
                         <div style={{ fontSize: '14px', color: '#666' }}>QPS</div>
                         <div style={{ fontSize: '24px', fontWeight: 'bold', marginTop: '5px' }}>
-                            {selectedObj.data.qps.toFixed(2)}
+                            {(selectedObj.data?.qps || 0).toFixed(2)}
                         </div>
                         </div>
 
                         <div
                         style={{
-                            backgroundColor: selectedObj.data.errorRate > 0 ? '#fff1f0' : '#f6ffed',
+                            backgroundColor: (selectedObj.data?.errorRate || 0) > 0 ? '#fff1f0' : '#f6ffed',
                             padding: '15px',
                             borderRadius: '8px',
                             width: '200px',
@@ -379,10 +558,10 @@ const PointDetailDrawer = ({selectedObj = {}}) => {
                             fontSize: '24px',
                             fontWeight: 'bold',
                             marginTop: '5px',
-                            color: selectedObj.data.errorRate > 0 ? '#f5222d' : '#52c41a',
+                            color: (selectedObj.data?.errorRate || 0) > 0 ? '#f5222d' : '#52c41a',
                             }}
                         >
-                            {(selectedObj.data.errorRate * 100).toFixed(1)}%
+                            {((selectedObj.data?.errorRate || 0) * 100).toFixed(1)}%
                         </div>
                         </div>
 
@@ -396,7 +575,7 @@ const PointDetailDrawer = ({selectedObj = {}}) => {
                         >
                         <div style={{ fontSize: '14px', color: '#666' }}>错误数</div>
                         <div style={{ fontSize: '24px', fontWeight: 'bold', marginTop: '5px' }}>
-                            {selectedObj.data.errorCount}
+                            {selectedObj.data?.errorCount || 0}
                         </div>
                         </div>
                     </div>
@@ -449,7 +628,19 @@ const PointDetailDrawer = ({selectedObj = {}}) => {
                 </Tabs.TabPane>
 
                 <Tabs.TabPane tab="端点列表" key="endpoints">
-                    <EndpointMonitoringTable></EndpointMonitoringTable>
+                    <div style={{ marginBottom: 16, padding: '0 20px' }}>
+                        <h4>
+                            {selectedObj.pointType === 'node' ? '节点' : '连接'}相关端点列表
+                            {selectedObj.pointType === 'node' && selectedObj.data?.containerName && 
+                                ` - ${selectedObj.data.containerName}`}
+                            {selectedObj.pointType === 'edge' && 
+                                ` - ${selectedObj.source} → ${selectedObj.target}`}
+                        </h4>
+                    </div>
+                    <EndpointMonitoringTable 
+                        data={endpointData} 
+                        loading={endpointLoading}
+                    />
                 </Tabs.TabPane>
 
                 <Tabs.TabPane tab="调用日志" key="logs">

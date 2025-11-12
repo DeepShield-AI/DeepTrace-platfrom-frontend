@@ -3,63 +3,12 @@ import { Card, Table, Tag, Typography } from 'antd';
 
 const { Title } = Typography;
 
-// 生成模拟数据
-const generateMockData = () => {
-  const endpoints = [
-    '/api/users',
-    '/api/orders',
-    '/api/products',
-    '/api/auth/login',
-    '/api/payments',
-    '/api/inventory',
-    '/api/shipping',
-    '/api/reports',
-    '/api/notifications',
-    '/api/settings',
-  ];
-
-  const signalSources = ['Mobile App', 'Web Client', 'Internal Service', 'Third-party API'];
-
-  const appProtocols = ['HTTP/1.1', 'HTTP/2', 'gRPC', 'WebSocket'];
-
-  const observationPoints = ['US-East-1', 'EU-Central-1', 'AP-Southeast-1', 'US-West-2'];
-
-  const data = [];
-
-  for (let i = 0; i < 25; i++) {
-    const endpoint = endpoints[Math.floor(Math.random() * endpoints.length)];
-    const signalSource = signalSources[Math.floor(Math.random() * signalSources.length)];
-    const appProtocol = appProtocols[Math.floor(Math.random() * appProtocols.length)];
-    const observationPoint =
-      observationPoints[Math.floor(Math.random() * observationPoints.length)];
-
-    const requestRate = (Math.random() * 1000 + 50).toFixed(2);
-    const avgLatency = (Math.random() * 300 + 10).toFixed(2);
-    const p75Latency = (avgLatency * 1.3).toFixed(2);
-    const p99Latency = (avgLatency * 1.8).toFixed(2);
-    const serverErrorRate = (Math.random() * 5).toFixed(2);
-    const clientErrorRate = (Math.random() * 3).toFixed(2);
-
-    data.push({
-      key: i,
-      endpoint,
-      signalSource,
-      appProtocol,
-      observationPoint,
-      requestRate,
-      avgLatency,
-      p75Latency,
-      p99Latency,
-      serverErrorRate,
-      clientErrorRate,
-    });
-  }
-
-  return data;
-};
-
-const EndpointMonitoringTable = () => {
-  const data = generateMockData();
+const EndpointMonitoringTable = ({ data = [] }) => {
+  // 如果没有传入数据，使用空数组
+  const tableData = data.map((item, index) => ({
+    key: index,
+    ...item
+  }));
 
   // 列定义
   const columns = [
@@ -71,108 +20,113 @@ const EndpointMonitoringTable = () => {
       render: (text) => <span style={{ fontFamily: 'monospace' }}>{text}</span>,
     },
     {
-      title: '信号源',
-      dataIndex: 'signalSource',
-      key: 'signalSource',
-      filters: [
-        { text: 'Mobile App', value: 'Mobile App' },
-        { text: 'Web Client', value: 'Web Client' },
-        { text: 'Internal Service', value: 'Internal Service' },
-        { text: 'Third-party API', value: 'Third-party API' },
-      ],
-      onFilter: (value, record) => record.signalSource === value,
-    },
-    {
-      title: '应用协议',
-      dataIndex: 'appProtocol',
-      key: 'appProtocol',
+      title: '协议',
+      dataIndex: 'protocol',
+      key: 'protocol',
       render: (protocol) => {
         let color = 'geekblue';
-        if (protocol === 'HTTP/2') color = 'green';
+        if (protocol === 'HTTP') color = 'green';
         if (protocol === 'gRPC') color = 'purple';
-        if (protocol === 'WebSocket') color = 'orange';
+        if (protocol === 'Thrift') color = 'orange';
+        if (protocol === 'WebSocket') color = 'cyan';
         return <Tag color={color}>{protocol}</Tag>;
       },
       filters: [
-        { text: 'HTTP/1.1', value: 'HTTP/1.1' },
-        { text: 'HTTP/2', value: 'HTTP/2' },
+        { text: 'HTTP', value: 'HTTP' },
         { text: 'gRPC', value: 'gRPC' },
+        { text: 'Thrift', value: 'Thrift' },
         { text: 'WebSocket', value: 'WebSocket' },
       ],
-      onFilter: (value, record) => record.appProtocol === value,
+      onFilter: (value, record) => record.protocol === value,
     },
     {
-      title: '观测点',
-      dataIndex: 'observationPoint',
-      key: 'observationPoint',
-      filters: [
-        { text: 'US-East-1', value: 'US-East-1' },
-        { text: 'EU-Central-1', value: 'EU-Central-1' },
-        { text: 'AP-Southeast-1', value: 'AP-Southeast-1' },
-        { text: 'US-West-2', value: 'US-West-2' },
-      ],
-      onFilter: (value, record) => record.observationPoint === value,
-    },
-    {
-      title: '请求速率 (req/s)',
-      dataIndex: 'requestRate',
-      key: 'requestRate',
-      sorter: (a, b) => a.requestRate - b.requestRate,
-      render: (value) => <span style={{ fontWeight: 'bold' }}>{value}</span>,
+      title: '总请求数',
+      dataIndex: 'totalCount',
+      key: 'totalCount',
+      sorter: (a, b) => a.totalCount - b.totalCount,
+      render: (value) => <span style={{ fontWeight: 'bold' }}>{value.toLocaleString()}</span>,
       defaultSortOrder: 'descend',
     },
     {
+      title: 'QPS',
+      dataIndex: 'qps',
+      key: 'qps',
+      sorter: (a, b) => a.qps - b.qps,
+      render: (value) => <span style={{ fontWeight: 'bold' }}>{value.toFixed(2)}</span>,
+    },
+    {
       title: '平均响应时延 (ms)',
-      dataIndex: 'avgLatency',
-      key: 'avgLatency',
-      sorter: (a, b) => a.avgLatency - b.avgLatency,
+      dataIndex: 'avgDuration',
+      key: 'avgDuration',
+      sorter: (a, b) => a.avgDuration - b.avgDuration,
       render: (value) => {
         const numValue = parseFloat(value);
         let color = '#52c41a'; // 绿色 - 良好
-        if (numValue > 150) color = '#f5222d'; // 红色 - 差
-        else if (numValue > 80) color = '#fa8c16'; // 橙色 - 一般
+        if (numValue > 200000) color = '#f5222d'; // 红色 - 差
+        else if (numValue > 100000) color = '#fa8c16'; // 橙色 - 一般
 
-        return <span style={{ color, fontWeight: 'bold' }}>{value}</span>;
+        return <span style={{ color, fontWeight: 'bold' }}>{value.toFixed(2)}</span>;
       },
     },
     {
       title: 'P75响应时延 (ms)',
-      dataIndex: 'p75Latency',
-      key: 'p75Latency',
-      sorter: (a, b) => a.p75Latency - b.p75Latency,
+      dataIndex: 'p75Duration',
+      key: 'p75Duration',
+      sorter: (a, b) => parseFloat(a.p75Duration) - parseFloat(b.p75Duration),
+      render: (value) => parseFloat(value).toFixed(2),
     },
     {
       title: 'P99响应时延 (ms)',
-      dataIndex: 'p99Latency',
-      key: 'p99Latency',
-      sorter: (a, b) => a.p99Latency - b.p99Latency,
+      dataIndex: 'p99Duration',
+      key: 'p99Duration',
+      sorter: (a, b) => parseFloat(a.p99Duration) - parseFloat(b.p99Duration),
+      render: (value) => parseFloat(value).toFixed(2),
     },
     {
-      title: '服务端异常比例 (%)',
-      dataIndex: 'serverErrorRate',
-      key: 'serverErrorRate',
-      sorter: (a, b) => a.serverErrorRate - b.serverErrorRate,
+      title: '错误数',
+      dataIndex: 'errorCount',
+      key: 'errorCount',
+      sorter: (a, b) => a.errorCount - b.errorCount,
+      render: (value) => <span style={{ fontWeight: 'bold' }}>{value.toLocaleString()}</span>,
+    },
+    {
+      title: '错误率 (%)',
+      dataIndex: 'errorRate',
+      key: 'errorRate',
+      sorter: (a, b) => a.errorRate - b.errorRate,
       render: (value) => {
-        const numValue = parseFloat(value);
+        const numValue = parseFloat(value) * 100; // 转换为百分比
         let color = '#52c41a'; // 绿色 - 良好
-        if (numValue > 3) color = '#f5222d'; // 红色 - 差
+        if (numValue > 5) color = '#f5222d'; // 红色 - 差
         else if (numValue > 1) color = '#fa8c16'; // 橙色 - 一般
 
-        return <span style={{ color, fontWeight: 'bold' }}>{value}%</span>;
+        return <span style={{ color, fontWeight: 'bold' }}>{numValue.toFixed(2)}%</span>;
       },
     },
     {
-      title: '客户端异常比例 (%)',
-      dataIndex: 'clientErrorRate',
-      key: 'clientErrorRate',
-      sorter: (a, b) => a.clientErrorRate - b.clientErrorRate,
+      title: '最早请求时间',
+      dataIndex: 'minTime',
+      key: 'minTime',
       render: (value) => {
-        const numValue = parseFloat(value);
-        let color = '#52c41a'; // 绿色 - 良好
-        if (numValue > 2) color = '#f5222d'; // 红色 - 差
-        else if (numValue > 0.5) color = '#fa8c16'; // 橙色 - 一般
-
-        return <span style={{ color, fontWeight: 'bold' }}>{value}%</span>;
+        // 如果是时间戳，转换为可读格式
+        const timestamp = parseInt(value);
+        if (!isNaN(timestamp)) {
+          return new Date(timestamp).toLocaleString();
+        }
+        return value;
+      },
+    },
+    {
+      title: '最晚请求时间',
+      dataIndex: 'maxTime',
+      key: 'maxTime',
+      render: (value) => {
+        // 如果是时间戳，转换为可读格式
+        const timestamp = parseInt(value);
+        if (!isNaN(timestamp)) {
+          return new Date(timestamp).toLocaleString();
+        }
+        return value;
       },
     },
   ];
@@ -188,18 +142,21 @@ const EndpointMonitoringTable = () => {
         </div>
 
         <p style={{ color: '#666', marginBottom: '24px' }}>
-          展示系统中各个端点的性能指标，包括请求速率、响应时延和错误率等关键指标。
+          展示系统中各个端点的性能指标，包括请求量、响应时延和错误率等关键指标。
+          当前显示 {data.length} 个端点。
         </p>
 
         <Table
           columns={columns}
-          dataSource={data}
+          dataSource={tableData}
           pagination={{
             pageSize: 10,
-            showSizeChanger: false,
+            showSizeChanger: true,
+            showQuickJumper: true,
             showTotal: (total, range) => `第 ${range[0]}-${range[1]} 条，共 ${total} 条`,
+            pageSizeOptions: ['10', '20', '50', '100'],
           }}
-          scroll={{ x: 1500 }}
+          scroll={{ x: 1800 }}
           bordered
         />
       </Card>

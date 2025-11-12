@@ -19,7 +19,7 @@ const Chart1: React.FC = (props) => {
   ];
 
   const config = {
-    data: ipVolData,
+    data: data,
     xField: 'title',
     yField: 'value',
     sort: {

@@ -49,45 +49,26 @@ export default [
   //   component: './Detection',
   //   icon: "SecurityScan",
   // },
-  {
-    path: '/Monitor',
-    name: '视图列表',
-    icon: "FundProjectionScreenOutlined",
-    routes: [
-      {
-        path: '/Monitor/custom',
-        name: '自定义视图', 
-        component: './MonitorNative'
-      },
-      {
-        path: '/Monitor/native',
-        name: '内置视图',
-        component: './MonitorNative'
-      },
-    ]
-  },
-  {
-    path: '/Network',
-    name: '网络观测',
-    icon: "CloudSync",
-    routes: [
-      {
-        path: "/Network/track",
-        name: "资源分析",
-        component: "./Protocol"
-      },
-      {
-        path: "/Network/topology",
-        name: "路径分析",
-        component: "./Protocol"
-      },
-      {
-        path: "/Network/log",
-        name: "拓扑分析",
-        component: "./Protocol"
-      },
-    ]
-  },
+  // {
+  //   path: '/Monitor',
+  //   name: '视图列表',
+  //   icon: "FundProjectionScreenOutlined",
+  //   disabled: true,
+  //   routes: [
+  //     {
+  //       path: '/Monitor/custom',
+  //       name: '自定义视图', 
+  //       component: './MonitorNative',
+  //       disabled: true
+  //     },
+  //     {
+  //       path: '/Monitor/native',
+  //       name: '内置视图',
+  //       component: './MonitorNative',
+  //       disabled: true
+  //     },
+  //   ]
+  // },
   {
     path: '/Application',
     name: '应用观测',
@@ -103,11 +84,12 @@ export default [
         name: "调用链拓扑",
         component: "./ApplicationTopology"
       },
-      {
-        path: "/Application/log",
-        name: "日志检索",
-        component: "./Protocol"
-      },
+      // {
+      //   path: "/Application/log",
+      //   name: "日志检索",
+      //   component: "./Protocol",
+      //   disabled: true
+      // },
     ]
   },
   {
@@ -120,16 +102,18 @@ export default [
         name: "指标查看",
         component: "./DataView"
       },
-      {
-        path: "/Data/summary",
-        name: "指标摘要",
-        component: "./ApplicationTopology"
-      },
-      {
-        path: "/Data/template",
-        name: "指标模版",
-        component: "./Protocol"
-      },
+      // {
+      //   path: "/Data/summary",
+      //   name: "指标摘要",
+      //   component: "./ApplicationTopology",
+      //   disabled: true
+      // },
+      // {
+      //   path: "/Data/template",
+      //   name: "指标模版",
+      //   component: "./Protocol",
+      //   disabled: true
+      // },
     ]
   },
   {
@@ -142,30 +126,51 @@ export default [
         name: '采集器',
         component: './ActionCollect'
       },
-      {
-        path: '/Action/alert',
-        name: '数据节点',
-        component: './Alert',
-        // icon: "InfoCircle"
-      },
-      {
-        path: '/Action/hunts',
-        name: '资产配置',
-        component: './Hunts',
-        // icon: "Monitor"
-      },
-      {
-        path: '/Action/cases',
-        name: '系统配置',
-        component: './Cases',
-        // icon: "Project"
-      },
+      // {
+      //   path: '/Action/alert',
+      //   name: '数据节点',
+      //   component: './Alert',
+      //   disabled: true
+      //   // icon: "InfoCircle"
+      // },
+      // {
+      //   path: '/Action/cases',
+      //   name: '系统配置',
+      //   component: './Cases',
+      //   disabled: true
+      //   // icon: "Project"
+      // },
     ]
   },
-  {
-    path: '/ActionDetail',
-    component: './ActionCollect/component/collectTableDetail.tsx'
-  },
+  // {
+  //   path: '/ActionDetail',
+  //   component: './ActionCollect/component/collectTableDetail.tsx'
+  // },
+  
+  // {
+  //   path: '/Network',
+  //   name: '网络观测',
+  //   icon: "CloudSync",
+  //   disabled: true,
+  //   routes: [
+  //     {
+  //       path: "/Network/track",
+  //       name: "资源分析",
+  //       component: "./Protocol",
+  //       disabled:true
+  //     },
+  //     {
+  //       path: "/Network/topology",
+  //       name: "路径分析",
+  //       component: "./Protocol"
+  //     },
+  //     {
+  //       path: "/Network/log",
+  //       name: "拓扑分析",
+  //       component: "./Protocol"
+  //     },
+  //   ]
+  // },
   {
     path: '/Alert',
     name: '告警管理',
@@ -182,15 +187,15 @@ export default [
         component: './Alert',
         // icon: "InfoCircle"
       },
-      {
-        path: '/Alert/setting',
-        name: '告警策略',
-        component: './Hunts',
-        // icon: "Monitor"
-      },
+      // {
+      //   path: '/Alert/setting',
+      //   name: '告警策略',
+      //   component: './Hunts',
+      //   disabled: true
+      //   // icon: "Monitor"
+      // },
     ]
   },
-
   // {
   //   path: '/security/alert',
   //   name: 'Alert',
@@ -217,17 +222,17 @@ export default [
   //     {
   //       path: "/Protocol/view",
   //       name: "流量可视化",
-  //       component: "./Protocol"
+  //       component: "./SecurityBase"
   //     },
   //     {
   //       path: "/Protocol/analyze",
   //       name: "统计分析",
-  //       component: "./Protocol"
+  //       component: "./SecurityLoad"
   //     },
   //     {
   //       path: "/Protocol/search",
   //       name: "日志检索",
-  //       component: "./Protocol"
+  //       component: "./SecurityNetWork"
   //     },
   //   ]
   // },

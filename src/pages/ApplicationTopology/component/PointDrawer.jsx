@@ -685,7 +685,9 @@ const PointDrawer = () => {
     }
 
     if (!root) {
-      throw new Error('未找到根节点（parent_id为null的节点）');
+      // throw new Error('未找到根节点（parent_id为null的节点）');
+      root = { span_id: null, level: 0, child_ids: [] }
+
     }
 
     // 3. 根节点层级为0

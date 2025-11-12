@@ -9,7 +9,6 @@ import {
     ProTable,
     ProCard
   } from '@ant-design/pro-components';
-import { Line } from '@ant-design/charts';
 import Chart1 from './components/chart1.tsx';
 import Chart2 from './components/chart2.tsx';
 import Chart3 from './components/chart3.tsx';
@@ -20,11 +19,11 @@ import { AlertTable } from './alert/index.tsx';
 // import BaseMontor from './components/BaseMontor'
 // import TriggerMonitor from './components/triggerMonitor';
 // import './index.less'
-import {SECURITY_CARD_DATA} from '../../mock.ts'
-import { 
-    getAllOverView,
-    getIPData
-} from '../../services/server.js'
+// import {SECURITY_CARD_DATA} from '../../mock.ts'
+// import { 
+//     getAllOverView,
+//     getIPData
+// } from '../../services/server.js'
 
 import {
     accessGetAllMockData,
@@ -173,6 +172,7 @@ const Monitor = () => {
         <PageContainer
             content="系统安全事件监测"
         >
+            
             <ProCard direction="column" ghost gutter={[0, 16]}>
                 <ProCard ghost>
                     <RangePicker width={400}/>
@@ -184,73 +184,73 @@ const Monitor = () => {
                     <AlertTable></AlertTable>
                 </ProCard>
                 <ProCard title="Detection" collapsible>
-                <ProCard>
-                    <ProTable
-                        columns={groupTableColumn1}
-                        request={async (params) => {
-                        console.log(params);
-                        return {
-                            data: [
-                                {
-                                    key: 1,
-                                    count: 56211,
-                                    type: "suricata",
-                                },
-                                {
-                                    key: 2,
-                                    count: 3256,
-                                    type: "yara",
-                                },
-                                {
-                                    key: 3,
-                                    count: 1235,
-                                    type: "sigma",
-                                },
-                            ],
-                            success: true,
-                        };
-                        }}
-                        search={false}
-                    />
-                </ProCard>
-                <ProCard>
-                    <ProTable
-                        columns={groupTableColumn2}
-                        request={async (params) => {
+                    <ProCard>
+                        <ProTable
+                            columns={groupTableColumn1}
+                            request={async (params) => {
+                            console.log(params);
                             return {
                                 data: [
                                     {
-                                        ruleset: "ETOPEN",
+                                        key: 1,
                                         count: 56211,
-                                        enabled: true,
+                                        type: "suricata",
                                     },
                                     {
-                                        ruleset: "core",
+                                        key: 2,
                                         count: 3256,
-                                        enabled: false,
+                                        type: "yara",
                                     },
                                     {
-                                        ruleset: "ETOPEN-2",
+                                        key: 3,
                                         count: 1235,
-                                        enabled: false,
-                                    },
-                                    {
-                                        ruleset: "ETOPEN-2",
-                                        count: 123,
-                                        enabled: false,
-                                    },
-                                    {
-                                        ruleset: "ETOPEN-2",
-                                        count: 87,
-                                        enabled: false,
+                                        type: "sigma",
                                     },
                                 ],
                                 success: true,
                             };
-                        }}
-                        search={false}
-                    />
-                </ProCard>
+                            }}
+                            search={false}
+                        />
+                    </ProCard>
+                    <ProCard>
+                        <ProTable
+                            columns={groupTableColumn2}
+                            request={async (params) => {
+                                return {
+                                    data: [
+                                        {
+                                            ruleset: "ETOPEN",
+                                            count: 56211,
+                                            enabled: true,
+                                        },
+                                        {
+                                            ruleset: "core",
+                                            count: 3256,
+                                            enabled: false,
+                                        },
+                                        {
+                                            ruleset: "ETOPEN-2",
+                                            count: 1235,
+                                            enabled: false,
+                                        },
+                                        {
+                                            ruleset: "ETOPEN-2",
+                                            count: 123,
+                                            enabled: false,
+                                        },
+                                        {
+                                            ruleset: "ETOPEN-2",
+                                            count: 87,
+                                            enabled: false,
+                                        },
+                                    ],
+                                    success: true,
+                                };
+                            }}
+                            search={false}
+                        />
+                    </ProCard>
                 </ProCard>
                 <ProCard gutter={16} ghost wrap >
                     {
@@ -259,7 +259,6 @@ const Monitor = () => {
                         })
                     }
                 </ProCard>
-                {/* part2 */}
                 <ProCard gutter={16} ghost>
                     <ProCard colSpan={10} style={{ height: 300, padding: 0 }} title={"IP数据量统计"} >
                         <Chart1 ipVolData={ipVolData}/>
@@ -273,10 +272,10 @@ const Monitor = () => {
                 </ProCard>
             </ProCard>
             {/* 试验观测 */}
-            <ProCard collapsible title="试验观测" ghost bordered headerBordered>
-            </ProCard>
+            {/* <ProCard collapsible title="试验观测" ghost bordered headerBordered>
+            </ProCard> */}
             {/* part1 */}
-            <ProCard collapsible title="基本数据监
+            {/* <ProCard collapsible title="基本数据监
             测图表" ghost bordered headerBordered >
                 <BaseModule></BaseModule>
             </ProCard>
@@ -285,7 +284,7 @@ const Monitor = () => {
             </ProCard>
             <ProCard collapsible title="试验系统负载图表" ghost bordered headerBordered >
                 <NetworkModule></NetworkModule>
-            </ProCard>
+            </ProCard> */}
         </PageContainer>
     )
 }

@@ -9,8 +9,9 @@ let isMock = true
 
 // const ipAddress = "202.112.237.37"
 const ipAddress = "http://114.215.254.187:8081"
-// const flameIpAdress = "http://114.215.254.187:8088"
-const flameIpAdress = "http://localhost:8080"
+const topologyIpAddress = "http://localhost:8081"
+const flameIpAdress = "http://114.215.254.187:8080"
+// const flameIpAdress = "http://localhost:8080"
 
 
 
@@ -246,9 +247,52 @@ const getTraceCharts = async (type) => {
     }
 }
 
-const getEsTracesGraphNodes = async () => { 
+// 查点指标
+const getEsTracesGraphNodes = async (params) => { 
     try { 
-        const res = await axios.get(`${ipAddress}/api/esTracesGraph/nodes`)
+        const res = await axios.get(`${topologyIpAddress}/api/esTracesGraph/nodes`, {
+            params
+        })
+        const {data = {}} = res
+        return data
+    } catch (error) {
+        console.error("==ERROR==", error)
+    }
+}
+
+// 查边指标
+const getEsTracesGraphEdges = async (params) => { 
+    try { 
+        const res = await axios.get(`${topologyIpAddress}/api/esTracesGraph/edges`, {
+            params
+        })
+        const {data = {}} = res
+        return data
+    } catch (error) {
+        console.error("==ERROR==", error)
+    }
+}
+
+
+// 查点指标的端点列表
+const getEsNodeEndpointList = async (params) => { 
+    try { 
+        const res = await axios.get(`${topologyIpAddress}/api/esNodes/queryEndpoint`, {
+            params,
+        })
+        const {data = {}} = res
+        return data
+    } catch (error) {
+        console.error("==ERROR==", error)
+    }
+}
+
+// 查边指标的端点列表
+const getEsEdgeEndpointList = async (params) => { 
+    try { 
+        const res = await axios.get(`${topologyIpAddress}/api/esEdges/queryEndpoint`, {
+            params,
+        })
         const {data = {}} = res
         return data
     } catch (error) {
@@ -257,7 +301,7 @@ const getEsTracesGraphNodes = async () => {
 }
 
 //调用日志
-const getEsNodesLog = async () => { 
+const getEsNodesLog = async (data) => { 
     try { 
         const res = await axios.get(`${ipAddress}/api/esNodes/log/queryByPage`)
         const {data = {}} = res
@@ -270,16 +314,6 @@ const getEsNodesLog = async () => {
 const getEsNodesLogStatus = async () => { 
     try { 
         const res = await axios.get(`${ipAddress}/api/esNodes/statistic/status`)
-        const {data = {}} = res
-        return data
-    } catch (error) {
-        console.error("==ERROR==", error)
-    }
-}
-//端点列表
-const getEsEndpointList = async () => { 
-    try { 
-        const res = await axios.get(`${ipAddress}/api/esNodes/queryEndpoint`)
         const {data = {}} = res
         return data
     } catch (error) {
@@ -333,5 +367,9 @@ export {
     getFlamegraphDataByTraceId,
     getFilters,
     getTraceDetail,
-    getTraceCharts
+    getTraceCharts,
+    getEsTracesGraphNodes,
+    getEsTracesGraphEdges,
+    getEsNodeEndpointList,
+    getEsEdgeEndpointList
 }

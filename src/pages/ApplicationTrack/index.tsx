@@ -863,7 +863,8 @@ const MonitorNative = () => {
         }
 
         if (!root) {
-            throw new Error("未找到根节点（parent_id为null的节点）");
+            root = { span_id: null, level: 0, child_ids: [] }
+            // throw new Error("未找到根节点（parent_id为null的节点）");
         }
 
         // 3. 根节点层级为0

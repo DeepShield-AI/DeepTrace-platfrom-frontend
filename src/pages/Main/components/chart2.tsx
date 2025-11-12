@@ -17,7 +17,7 @@ const Chart2 = (props) => {
   const chartRef = React.useRef(null);
   const {ipThreatData} = props
   const config = {
-    data: ipThreatData,
+    data: data,
     xField: 'type',
     yField: 'value',
     colorField: 'type',
