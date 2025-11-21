@@ -45,6 +45,8 @@ import {
   getTraceDetail,
   traceChartQuery,
   traceTableQuery,
+  getEsNodesLog,
+  getEsEdgesLog
 } from '../../../services/server.js';
 
 import { convertToGraphStructure } from '../../../utils/convert2graph.js';
@@ -149,8 +151,17 @@ const latencyData = [
     p99Duration: 0,
   },
 ];
+
 // 主监控组件
-const PointDrawer = () => {
+const PointDrawer = ({ 
+  selectId,
+  startTime,
+  endTime,
+  pointType,
+  sourceId,
+  targetId,
+  selectedObj
+}) => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [chartLoading, setChartLoading] = useState(false);
@@ -223,19 +234,46 @@ const PointDrawer = () => {
     setRelationData(relationData);
   };
 
-  // 获取表格数据函数
+  // 获取表格数据函数 - 根据pointType选择不同的接口
   const fetchTraceData = async () => {
     setLoading(true);
     try {
-      const params = {
+      const baseParams = {
         protocols: protocolFilters,
         endpoints: endpointFilters,
         statusCodes: statusFilters,
         pageNo: pagination.pageNum,
         pageSize: pagination.pageSize,
+        startTime: startTime,
+        endTime: endTime
       };
 
-      const response = await traceTableQuery(params);
+      let response;
+      
+      // 根据pointType选择不同的接口
+      if (pointType === 'node') {
+        // 节点日志接口
+        const params = {
+          ...baseParams,
+          nodeId: selectId
+        };
+        console.log('调用节点日志接口，参数:', params);
+        response = await getEsNodesLog(params);
+      } else if (pointType === 'edge') {
+        // 边日志接口
+        const params = {
+          ...baseParams,
+          srcNodeId: sourceId,
+          dstNodeId: targetId
+        };
+        console.log('调用边日志接口，参数:', params);
+        response = await getEsEdgesLog(params);
+      } else {
+        // 默认使用traceTableQuery（保留原有逻辑）
+        response = await traceTableQuery(baseParams);
+      }
+
+      // 统一处理响应数据
       const data = response?.data || {};
       setTableListDataSource(data.content || []);
 
@@ -243,9 +281,12 @@ const PointDrawer = () => {
         ...pagination,
         total: data.totalElements || 0,
       });
+
+      console.log(`获取${pointType}类型日志数据成功，数据量:`, data.content?.length || 0);
+
     } catch (error) {
-      message.error('Trace监控数据获取失败，请刷新重试');
-      console.error('Trace data fetch error:', error);
+      message.error(`${pointType === 'node' ? '节点' : '边'}日志数据获取失败，请刷新重试`);
+      console.error(`${pointType}日志数据获取失败:`, error);
     } finally {
       setLoading(false);
     }
@@ -253,11 +294,31 @@ const PointDrawer = () => {
 
   const fetchFilterOptions = async () => {
     try {
-      // 初始化请求获取选项
-      const response = await traceTableQuery({
-        pageNum: 1,
-        pageSize: 10,
-      });
+      // 根据pointType选择不同的接口获取筛选选项
+      let response;
+      if (pointType === 'node') {
+        response = await getEsNodesLog({
+          nodeId: selectId,
+          startTime: startTime,
+          endTime: endTime,
+          pageNo: 1,
+          pageSize: 10
+        });
+      } else if (pointType === 'edge') {
+        response = await getEsEdgesLog({
+          srcNodeId: sourceId,
+          dstNodeId: targetId,
+          startTime: startTime,
+          endTime: endTime,
+          pageNo: 1,
+          pageSize: 10
+        });
+      } else {
+        response = await traceTableQuery({
+          pageNum: 1,
+          pageSize: 10,
+        });
+      }
 
       const filters = await getFilters();
       console.log(filters, 'filters');
@@ -304,6 +365,7 @@ const PointDrawer = () => {
 
     return transformedData;
   }
+
   // 获取图表数据函数
   const fetchChartData = async () => {
     setChartLoading(true);
@@ -332,7 +394,6 @@ const PointDrawer = () => {
 
   // 获取Trace详情数据
   const fetchTraceDetail = async (traceId) => {
-
     setTraceDetailLoading(true);
     try {
       // 调用接口获取Trace详情
@@ -370,13 +431,19 @@ const PointDrawer = () => {
     }
   };
 
+  // 监听pointType和相关参数变化，重新获取数据
   useEffect(() => {
-    fetchFilterOptions();
-    fetchChartData();
-  }, []);
+    if (selectId) {
+      fetchFilterOptions();
+      fetchChartData();
+      fetchTraceData();
+    }
+  }, [pointType, selectId, sourceId, targetId, startTime, endTime]);
 
   useEffect(() => {
-    fetchTraceData();
+    if (selectId) {
+      fetchTraceData();
+    }
   }, [statusFilters, endpointFilters, protocolFilters, pagination.pageNum, pagination.pageSize]);
 
   // 筛选逻辑处理
@@ -595,7 +662,7 @@ const PointDrawer = () => {
       },
       label: {
         fontSize: 12,
-        formatter: (type) => `状态码 ${type}`, // 图例文本：优化为“状态码 200”
+        formatter: (type) => `状态码 ${type}`, // 图例文本：优化为"状态码 200"
       },
       interactive: true, // 支持点击图例隐藏/显示对应线条
     },
@@ -712,19 +779,30 @@ const PointDrawer = () => {
     // 5. 返回添加了level字段的节点数组（保持原数组顺序）
     return nodes.map((node) => spanToNode[node.span_id]);
   }
+
+  // 获取当前对象信息显示文本
+  const getCurrentObjectInfo = () => {
+    if (pointType === 'node') {
+      return `节点ID: ${selectId}`;
+    } else if (pointType === 'edge') {
+      return `边: ${sourceId} → ${targetId}`;
+    }
+    return '未知对象';
+  };
+
   return (
     <PageContainer
       content={
         <div>
           <Alert
-            message="Trace监控系统实时追踪服务调用链路，可通过左侧筛选面板按状态、端点或协议筛选数据"
+            message={`${pointType === 'node' ? '节点' : '边'}调用日志监控 - ${getCurrentObjectInfo()} - 时间范围: ${startTime ? new Date(startTime).toLocaleString() : '未知'} 至 ${endTime ? new Date(endTime).toLocaleString() : '未知'}`}
             type="info"
             showIcon
             style={{ marginBottom: 16 }}
           />
           <div style={{ display: 'flex', alignItems: 'center' }}>
             <DashboardOutlined style={{ marginRight: 8, fontSize: 18 }} />
-            <span>Trace链路监控</span>
+            <span>{pointType === 'node' ? '节点' : '边'}调用日志监控</span>
           </div>
         </div>
       }
@@ -828,44 +906,11 @@ const PointDrawer = () => {
         </ProCard>
 
         {/* 右侧表格区域 */}
-        <ProCard title="Trace监控数据" headerBordered>
-          {/* 图表区域 - 三个图表并列显示 */}
-          <Row gutter={16} style={{ marginBottom: 16 }}>
-            <Col span={8}>
-              <Card
-                title="请求数"
-                size="small"
-                extra={<span style={{ color: '#1890ff' }}>总数: {totalRequests}</span>}
-              >
-                {/* <div style={{ width: '100%', height: '100%' }}> */}
-                <Line {...requestChartConfig} loading={chartLoading} style={{ height: 200 }} />
-                {/* </div> */}
-              </Card>
-            </Col>
-            <Col span={8}>
-              <Card
-                title="错误数"
-                size="small"
-                extra={<span style={{ color: '#ff4d4f' }}>总数: {totalErrors}</span>}
-              >
-                <Line {...errorChartConfig} loading={chartLoading} style={{ height: 200 }} />
-              </Card>
-            </Col>
-            <Col span={8}>
-              <Card
-                title="响应时延"
-                size="small"
-                extra={<span style={{ color: '#faad14' }}>平均: {avgLatency}ms</span>}
-              >
-                <Area {...latencyChartConfig} loading={chartLoading} style={{ height: 200 }} />
-              </Card>
-            </Col>
-          </Row>
-
+        <ProCard title={`${pointType === 'node' ? '节点' : '边'}调用日志数据`} headerBordered>
           {/* 空数据提示 */}
           {tableListDataSource.length === 0 && !loading && (
             <Alert
-              message="暂无符合条件的Trace数据"
+              message={`暂无符合条件的${pointType === 'node' ? '节点' : '边'}调用日志数据`}
               type="warning"
               showIcon
               style={{ marginBottom: 16 }}

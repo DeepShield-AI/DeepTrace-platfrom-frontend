@@ -3,7 +3,7 @@ import {
     accessGetAllMockData,
     overviewGetAllMockData
 } from './mock.js'
-
+import qs from 'qs';
 // mock接口数据
 let isMock = true
 
@@ -12,7 +12,9 @@ const ipAddress = "http://114.215.254.187:8081"
 const topologyIpAddress = "http://localhost:8081"
 const flameIpAdress = "http://114.215.254.187:8080"
 // const flameIpAdress = "http://localhost:8080"
-
+axios.defaults.paramsSerializer = params => {
+  return qs.stringify(params, { arrayFormat: 'repeat' });
+};
 
 
 const getAllOverView = async () => {
@@ -254,6 +256,8 @@ const getEsTracesGraphNodes = async (params) => {
             params
         })
         const {data = {}} = res
+        console.log(data, "==data==");
+        
         return data
     } catch (error) {
         console.error("==ERROR==", error)
@@ -300,10 +304,64 @@ const getEsEdgeEndpointList = async (params) => {
     }
 }
 
-//调用日志
-const getEsNodesLog = async (data) => { 
+// 查应用指标 - 请求速率
+const getEsKpiQps = async (params) => { 
     try { 
-        const res = await axios.get(`${ipAddress}/api/esNodes/log/queryByPage`)
+        const res = await axios.get(`${topologyIpAddress}/api/esNodes/kpi/qps`, {
+            params,
+        })
+        const {data = {}} = res
+        return data
+    } catch (error) {
+        console.error("==ERROR==", error)
+    }
+}
+
+// 查应用指标 - 错误比例
+const getEsKpiErrorRate = async (params) => { 
+    try { 
+        const res = await axios.get(`${topologyIpAddress}/api/esNodes/kpi/errorRate`, {
+            params,
+        })
+        const {data = {}} = res
+        return data
+    } catch (error) {
+        console.error("==ERROR==", error)
+    }
+}
+
+// 查应用指标 - 响应时延
+const getEsKpiLatencyStats = async (params) => { 
+    try { 
+        const res = await axios.get(`${topologyIpAddress}/api/esNodes/kpi/latencyStats`, {
+            params,
+        })
+        const {data = {}} = res
+        return data
+    } catch (error) {
+        console.error("==ERROR==", error)
+    }
+}
+
+// 查点的调用日志
+const getEsNodesLog = async (params) => { 
+    try { 
+        const res = await axios.get(`${topologyIpAddress}/api/esNodes/log/queryByPage`, {
+            params
+        })
+        const {data = {}} = res
+        return data
+    } catch (error) {
+        console.error("==ERROR==", error)
+    }
+}
+
+// 查边的调用日志
+const getEsEdgesLog = async (params) => { 
+    try { 
+        const res = await axios.get(`${topologyIpAddress}/api/esEdges/log/queryByPage`, {
+            params
+        })
         const {data = {}} = res
         return data
     } catch (error) {
@@ -371,5 +429,10 @@ export {
     getEsTracesGraphNodes,
     getEsTracesGraphEdges,
     getEsNodeEndpointList,
-    getEsEdgeEndpointList
+    getEsEdgeEndpointList,
+    getEsKpiQps,
+    getEsKpiErrorRate,
+    getEsKpiLatencyStats,
+    getEsNodesLog,
+    getEsEdgesLog
 }

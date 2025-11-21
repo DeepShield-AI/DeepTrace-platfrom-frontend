@@ -1,6 +1,6 @@
 import { errorData, requestData } from '@/services/mock';
 import { Area, Line } from '@ant-design/plots';
-import { Card, Col, Drawer, Row, Select, Tabs } from 'antd'; // 引入抽屉组件
+import { Card, Col, Drawer, Row, Select, Tabs, Tooltip, Button } from 'antd';
 import dagre from 'dagre';
 import { useEffect, useRef, useState } from 'react';
 import ReactFlow, {
@@ -36,11 +36,6 @@ const CustomNode = ({ data }) => {
         position: 'relative',
         transition: 'all 0.2s ease',
         cursor: 'pointer',
-        '&:hover': {
-          boxShadow: '0 6px 16px rgba(0,0,0,0.2)',
-          transform: 'translateY(-4px)',
-          borderWidth: '3px',
-        },
       }}
     >
       {/* 顶部连接点（输入） */}
@@ -89,23 +84,62 @@ const nodeTypes = {
   customNode: CustomNode,
 };
 
-// 使用Dagre布局算法自动排列节点
-const getLayoutedElements = (nodes, edges, direction = 'LR') => {
+// 布局算法配置
+const LAYOUT_CONFIG = {
+  dagre: {
+    name: '层次布局',
+    description: '有向分层布局，层次清晰，适合展示调用流向',
+    direction: 'LR',
+    icon: '📊',
+    recommendedFor: '小到中等规模（≤30节点）'
+  },
+  circular: {
+    name: '圆形布局', 
+    description: '节点均匀分布在圆周上，结构对称美观',
+    icon: '⭕',
+    recommendedFor: '中等规模（10-50节点）'
+  },
+  grid: {
+    name: '网格布局',
+    description: '整齐的网格排列，便于查看大规模节点',
+    icon: '🔲',
+    recommendedFor: '大规模（30-100节点）'
+  },
+  force: {
+    name: '力导向布局',
+    description: '模拟物理力场，自动避免重叠，适合复杂关系',
+    icon: '⚛️',
+    recommendedFor: '超大规模或复杂关系（>50节点）'
+  }
+};
+
+// 改进的Dagre布局算法 - 层次布局
+const getDagreLayout = (nodes, edges, direction = 'LR') => {
   const dagreGraph = new dagre.graphlib.Graph();
   dagreGraph.setDefaultEdgeLabel(() => ({}));
 
-  // 使用更宽松的布局参数
+  // 根据节点数量动态调整布局参数
+  const nodeCount = nodes.length;
+  const baseNodeSep = 100;
+  const baseRankSep = 120;
+  
+  const dynamicNodeSep = baseNodeSep + Math.min(nodeCount * 3, 150);
+  const dynamicRankSep = baseRankSep + Math.min(nodeCount * 4, 200);
+
   dagreGraph.setGraph({
     rankdir: direction,
-    nodesep: 80, // 增加节点间距
-    ranksep: 120, // 增加层级间距
+    nodesep: dynamicNodeSep,
+    ranksep: dynamicRankSep,
+    marginx: 60,
+    marginy: 60,
+    align: 'UL',
+    acyclicer: 'greedy',
+    ranker: 'network-simplex'
   });
 
   nodes.forEach((node) => {
-    // 使用节点数据中存储的尺寸信息
-    const width = node.data?.width || 180;
-    const height = node.data?.height || 120;
-
+    const width = node.data?.width || 200;
+    const height = node.data?.height || 140;
     dagreGraph.setNode(node.id, { width, height });
   });
 
@@ -113,28 +147,150 @@ const getLayoutedElements = (nodes, edges, direction = 'LR') => {
     dagreGraph.setEdge(edge.source, edge.target);
   });
 
-  dagre.layout(dagreGraph);
+  try {
+    dagre.layout(dagreGraph);
 
-  return nodes.map((node) => {
-    const nodeWithPosition = dagreGraph.node(node.id);
+    return nodes.map((node) => {
+      const nodeWithPosition = dagreGraph.node(node.id);
+      const width = node.data?.width || 200;
+      const height = node.data?.height || 140;
+      
+      return {
+        ...node,
+        position: {
+          x: nodeWithPosition.x - width / 2,
+          y: nodeWithPosition.y - height / 2,
+        },
+      };
+    });
+  } catch (error) {
+    console.error('Dagre布局失败，使用圆形布局:', error);
+    return getCircularLayout(nodes, edges);
+  }
+};
+
+// 圆形布局
+const getCircularLayout = (nodes, edges) => {
+  const centerX = 800;
+  const centerY = 400;
+  const radius = Math.min(600, Math.max(300, nodes.length * 40));
+  
+  return nodes.map((node, index) => {
+    const angle = (index * 2 * Math.PI) / nodes.length;
+    const width = node.data?.width || 200;
+    const height = node.data?.height || 140;
+    
     return {
       ...node,
       position: {
-        x: nodeWithPosition.x - (node.data?.width || 180) / 2,
-        y: nodeWithPosition.y - (node.data?.height || 120) / 2,
-      },
+        x: centerX + radius * Math.cos(angle) - width / 2,
+        y: centerY + radius * Math.sin(angle) - height / 2
+      }
     };
   });
 };
 
+// 网格布局
+const getGridLayout = (nodes, edges) => {
+  const cols = Math.ceil(Math.sqrt(nodes.length));
+  const nodeWidth = 200;
+  const nodeHeight = 140;
+  const horizontalSpacing = 280;
+  const verticalSpacing = 220;
+  
+  return nodes.map((node, index) => {
+    const row = Math.floor(index / cols);
+    const col = index % cols;
+    return {
+      ...node,
+      position: {
+        x: col * horizontalSpacing + 50,
+        y: row * verticalSpacing + 50
+      }
+    };
+  });
+};
+
+// 力导向布局模拟
+const getForceDirectedLayout = (nodes, edges, iterations = 100) => {
+  const centerX = 800;
+  const centerY = 400;
+  const k = 300;
+  const repulsion = 10000;
+  
+  let positionedNodes = nodes.map(node => ({
+    ...node,
+    position: {
+      x: centerX + (Math.random() - 0.5) * 600,
+      y: centerY + (Math.random() - 0.5) * 400
+    }
+  }));
+
+  for (let iter = 0; iter < iterations; iter++) {
+    positionedNodes = positionedNodes.map((node, i) => {
+      let fx = 0, fy = 0;
+      
+      positionedNodes.forEach((otherNode, j) => {
+        if (i !== j) {
+          const dx = node.position.x - otherNode.position.x;
+          const dy = node.position.y - otherNode.position.y;
+          const distance = Math.sqrt(dx * dx + dy * dy) || 0.1;
+          
+          if (distance < 200) {
+            const force = repulsion / (distance * distance);
+            fx += (dx / distance) * force;
+            fy += (dy / distance) * force;
+          }
+        }
+      });
+
+      edges.forEach(edge => {
+        if (edge.source === node.id || edge.target === node.id) {
+          const targetId = edge.source === node.id ? edge.target : edge.source;
+          const targetNode = positionedNodes.find(n => n.id === targetId);
+          if (targetNode) {
+            const dx = targetNode.position.x - node.position.x;
+            const dy = targetNode.position.y - node.position.y;
+            const distance = Math.sqrt(dx * dx + dy * dy) || 0.1;
+            
+            const force = k * Math.log(distance / 200);
+            fx += (dx / distance) * force;
+            fy += (dy / distance) * force;
+          }
+        }
+      });
+
+      const dxCenter = centerX - node.position.x;
+      const dyCenter = centerY - node.position.y;
+      const centerForce = 0.01;
+      fx += dxCenter * centerForce;
+      fy += dyCenter * centerForce;
+
+      const maxForce = 10;
+      fx = Math.max(-maxForce, Math.min(maxForce, fx));
+      fy = Math.max(-maxForce, Math.min(maxForce, fy));
+
+      return {
+        ...node,
+        position: {
+          x: node.position.x + fx * 0.1,
+          y: node.position.y + fy * 0.1
+        }
+      };
+    });
+  }
+
+  return positionedNodes;
+};
+
 // 拓扑图组件
-const TopologyGraph = ({ nodeData, edgeData, startTime, endTime }) => {
+const TopologyGraph = ({ nodeData, edgeData, startTime, endTime, layoutType = 'dagre' }) => {
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [currentLayout, setCurrentLayout] = useState(layoutType);
   const { fitView } = useReactFlow();
-  const nodeRefs = useRef({});
 
   // 抽屉状态
   const [edgeDrawerVisible, setEdgeDrawerVisible] = useState(false);
@@ -145,17 +301,23 @@ const TopologyGraph = ({ nodeData, edgeData, startTime, endTime }) => {
   // 边的悬停状态
   const [hoveredEdge, setHoveredEdge] = useState(null);
   const [edgeTooltipPosition, setEdgeTooltipPosition] = useState({ x: 0, y: 0 });
-  // 活跃Tab状态
-  const [activeTab, setActiveTab] = useState('metrics');
 
-  // 时间段选择状态
-  const [timeRange, setTimeRange] = useState('lastHour');
-  // 图表数据状态
-  const [chartData, setChartData] = useState({
-    requestData, // type=count
-    errorData: [], // type=statusCount
-    latencyData: [], // type=latencyStats
-  });
+  // 应用布局算法
+  const applyLayout = (nodes, edges, layoutType) => {
+    console.log(`应用布局: ${LAYOUT_CONFIG[layoutType].name}, 节点数: ${nodes.length}`);
+
+    switch (layoutType) {
+      case 'circular':
+        return getCircularLayout(nodes, edges);
+      case 'grid':
+        return getGridLayout(nodes, edges);
+      case 'force':
+        return getForceDirectedLayout(nodes, edges);
+      case 'dagre':
+      default:
+        return getDagreLayout(nodes, edges, nodes.length > 20 ? 'TB' : 'LR');
+    }
+  };
 
   // 初始化节点和边数据
   useEffect(() => {
@@ -163,27 +325,24 @@ const TopologyGraph = ({ nodeData, edgeData, startTime, endTime }) => {
     setError(null);
 
     try {
-      // 1. 创建节点 - 初始尺寸使用默认值
+      // 创建节点
       const initialNodes = nodeData.map((node) => ({
         id: node.nodeId,
         type: 'customNode',
         data: {
           ...node,
-          width: 180, // 默认宽度
-          height: 120, // 默认高度
+          width: 200,
+          height: 140,
         },
         position: { x: 0, y: 0 },
       }));
 
-      // 2. 创建边
+      // 创建边
       const initialEdges = [];
-
       Object.keys(edgeData).forEach((srcNodeId) => {
         const outEdges = edgeData[srcNodeId];
-
         outEdges.forEach((edge) => {
           const targetNodeExists = nodeData.some((node) => node.nodeId === edge.dstNodeId);
-
           if (targetNodeExists) {
             initialEdges.push({
               id: `${srcNodeId}-${edge.dstNodeId}`,
@@ -194,7 +353,6 @@ const TopologyGraph = ({ nodeData, edgeData, startTime, endTime }) => {
               style: {
                 strokeWidth: Math.max(2, Math.min(5, 1 + edge.qps / 500)),
                 stroke: edge.errorRate > 0 ? '#f5222d' : '#1890ff',
-                // 添加箭头
                 markerEnd: {
                   type: 'arrowclosed',
                   color: edge.errorRate > 0 ? '#f5222d' : '#1890ff',
@@ -214,13 +372,22 @@ const TopologyGraph = ({ nodeData, edgeData, startTime, endTime }) => {
         });
       });
 
-      // 3. 应用布局算法
-      if (initialNodes.length > 0 && initialEdges.length > 0) {
-        const layoutedNodes = getLayoutedElements(initialNodes, initialEdges);
+      // 应用布局算法
+      if (initialNodes.length > 0) {
+        const layoutedNodes = applyLayout(initialNodes, initialEdges, currentLayout);
         setNodes(layoutedNodes);
         setEdges(initialEdges);
+        
+        setTimeout(() => {
+          if (fitView) {
+            fitView({ 
+              padding: 0.3, 
+              duration: 800,
+            });
+          }
+        }, 300);
       } else {
-        setError('没有有效的节点或边数据');
+        setError('没有有效的节点数据');
       }
     } catch (e) {
       setError(`数据处理错误: ${e.message}`);
@@ -228,57 +395,29 @@ const TopologyGraph = ({ nodeData, edgeData, startTime, endTime }) => {
     } finally {
       setLoading(false);
     }
-  }, [nodeData, edgeData]);
-
-  // 在节点渲染后更新尺寸
-  useEffect(() => {
-    if (nodes.length > 0 && Object.keys(nodeRefs.current).length > 0) {
-      const updatedNodes = nodes.map((node) => {
-        const nodeRef = nodeRefs.current[node.id];
-        if (nodeRef) {
-          const rect = nodeRef.getBoundingClientRect();
-          return {
-            ...node,
-            data: {
-              ...node.data,
-              width: rect.width,
-              height: rect.height,
-            },
-          };
-        }
-        return node;
-      });
-
-      // 重新应用布局
-      const layoutedNodes = getLayoutedElements(updatedNodes, edges);
-      setNodes(layoutedNodes);
-
-      // 适配视图
-      setTimeout(() => {
-        if (fitView) {
-          fitView({ padding: 0.2, duration: 500 });
-        }
-      }, 100);
-    }
-  }, [nodes, edges]);
+  }, [nodeData, edgeData, currentLayout]);
 
   // 重新布局函数
-  const handleRelayout = () => {
+  const handleRelayout = (newLayoutType = null) => {
     setLoading(true);
-    const layoutedNodes = getLayoutedElements(nodes, edges);
+    const actualLayoutType = newLayoutType || currentLayout;
+    
+    const layoutedNodes = applyLayout(nodes, edges, actualLayoutType);
     setNodes(layoutedNodes);
+    if (newLayoutType) {
+      setCurrentLayout(newLayoutType);
+    }
 
     setTimeout(() => {
       if (fitView) {
-        fitView({ padding: 0.2, duration: 500 });
+        fitView({ padding: 0.3, duration: 800 });
       }
       setLoading(false);
-    }, 300);
+    }, 500);
   };
 
   // 处理边点击事件
   const handleEdgeClick = (event, edge) => {
-    // 为边对象添加 pointType 字段
     const edgeWithType = {
       ...edge,
       pointType: 'edge'
@@ -289,7 +428,6 @@ const TopologyGraph = ({ nodeData, edgeData, startTime, endTime }) => {
 
   // 处理节点点击事件
   const handleNodeClick = (event, node) => {
-    // 为节点对象添加 pointType 字段
     const nodeWithType = {
       ...node,
       pointType: 'node'
@@ -307,20 +445,18 @@ const TopologyGraph = ({ nodeData, edgeData, startTime, endTime }) => {
     });
   };
 
-  // 处理边离开事件
-  const handleEdgeMouseLeave = (event, edge) => {
+  const handleEdgeMouseLeave = () => {
     setHoveredEdge(null);
   };
 
-  // 处理边移动事件
-  const handleEdgeMouseMove = (event, edge) => {
+  const handleEdgeMouseMove = (event) => {
     setEdgeTooltipPosition({
       x: event.clientX,
       y: event.clientY,
     });
   };
 
-  // 更新边的样式（添加悬停效果）
+  // 更新边的样式
   const getEdgeStyle = (edge) => {
     const baseStyle = {
       strokeWidth: Math.max(2, Math.min(5, 1 + edge.data?.qps / 500)),
@@ -332,47 +468,21 @@ const TopologyGraph = ({ nodeData, edgeData, startTime, endTime }) => {
         height: 20,
       },
       transition: 'all 0.3s ease',
-      cursor: 'pointer', // 添加手形指针
+      cursor: 'pointer',
     };
 
-    // 添加悬停效果
     if (hoveredEdge && hoveredEdge.id === edge.id) {
       return {
         ...baseStyle,
-        strokeWidth: baseStyle.strokeWidth + 3, // 增加线宽
-        stroke: edge.data?.errorRate > 0 ? '#ff0000' : '#40a9ff', // 更亮的颜色
+        strokeWidth: baseStyle.strokeWidth + 3,
+        stroke: edge.data?.errorRate > 0 ? '#ff0000' : '#40a9ff',
         opacity: 1,
-        filter: 'drop-shadow(0 0 4px rgba(0, 0, 0, 0.3))', // 添加阴影效果
+        filter: 'drop-shadow(0 0 4px rgba(0, 0, 0, 0.3))',
       };
     }
 
     return baseStyle;
   };
-
-  function transformData(originalData) {
-    // 创建一个空数组来存储转换后的结果
-    const transformedData = [];
-
-    // 遍历原始数据中的每个状态码对象
-    for (const statusObj of originalData) {
-      const statusCode = statusObj.statusCode;
-
-      // 遍历该状态码下的每个时间桶数据
-      for (const timeBucket of statusObj.timeBuckets) {
-        // 创建一个新对象，将状态码作为 type，并包含时间戳和文档计数
-        const newObj = {
-          type: statusCode,
-          timeKey: timeBucket.timeKey,
-          docCount: timeBucket.docCount,
-        };
-
-        // 将新对象添加到结果数组中
-        transformedData.push(newObj);
-      }
-    }
-
-    return transformedData;
-  }
 
   return (
     <div
@@ -385,7 +495,7 @@ const TopologyGraph = ({ nodeData, edgeData, startTime, endTime }) => {
         borderRadius: 4,
       }}
     >
-      {/* 全局样式 - 添加悬停效果 */}
+      {/* 全局样式 */}
       <style>
         {`
           .react-flow__edge:hover path {
@@ -394,19 +504,6 @@ const TopologyGraph = ({ nodeData, edgeData, startTime, endTime }) => {
             filter: drop-shadow(0 0 4px rgba(0, 0, 0, 0.3)) !important;
           }
           
-          .react-flow__edge:hover .react-flow__edge-label {
-            background: rgba(255, 255, 255, 0.95) !important;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.2) !important;
-            font-weight: bold !important;
-            transform: scale(1.05) !important;
-            transition: all 0.3s ease !important;
-          }
-          
-          .react-flow__edge:hover .react-flow__edge-path {
-            stroke-width: 5px !important;
-          }
-          
-          /* 添加手形指针 */
           .react-flow__edge {
             cursor: pointer;
           }
@@ -447,9 +544,6 @@ const TopologyGraph = ({ nodeData, edgeData, startTime, endTime }) => {
           </div>
           <div style={{ fontSize: '12px', marginBottom: '3px' }}>
             <strong>错误率:</strong> {(hoveredEdge.data?.errorRate * 100).toFixed(2)}%
-          </div>
-          <div style={{ fontSize: '12px', marginBottom: '3px' }}>
-            <strong>错误次数:</strong> {hoveredEdge.data?.errorCount}
           </div>
         </div>
       )}
@@ -499,32 +593,9 @@ const TopologyGraph = ({ nodeData, edgeData, startTime, endTime }) => {
           }}
         >
           <div style={{ textAlign: 'center', marginBottom: 20 }}>
-            <svg width="64" height="41" viewBox="0 0 64 41" xmlns="http://www.w3.org/2000/svg">
-              <g transform="translate(0 1)" fill="none" fillRule="evenodd">
-                <ellipse fill="#f5f5f5" cx="32" cy="33" rx="32" ry="7"></ellipse>
-                <g fillRule="nonzero" stroke="#d9d9d9">
-                  <path d="M55 12.76L44.854 1.258C44.367.474 43.656 0 42.907 0H21.093c-.749 0-1.46.474-1.947 1.257L9 12.761V22h46v-9.24z"></path>
-                  <path
-                    d="M41.613 15.931c0-1.605.994-2.93 2.227-2.931H55v18.137C55 33.26 53.68 35 52.05 35h-40.1C10.32 35 9 33.259 9 31.137V13h11.16c1.233 0 2.227 1.323 2.227 2.928v.022c0 1.605 1.005 2.901 2.237 2.901h14.752c1.232 0 2.237-1.308 2.237-2.913v-.007z"
-                    fill="#fafafa"
-                  ></path>
-                </g>
-              </g>
-            </svg>
-            <div style={{ marginTop: 8 }}>
-              <h3>拓扑图加载失败</h3>
-              <p>{error}</p>
-              <p>请检查节点和边数据格式</p>
-            </div>
+            <h3>拓扑图加载失败</h3>
+            <p>{error}</p>
           </div>
-          <button
-            type="button"
-            className="ant-btn ant-btn-primary"
-            style={{ marginTop: 20 }}
-            onClick={() => window.location.reload()}
-          >
-            <span>重新加载</span>
-          </button>
         </div>
       )}
 
@@ -543,11 +614,11 @@ const TopologyGraph = ({ nodeData, edgeData, startTime, endTime }) => {
         onEdgeMouseLeave={handleEdgeMouseLeave}
         onEdgeMouseMove={handleEdgeMouseMove}
         fitView
-        minZoom={0.1}
-        maxZoom={2}
+        minZoom={0.05}
+        maxZoom={3}
         nodeExtent={[
-          [-1000, -1000],
-          [1000, 1000],
+          [-2000, -2000],
+          [2000, 2000]
         ]}
       >
         <Controls />
@@ -560,19 +631,108 @@ const TopologyGraph = ({ nodeData, edgeData, startTime, endTime }) => {
         <Background color="#f0f0f0" gap={16} />
       </ReactFlow>
 
-      <button
-        type="button"
-        className="ant-btn ant-btn-primary"
+      {/* 布局控制面板 */}
+      <div
         style={{
           position: 'absolute',
           top: 10,
           right: 10,
           zIndex: 5,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '8px',
+          backgroundColor: 'rgba(255, 255, 255, 0.95)',
+          padding: '12px',
+          borderRadius: '6px',
+          border: '1px solid #d9d9d9',
+          minWidth: '200px',
         }}
-        onClick={handleRelayout}
       >
-        <span>重新布局</span>
-      </button>
+        {/* 当前布局信息 */}
+        <div style={{ marginBottom: '8px', paddingBottom: '8px', borderBottom: '1px solid #f0f0f0' }}>
+          <div style={{ fontWeight: 'bold', fontSize: '14px' }}>
+            {LAYOUT_CONFIG[currentLayout].icon} 当前布局: {LAYOUT_CONFIG[currentLayout].name}
+          </div>
+          <div style={{ fontSize: '12px', color: '#666', marginTop: '2px' }}>
+            {LAYOUT_CONFIG[currentLayout].recommendedFor}
+          </div>
+        </div>
+
+        {/* 布局切换按钮 */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+          {Object.entries(LAYOUT_CONFIG).map(([key, config]) => (
+            <Tooltip 
+              key={key}
+              title={
+                <div>
+                  <div style={{ fontWeight: 'bold' }}>{config.name}</div>
+                  <div>{config.description}</div>
+                  <div style={{ color: '#52c41a', marginTop: '4px' }}>
+                    推荐: {config.recommendedFor}
+                  </div>
+                </div>
+              }
+              placement="left"
+              color="blue"
+            >
+              <Button
+                size="small"
+                type={currentLayout === key ? 'primary' : 'default'}
+                onClick={() => handleRelayout(key)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'flex-start',
+                  textAlign: 'left',
+                  height: 'auto',
+                  padding: '6px 8px',
+                }}
+              >
+                <span style={{ marginRight: '6px', fontSize: '14px' }}>{config.icon}</span>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
+                  <span style={{ fontSize: '12px', fontWeight: currentLayout === key ? 'bold' : 'normal' }}>
+                    {config.name}
+                  </span>
+                  <span style={{ fontSize: '10px', color: '#666' }}>
+                    {config.recommendedFor}
+                  </span>
+                </div>
+              </Button>
+            </Tooltip>
+          ))}
+        </div>
+
+        {/* 重新布局按钮 */}
+        <Button
+          type="dashed"
+          size="small"
+          onClick={() => handleRelayout()}
+          style={{ marginTop: '8px' }}
+        >
+          🔄 重新应用当前布局
+        </Button>
+      </div>
+
+      {/* 统计信息 */}
+      <div
+        style={{
+          position: 'absolute',
+          bottom: 10,
+          left: 10,
+          zIndex: 5,
+          backgroundColor: 'rgba(255,255,255,0.9)',
+          padding: '8px 12px',
+          borderRadius: '4px',
+          fontSize: '12px',
+          border: '1px solid #d9d9d9',
+          display: 'flex',
+          gap: '12px',
+        }}
+      >
+        <span>节点: <strong>{nodes.length}</strong></span>
+        <span>边: <strong>{edges.length}</strong></span>
+        <span>布局: <strong>{LAYOUT_CONFIG[currentLayout].name}</strong></span>
+      </div>
 
       {/* 边详情抽屉 */}
       <Drawer
@@ -584,11 +744,7 @@ const TopologyGraph = ({ nodeData, edgeData, startTime, endTime }) => {
         visible={edgeDrawerVisible}
       >
         {selectedEdge && (
-          <div>
-            <PointDetailDrawer
-              selectedObj={selectedEdge}
-            />
-          </div>
+          <PointDetailDrawer selectedObj={selectedEdge} />
         )}
       </Drawer>
 
@@ -602,11 +758,7 @@ const TopologyGraph = ({ nodeData, edgeData, startTime, endTime }) => {
         visible={nodeDrawerVisible}
       >
         {selectedNode && (
-          <div>
-            <PointDetailDrawer
-              selectedObj={selectedNode}
-            />
-          </div>
+          <PointDetailDrawer selectedObj={selectedNode} />
         )}
       </Drawer>
     </div>

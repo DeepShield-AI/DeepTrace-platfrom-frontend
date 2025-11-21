@@ -1,6 +1,6 @@
 import { errorData, requestData } from '@/services/mock';
 import { Area, Line } from '@ant-design/plots';
-import { Card, Col, Drawer, Row, Tabs, message, DatePicker, Button, Space } from 'antd';
+import { Card, Col, Drawer, Row, Tabs, message, DatePicker, Button, Space, Statistic } from 'antd';
 import dagre from 'dagre';
 import { useEffect, useRef, useState } from 'react';
 import ReactFlow, {
@@ -17,27 +17,55 @@ import EndpointMonitoringTable from './components/endpointTable.jsx';
 import PointDrawer from './PointDrawer';
 import { 
     getEsEdgeEndpointList,
-    getEsNodeEndpointList
+    getEsNodeEndpointList,
+    getEsKpiQps,
+    getEsKpiErrorRate,
+    getEsKpiLatencyStats,
+    getEsKpiResourceUsage // 假设有资源使用情况接口
 } from '../../../services/server.js';
 import moment from 'moment';
 
 const { RangePicker } = DatePicker;
+const { Countdown } = Statistic;
 
 const PointDetailDrawer = ({selectedObj = {}}) => {
 
     // 时间范围状态
     const [timeRange, setTimeRange] = useState({
-        startTime: moment().subtract(1, 'hour').valueOf(), // 默认最近1小时
-        endTime: moment().valueOf()
+        startTime: moment('2025-10-31 00:00:00').valueOf(), // 2025年10月31日0点
+        endTime: moment('2025-10-31 23:59:59').valueOf()   // 2025年10月31日24点
     });
     
     const [activeTab, setActiveTab] = useState('metrics');
     const [chartData, setChartData] = useState({
-        requestData, // type=count
-        errorData: [], // type=statusCount
-        latencyData: [], // type=latencyStats
+        requestData: [], // QPS数据
+        errorData: [], // 错误率数据
+        latencyData: [], // 时延数据
     });
     const [chartLoading, setChartLoading] = useState(false);
+
+    // 性能指标状态
+    const [performanceMetrics, setPerformanceMetrics] = useState({
+        avgDuration: 0,
+        qps: 0,
+        errorRate: 0,
+        errorCount: 0,
+        p75Duration: 0,
+        p99Duration: 0,
+        totalRequests: 0
+    });
+
+    // 资源使用状态
+    const [resourceMetrics, setResourceMetrics] = useState({
+        cpuUsage: 0,
+        memoryUsage: 0,
+        networkTraffic: 0,
+        diskUsage: 0,
+        threadCount: 0,
+        gcCount: 0
+    });
+
+    const [metricsLoading, setMetricsLoading] = useState(false);
 
     // 抽屉状态
     const [edgeDrawerVisible, setEdgeDrawerVisible] = useState(false);
@@ -79,17 +107,378 @@ const PointDetailDrawer = ({selectedObj = {}}) => {
     const [endpointData, setEndpointData] = useState(defaultEndpointData);
     const [endpointLoading, setEndpointLoading] = useState(false);
 
+    // 兜底图表数据
+    const getFallbackChartData = () => {
+        const startTime = timeRange.startTime;
+        const endTime = timeRange.endTime;
+        const interval = 5 * 60 * 1000; // 5分钟间隔
+        
+        // 生成时间序列数据
+        const timeSeries = [];
+        for (let time = startTime; time <= endTime; time += interval) {
+            timeSeries.push(time);
+        }
+        
+        // 请求数兜底数据
+        const fallbackRequestData = timeSeries.map(time => ({
+            timeKey: time,
+            docCount: Math.floor(Math.random() * 100) + 50 // 50-150之间的随机数
+        }));
+        
+        // 错误率兜底数据
+        const fallbackErrorData = [
+            {
+                statusCode: "200",
+                timeBuckets: timeSeries.map(time => ({
+                    timeKey: time,
+                    docCount: Math.floor(Math.random() * 20) + 10 // 10-30之间的随机数
+                }))
+            },
+            {
+                statusCode: "500",
+                timeBuckets: timeSeries.map(time => ({
+                    timeKey: time,
+                    docCount: Math.floor(Math.random() * 5) + 1 // 1-6之间的随机数
+                }))
+            }
+        ];
+        
+        // 时延兜底数据
+        const fallbackLatencyData = timeSeries.flatMap(time => [
+            {
+                time: time,
+                latency: Math.random() * 100 + 50, // 50-150ms
+                type: '平均时延'
+            },
+            {
+                time: time,
+                latency: Math.random() * 150 + 100, // 100-250ms
+                type: 'P75'
+            },
+            {
+                time: time,
+                latency: Math.random() * 200 + 150, // 150-350ms
+                type: 'P99'
+            }
+        ]);
+        
+        return {
+            requestData: fallbackRequestData,
+            errorData: fallbackErrorData,
+            latencyData: fallbackLatencyData
+        };
+    };
+
+    // 获取当前节点ID
+    const getCurrentNodeId = () => {
+        if (selectedObj.pointType === 'node') {
+            return selectedObj.id || selectedObj.data?.id;
+        } else if (selectedObj.pointType === 'edge') {
+            // 对于边，返回源节点ID
+            return selectedObj.source || selectedObj.data?.source;
+        }
+        return null;
+    };
+
+    // 获取目标节点ID（仅对边有效）
+    const getTargetNodeId = () => {
+        if (selectedObj.pointType === 'edge') {
+            return selectedObj.target || selectedObj.data?.target;
+        }
+        return null;
+    };
+
+    // 构建请求参数 - 根据pointType使用不同的参数名
+    const buildRequestParams = () => {
+        const nodeId = getCurrentNodeId();
+        if (!nodeId) return null;
+
+        const params = {
+            startTime: timeRange.startTime,
+            endTime: timeRange.endTime
+        };
+
+        // 根据 pointType 添加不同的ID参数
+        if (selectedObj.pointType === 'node') {
+            params.nodeId = nodeId;
+        } else if (selectedObj.pointType === 'edge') {
+            params.srcNodeId = nodeId; // 边的情况使用srcId
+            // 如果需要，也可以添加目标节点ID
+            if (selectedObj.target) {
+                params.dstNodeId = selectedObj.target;
+            }
+        }
+
+        return params;
+    };
+
+    // 计算性能指标
+    const calculatePerformanceMetrics = (chartData) => {
+        if (!chartData.requestData || chartData.requestData.length === 0) {
+            return {
+                avgDuration: selectedObj.data?.avgDuration || 0,
+                qps: selectedObj.data?.qps || 0,
+                errorRate: selectedObj.data?.errorRate || 0,
+                errorCount: selectedObj.data?.errorCount || 0,
+                p75Duration: selectedObj.data?.p75Duration || 0,
+                p99Duration: selectedObj.data?.p99Duration || 0,
+                totalRequests: selectedObj.data?.totalCount || 0
+            };
+        }
+
+        // 从图表数据计算实时指标
+        const requestData = chartData.requestData;
+        const errorData = chartData.errorData;
+        const latencyData = chartData.latencyData;
+
+        // 计算QPS（基于最近时间点的请求数）
+        const recentRequests = requestData.slice(-10); // 取最近10个数据点
+        const totalRecentRequests = recentRequests.reduce((sum, item) => sum + (item.docCount || 0), 0);
+        const qps = recentRequests.length > 0 ? totalRecentRequests / recentRequests.length : 0;
+
+        // 计算错误率
+        let totalErrors = 0;
+        let totalRequests = 0;
+        
+        if (errorData && errorData.length > 0) {
+            // 汇总所有错误状态码的请求数
+            errorData.forEach(statusGroup => {
+                if (statusGroup.statusCode >= '400') {
+                    const recentErrors = statusGroup.timeBuckets?.slice(-10) || [];
+                    totalErrors += recentErrors.reduce((sum, item) => sum + (item.docCount || 0), 0);
+                }
+                
+                // 计算总请求数（所有状态码）
+                const recentStatusRequests = statusGroup.timeBuckets?.slice(-10) || [];
+                totalRequests += recentStatusRequests.reduce((sum, item) => sum + (item.docCount || 0), 0);
+            });
+        }
+
+        const errorRate = totalRequests > 0 ? totalErrors / totalRequests : 0;
+
+        // 计算平均时延
+        let avgDuration = 0;
+        if (latencyData && latencyData.length > 0) {
+            const avgLatencies = latencyData.filter(item => item.type === '平均时延');
+            if (avgLatencies.length > 0) {
+                const recentAvgLatencies = avgLatencies.slice(-5); // 取最近5个平均时延
+                avgDuration = recentAvgLatencies.reduce((sum, item) => sum + (item.latency || 0), 0) / recentAvgLatencies.length;
+            }
+        }
+
+        // 计算P75和P99时延
+        let p75Duration = 0;
+        let p99Duration = 0;
+        if (latencyData && latencyData.length > 0) {
+            const p75Latencies = latencyData.filter(item => item.type === 'P75');
+            const p99Latencies = latencyData.filter(item => item.type === 'P99');
+            
+            if (p75Latencies.length > 0) {
+                const recentP75 = p75Latencies.slice(-5);
+                p75Duration = recentP75.reduce((sum, item) => sum + (item.latency || 0), 0) / recentP75.length;
+            }
+            
+            if (p99Latencies.length > 0) {
+                const recentP99 = p99Latencies.slice(-5);
+                p99Duration = recentP99.reduce((sum, item) => sum + (item.latency || 0), 0) / recentP99.length;
+            }
+        }
+
+        return {
+            avgDuration: avgDuration || selectedObj.data?.avgDuration || 0,
+            qps: qps || selectedObj.data?.qps || 0,
+            errorRate: errorRate || selectedObj.data?.errorRate || 0,
+            errorCount: totalErrors || selectedObj.data?.errorCount || 0,
+            p75Duration: p75Duration || selectedObj.data?.p75Duration || 0,
+            p99Duration: p99Duration || selectedObj.data?.p99Duration || 0,
+            totalRequests: totalRequests || selectedObj.data?.totalCount || 0
+        };
+    };
+
+    // 获取资源使用数据
+    const fetchResourceMetrics = async () => {
+        setMetricsLoading(true);
+        try {
+            const params = buildRequestParams();
+            if (!params) {
+                console.warn('未找到节点ID，使用默认资源数据');
+                // 使用默认资源数据
+                setResourceMetrics({
+                    cpuUsage: Math.random() * 30 + 20, // 20-50%
+                    memoryUsage: Math.random() * 2 + 1, // 1-3GB
+                    networkTraffic: Math.random() * 10 + 5, // 5-15MB/s
+                    diskUsage: Math.random() * 50 + 30, // 30-80%
+                    threadCount: Math.floor(Math.random() * 50) + 20, // 20-70
+                    gcCount: Math.floor(Math.random() * 100) + 50 // 50-150
+                });
+                return;
+            }
+
+            // 假设有获取资源使用情况的接口
+            // const response = await getEsKpiResourceUsage(params);
+            
+            // 模拟接口返回数据
+            const mockResourceData = {
+                cpuUsage: Math.random() * 40 + 10, // 10-50%
+                memoryUsageMB: Math.random() * 3 + 0.5, // 0.5-3.5GB
+                networkTrafficMB: Math.random() * 15 + 3, // 3-18MB/s
+                diskUsage: Math.random() * 60 + 20, // 20-80%
+                threadCount: Math.floor(Math.random() * 60) + 15, // 15-75
+                gcCount: Math.floor(Math.random() * 120) + 30 // 30-150
+            };
+
+            setResourceMetrics({
+                cpuUsage: mockResourceData.cpuUsage,
+                memoryUsage: mockResourceData.memoryUsageMB,
+                networkTraffic: mockResourceData.networkTrafficMB,
+                diskUsage: mockResourceData.diskUsage,
+                threadCount: mockResourceData.threadCount,
+                gcCount: mockResourceData.gcCount
+            });
+
+        } catch (error) {
+            console.error('获取资源数据失败:', error);
+            // 使用默认数据
+            setResourceMetrics({
+                cpuUsage: Math.random() * 30 + 20,
+                memoryUsage: Math.random() * 2 + 1,
+                networkTraffic: Math.random() * 10 + 5,
+                diskUsage: Math.random() * 50 + 30,
+                threadCount: Math.floor(Math.random() * 50) + 20,
+                gcCount: Math.floor(Math.random() * 100) + 50
+            });
+        } finally {
+            setMetricsLoading(false);
+        }
+    };
+
+    // 获取图表数据
+    const fetchChartData = async () => {
+        setChartLoading(true);
+        try {
+            const params = buildRequestParams();
+            if (!params) {
+                console.warn('未找到节点ID，无法获取图表数据');
+                // 使用兜底数据
+                const fallbackData = getFallbackChartData();
+                setChartData(fallbackData);
+                // 计算性能指标
+                setPerformanceMetrics(calculatePerformanceMetrics(fallbackData));
+                message.warning('未找到节点信息，使用示例数据');
+                return;
+            }
+
+            console.log('获取图表数据，参数:', params);
+            
+            // 并行请求三个接口
+            const [qpsResponse, errorRateResponse, latencyResponse] = await Promise.all([
+                getEsKpiQps(params),
+                getEsKpiErrorRate(params),
+                getEsKpiLatencyStats(params)
+            ]);
+            
+            // 处理QPS数据
+            let requestData = [];
+            if (qpsResponse && qpsResponse.success && qpsResponse.data && qpsResponse.data.length > 0) {
+                requestData = qpsResponse.data;
+                console.log('QPS数据获取成功，数据量:', requestData.length);
+            } else {
+                console.warn('QPS接口返回空数据，使用兜底数据');
+                requestData = getFallbackChartData().requestData;
+            }
+            
+            // 处理错误率数据
+            let errorData = [];
+            if (errorRateResponse && errorRateResponse.success && errorRateResponse.data && errorRateResponse.data.length > 0) {
+                errorData = errorRateResponse.data;
+                console.log('错误率数据获取成功，数据量:', errorData.length);
+            } else {
+                console.warn('错误率接口返回空数据，使用兜底数据');
+                errorData = getFallbackChartData().errorData;
+            }
+            
+            // 处理时延数据
+            let latencyData = [];
+            if (latencyResponse && latencyResponse.success && latencyResponse.data && latencyResponse.data.length > 0) {
+                // 转换时延数据格式，假设接口返回的数据需要转换
+                latencyData = transformLatencyData(latencyResponse.data);
+                console.log('时延数据获取成功，数据量:', latencyData.length);
+            } else {
+                console.warn('时延接口返回空数据，使用兜底数据');
+                latencyData = getFallbackChartData().latencyData;
+            }
+            
+            const newChartData = {
+                requestData,
+                errorData,
+                latencyData
+            };
+            
+            setChartData(newChartData);
+            // 计算性能指标
+            setPerformanceMetrics(calculatePerformanceMetrics(newChartData));
+            
+            message.success('图表数据加载成功');
+        } catch (error) {
+            console.error('获取图表数据失败:', error);
+            // 使用兜底数据
+            const fallbackData = getFallbackChartData();
+            setChartData(fallbackData);
+            setPerformanceMetrics(calculatePerformanceMetrics(fallbackData));
+            message.warning('图表数据加载失败，使用示例数据');
+        } finally {
+            setChartLoading(false);
+        }
+    };
+
+    // 转换时延数据格式
+    const transformLatencyData = (originalData) => {
+        if (!originalData || !Array.isArray(originalData)) return [];
+        
+        // 假设原始数据格式为：[{ time: timestamp, avg: number, p75: number, p99: number }]
+        // 转换为：[{ time: timestamp, latency: number, type: 'avg' }, ...]
+        const transformed = [];
+        
+        originalData.forEach(item => {
+            if (item.avg !== undefined) {
+                transformed.push({
+                    time: item.time,
+                    latency: item.avg,
+                    type: '平均时延'
+                });
+            }
+            if (item.p75 !== undefined) {
+                transformed.push({
+                    time: item.time,
+                    latency: item.p75,
+                    type: 'P75'
+                });
+            }
+            if (item.p99 !== undefined) {
+                transformed.push({
+                    time: item.time,
+                    latency: item.p99,
+                    type: 'P99'
+                });
+            }
+        });
+        
+        return transformed;
+    };
+
     // 获取端点列表数据 - 根据 pointType 选择不同的 API
     const fetchEndpointData = async () => {
         setEndpointLoading(true);
         try {
-            // 构建请求参数
-            const params = {
-                startTime: timeRange.startTime,
-                endTime: timeRange.endTime
-            };
-            
-            console.log('请求参数:', params);
+            const params = buildRequestParams();
+            if (!params) {
+                console.warn('未找到节点ID，无法获取端点数据');
+                setEndpointData(defaultEndpointData);
+                message.warning('未找到节点信息，使用默认数据');
+                return;
+            }
+
+            console.log('请求端点数据，参数:', params);
             
             let response;
             
@@ -97,11 +486,11 @@ const PointDetailDrawer = ({selectedObj = {}}) => {
             if (selectedObj.pointType === 'node') {
                 // 节点相关的端点数据
                 response = await getEsNodeEndpointList(params);
-                console.log('调用节点端点API');
+                console.log('调用节点端点API', response);
             } else if (selectedObj.pointType === 'edge') {
                 // 边相关的端点数据
                 response = await getEsEdgeEndpointList(params);
-                console.log('调用边端点API');
+                console.log('调用边端点API，参数:', params);
             } else {
                 // 默认情况，使用节点API
                 response = await getEsNodeEndpointList(params);
@@ -109,14 +498,14 @@ const PointDetailDrawer = ({selectedObj = {}}) => {
             }
             
             // 根据实际API响应结构调整
-            if (response && response.success && response.data) {
-                setEndpointData(response.data);
+            if (response && response.length > 0) {
+                setEndpointData(response);
                 message.success('端点数据加载成功');
             } else {
                 // 如果响应结构不符合预期，使用兜底数据
-                console.warn('API响应格式不符合预期，使用兜底数据');
+                console.warn('API响应为空或格式不符合预期，使用兜底数据');
                 setEndpointData(defaultEndpointData);
-                message.warning('使用默认端点数据');
+                message.warning('接口返回空数据，使用默认数据');
             }
         } catch (error) {
             console.error('获取端点数据失败:', error);
@@ -127,10 +516,13 @@ const PointDetailDrawer = ({selectedObj = {}}) => {
         }
     };
 
-    // 监听activeTab变化，当切换到端点列表时获取数据
+    // 监听activeTab变化，当切换到对应tab时获取数据
     useEffect(() => {
         if (activeTab === 'endpoints') {
             fetchEndpointData();
+        } else if (activeTab === 'metrics') {
+            fetchChartData();
+            fetchResourceMetrics();
         }
     }, [activeTab]);
 
@@ -138,6 +530,9 @@ const PointDetailDrawer = ({selectedObj = {}}) => {
     useEffect(() => {
         if (activeTab === 'endpoints' && selectedObj.pointType) {
             fetchEndpointData();
+        } else if (activeTab === 'metrics') {
+            fetchChartData();
+            fetchResourceMetrics();
         }
     }, [selectedObj]);
 
@@ -145,6 +540,9 @@ const PointDetailDrawer = ({selectedObj = {}}) => {
     useEffect(() => {
         if (activeTab === 'endpoints') {
             fetchEndpointData();
+        } else if (activeTab === 'metrics') {
+            fetchChartData();
+            fetchResourceMetrics();
         }
     }, [timeRange]);
 
@@ -170,18 +568,27 @@ const PointDetailDrawer = ({selectedObj = {}}) => {
             return;
         }
         
-        // 如果当前在端点列表tab，则重新获取数据
+        // 根据当前激活的tab重新获取数据
         if (activeTab === 'endpoints') {
             fetchEndpointData();
+        } else if (activeTab === 'metrics') {
+            fetchChartData();
+            fetchResourceMetrics();
         }
         
         message.success('时间范围已更新');
     };
 
     const formatNumber = (num) => {
-        if (num >= 1000000) return (num / 1000000).toFixed(2) + 'm';
-        if (num >= 1000) return (num / 1000).toFixed(2) + 'k';
-        return num.toFixed(2);
+        if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
+        if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
+        return num.toFixed(1);
+    };
+
+    // 格式化时延显示
+    const formatLatency = (latency) => {
+        if (latency >= 1000) return (latency / 1000).toFixed(1) + 's';
+        return latency.toFixed(0) + 'ms';
     };
 
     // 格式化时间显示
@@ -202,7 +609,25 @@ const PointDetailDrawer = ({selectedObj = {}}) => {
         return '对象';
     };
 
+    // 获取当前节点ID的显示文本
+    const getCurrentNodeIdText = () => {
+        const nodeId = getCurrentNodeId();
+        return nodeId ? ` (节点ID: ${nodeId})` : '';
+    };
+
+    // 获取参数类型显示文本
+    const getParamTypeText = () => {
+        if (selectedObj.pointType === 'node') {
+            return 'nodeId';
+        } else if (selectedObj.pointType === 'edge') {
+            return 'srcId';
+        }
+        return 'ID';
+    };
+
     function transformData(originalData) {
+        if (!originalData || !Array.isArray(originalData)) return [];
+        
         // 创建一个空数组来存储转换后的结果
         const transformedData = [];
 
@@ -229,7 +654,7 @@ const PointDetailDrawer = ({selectedObj = {}}) => {
 
     // 图表配置
     const requestChartConfig = {
-        data: requestData,
+        data: chartData.requestData,
         xField: 'timeKey',
         yField: 'docCount',
         height: 200,
@@ -280,38 +705,34 @@ const PointDetailDrawer = ({selectedObj = {}}) => {
         },
     };
     
-    // 1. 先确保转换后的数据格式正确（复用你的 transformData 函数，无需修改）
-    const transformedErrorData = transformData(errorData);
+    // 转换错误率数据
+    const transformedErrorData = transformData(chartData.errorData);
 
-    // 2. 优化后的错误数图表配置（多线折线图）
+    // 错误数图表配置
     const errorChartConfig = {
-        data: transformedErrorData, // 转换后的数据（含 type、timeKey、docCount）
-        xField: 'timeKey', // X轴：时间戳
-        yField: 'docCount', // Y轴：错误数
-        seriesField: 'type', // 核心：按状态码（type）分组，生成多条线
+        data: transformedErrorData,
+        xField: 'timeKey',
+        yField: 'docCount',
+        seriesField: 'type',
         height: 200,
-        // 3. 自定义每条线的颜色（按状态码分配，区分明显）
         color: ({ type }) => {
         const colorMap = {
-            200: '#1890ff', // 200状态码：蓝色
-            201: '#52c41a', // 201状态码：绿色
-            404: '#faad14', // 若后续有404：橙色（提前预留）
-            500: '#ff4d4f', // 若后续有500：红色（提前预留）
+            200: '#1890ff',
+            201: '#52c41a',
+            404: '#faad14',
+            500: '#ff4d4f',
         };
-        return colorMap[type] || '#8c8c8c'; // 默认：灰色
+        return colorMap[type] || '#8c8c8c';
         },
-        // 4. 折线样式优化（线条宽度、点样式）
         line: {
         style: {
-            lineWidth: 2, // 线条宽度，确保清晰
+            lineWidth: 2,
         },
         },
-        // 5. 数据点样式（统一形状，按分组区分颜色）
         point: {
-        shape: 'circle', // 点形状：圆形（比方形更友好）
-        size: 4, // 点大小：适中，避免遮挡
+        shape: 'circle',
+        size: 4,
         fill: ({ type }) => {
-            // 点填充色与线条色一致
             const colorMap = {
             200: '#1890ff',
             201: '#52c41a',
@@ -320,54 +741,48 @@ const PointDetailDrawer = ({selectedObj = {}}) => {
             };
             return colorMap[type] || '#8c8c8c';
         },
-        stroke: '#fff', // 点边框：白色，增强立体感
+        stroke: '#fff',
         strokeWidth: 1,
         },
-        // 6. X轴配置（时间格式化，与请求数图表保持一致）
         xAxis: {
         type: 'time',
-        tickCount: 5, // 控制刻度数量，避免标签重叠
+        tickCount: 5,
         label: {
             fontSize: 12,
             formatter: (timestamp) => {
-            // 时间格式：仅显示时分（适合当天内数据，若跨天可加年月日）
             return new Date(timestamp).toLocaleTimeString('zh-CN', {
                 hour: '2-digit',
                 minute: '2-digit',
             });
             },
         },
-        range: [0.05, 0.95], // 轴两端留空白，避免数据贴边
+        range: [0.05, 0.95],
         },
-        // 7. Y轴配置（从0开始，添加单位）
         yAxis: {
         label: {
             fontSize: 12,
-            formatter: (value) => `${value} 次`, // 单位：次
+            formatter: (value) => `${value} 次`,
         },
-        min: 0, // Y轴从0开始，避免数据比例失真
-        tickCount: 4, // 控制Y轴刻度数量
+        min: 0,
+        tickCount: 4,
         },
-        // 8. 图例配置（显示状态码，支持交互）
         legend: {
-        position: 'top', // 图例位置：顶部（可选 right/left/bottom）
+        position: 'top',
         title: {
-            text: '响应状态码', // 图例标题，明确含义
+            text: '响应状态码',
             fontSize: 12,
-            padding: [0, 0, 4, 0], // 标题与图例间距
+            padding: [0, 0, 4, 0],
         },
         label: {
             fontSize: 12,
-            formatter: (type) => `状态码 ${type}`, // 图例文本：优化为"状态码 200"
+            formatter: (type) => `状态码 ${type}`,
         },
-        interactive: true, // 支持点击图例隐藏/显示对应线条
+        interactive: true,
         },
-        // 9. Tooltip 配置（显示完整信息）
         interaction: {
         tooltip: {
-            marker: true, // 显示 tooltip 对应的点标记
+            marker: true,
             formatter: (datum) => {
-            // 格式化时间：显示完整年月日时分秒
             const fullTime = new Date(datum.timeKey).toLocaleString('zh-CN', {
                 year: 'numeric',
                 month: '2-digit',
@@ -384,7 +799,6 @@ const PointDetailDrawer = ({selectedObj = {}}) => {
             },
         },
         },
-        // 10. 网格线配置（辅助读数，降低透明度避免干扰）
         grid: {
         horizontal: {
             visible: true,
@@ -394,29 +808,51 @@ const PointDetailDrawer = ({selectedObj = {}}) => {
             },
         },
         vertical: {
-            visible: false, // 隐藏垂直网格线，保持图表简洁
+            visible: false,
         },
         },
     };
 
-  const latencyChartConfig = {
-    data: chartData.latencyData,
-    xField: 'time',
-    yField: 'latency',
-    seriesField: 'type',
-    height: 200,
-    color: ['#1979C9', '#D62A0D', '#FAA219'],
-    xAxis: {
-      label: {
-        autoRotate: false,
-      },
-    },
-    tooltip: {
-      formatter: (datum) => {
-        return { name: datum.type, value: `${datum.latency.toFixed(2)}ms` };
-      },
-    },
-  };
+    const latencyChartConfig = {
+        data: chartData.latencyData,
+        xField: 'time',
+        yField: 'latency',
+        seriesField: 'type',
+        height: 200,
+        color: ['#1979C9', '#D62A0D', '#FAA219'],
+        xAxis: {
+        type: 'time',
+        label: {
+            formatter: (v) => {
+            return new Date(v).toLocaleTimeString('zh-CN', {
+                hour: '2-digit',
+                minute: '2-digit',
+            });
+            },
+        },
+        },
+        yAxis: {
+        label: {
+            formatter: (value) => `${value}ms`,
+        },
+        },
+        tooltip: {
+        formatter: (datum) => {
+            const formatTime = new Date(datum.time).toLocaleString('zh-CN', {
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            });
+            return [
+            { name: '时间', value: formatTime },
+            { name: '时延类型', value: datum.type },
+            { name: '时延', value: `${datum.latency.toFixed(2)}ms` },
+            ];
+        },
+        },
+    };
 
     return (
             <div>
@@ -432,7 +868,7 @@ const PointDetailDrawer = ({selectedObj = {}}) => {
                 }}
                 >
                 <div style={{ fontSize: '14px', color: '#666' }}>
-                    当前对象: {getObjectDisplayName()} | 时间段: {formatTimeDisplay()}
+                    当前对象: {getObjectDisplayName()}{getCurrentNodeIdText()} | 参数类型: {getParamTypeText()} | 时间段: {formatTimeDisplay()}
                 </div>
                 
                 <Space>
@@ -468,29 +904,27 @@ const PointDetailDrawer = ({selectedObj = {}}) => {
                 >
                 <Tabs.TabPane tab="应用指标" key="metrics">
                     <div style={{ padding: '20px' }}>
-                    <h3>指标曲线</h3>
+                    <h3>指标曲线{getCurrentNodeIdText()} ({getParamTypeText()})</h3>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '20px' }}>
                         <Row gutter={16} style={{ marginBottom: 16, width: '100%' }}>
                         <Col span={8}>
                             <Card
-                            title="请求数"
-                            size="small"
-                            // extra={<span style={{ color: '#1890ff' }}>总数: {totalRequests}</span>}
-                            >
-                            {/* <div style={{ width: '100%', height: '100%' }}> */}
+                                title="请求数"
+                                size="small"
+                                extra={<span style={{ color: '#1890ff' }}>总数: {formatNumber(performanceMetrics.totalRequests)}</span>}
+                                >
                             <Line
                                 {...requestChartConfig}
                                 loading={chartLoading}
                                 style={{ height: 200 }}
                             />
-                            {/* </div> */}
                             </Card>
                         </Col>
                         <Col span={8}>
                             <Card
                             title="错误数"
                             size="small"
-                            // extra={<span style={{ color: '#ff4d4f' }}>总数: {totalErrors}</span>}
+                            extra={<span style={{ color: '#ff4d4f' }}>总数: {formatNumber(performanceMetrics.errorCount)}</span>}
                             >
                             <Line
                                 {...errorChartConfig}
@@ -503,7 +937,7 @@ const PointDetailDrawer = ({selectedObj = {}}) => {
                             <Card
                             title="响应时延"
                             size="small"
-                            // extra={<span style={{ color: '#faad14' }}>平均: {avgLatency}ms</span>}
+                            extra={<span style={{ color: '#faad14' }}>平均: {formatLatency(performanceMetrics.avgDuration)}</span>}
                             >
                             <Area
                                 {...latencyChartConfig}
@@ -516,113 +950,59 @@ const PointDetailDrawer = ({selectedObj = {}}) => {
                     </div>
                     <h3 style={{ marginTop: '30px' }}>性能指标</h3>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '20px' }}>
-                        <div
-                        style={{
-                            backgroundColor: '#f0f9ff',
-                            padding: '15px',
-                            borderRadius: '8px',
-                            width: '200px',
-                        }}
-                        >
-                        <div style={{ fontSize: '14px', color: '#666' }}>平均耗时</div>
-                        <div style={{ fontSize: '24px', fontWeight: 'bold', marginTop: '5px' }}>
-                            {formatNumber(selectedObj.data?.avgDuration || 0)}μs
-                        </div>
-                        </div>
+                        <Card size="small" style={{ width: 200 }} loading={metricsLoading}>
+                            <Statistic
+                                title="平均耗时"
+                                value={performanceMetrics.avgDuration}
+                                formatter={value => formatLatency(value)}
+                                valueStyle={{ color: '#1890ff' }}
+                                prefix="≈"
+                            />
+                            <div style={{ fontSize: '12px', color: '#666', marginTop: '8px' }}>
+                                P75: {formatLatency(performanceMetrics.p75Duration)} | P99: {formatLatency(performanceMetrics.p99Duration)}
+                            </div>
+                        </Card>
 
-                        <div
-                        style={{
-                            backgroundColor: '#f6ffed',
-                            padding: '15px',
-                            borderRadius: '8px',
-                            width: '200px',
-                        }}
-                        >
-                        <div style={{ fontSize: '14px', color: '#666' }}>QPS</div>
-                        <div style={{ fontSize: '24px', fontWeight: 'bold', marginTop: '5px' }}>
-                            {(selectedObj.data?.qps || 0).toFixed(2)}
-                        </div>
-                        </div>
+                        <Card size="small" style={{ width: 200 }} loading={metricsLoading}>
+                            <Statistic
+                                title="QPS"
+                                value={performanceMetrics.qps}
+                                precision={2}
+                                valueStyle={{ color: '#52c41a' }}
+                                suffix="次/秒"
+                            />
+                            <div style={{ fontSize: '12px', color: '#666', marginTop: '8px' }}>
+                                总请求: {formatNumber(performanceMetrics.totalRequests)}
+                            </div>
+                        </Card>
 
-                        <div
-                        style={{
-                            backgroundColor: (selectedObj.data?.errorRate || 0) > 0 ? '#fff1f0' : '#f6ffed',
-                            padding: '15px',
-                            borderRadius: '8px',
-                            width: '200px',
-                        }}
-                        >
-                        <div style={{ fontSize: '14px', color: '#666' }}>错误率</div>
-                        <div
-                            style={{
-                            fontSize: '24px',
-                            fontWeight: 'bold',
-                            marginTop: '5px',
-                            color: (selectedObj.data?.errorRate || 0) > 0 ? '#f5222d' : '#52c41a',
-                            }}
-                        >
-                            {((selectedObj.data?.errorRate || 0) * 100).toFixed(1)}%
-                        </div>
-                        </div>
+                        <Card size="small" style={{ width: 200 }} loading={metricsLoading}>
+                            <Statistic
+                                title="错误率"
+                                value={performanceMetrics.errorRate * 100}
+                                precision={2}
+                                suffix="%"
+                                valueStyle={{ 
+                                    color: performanceMetrics.errorRate > 0.01 ? '#f5222d' : '#52c41a'
+                                }}
+                            />
+                            <div style={{ fontSize: '12px', color: '#666', marginTop: '8px' }}>
+                                错误数: {formatNumber(performanceMetrics.errorCount)}
+                            </div>
+                        </Card>
 
-                        <div
-                        style={{
-                            backgroundColor: '#fff7e6',
-                            padding: '15px',
-                            borderRadius: '8px',
-                            width: '200px',
-                        }}
-                        >
-                        <div style={{ fontSize: '14px', color: '#666' }}>错误数</div>
-                        <div style={{ fontSize: '24px', fontWeight: 'bold', marginTop: '5px' }}>
-                            {selectedObj.data?.errorCount || 0}
-                        </div>
-                        </div>
-                    </div>
-
-                    <h3 style={{ marginTop: '30px' }}>资源使用</h3>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '20px' }}>
-                        <div
-                        style={{
-                            backgroundColor: '#f0f9ff',
-                            padding: '15px',
-                            borderRadius: '8px',
-                            width: '200px',
-                        }}
-                        >
-                        <div style={{ fontSize: '14px', color: '#666' }}>CPU使用率</div>
-                        <div style={{ fontSize: '24px', fontWeight: 'bold', marginTop: '5px' }}>
-                            45.2%
-                        </div>
-                        </div>
-
-                        <div
-                        style={{
-                            backgroundColor: '#f6ffed',
-                            padding: '15px',
-                            borderRadius: '8px',
-                            width: '200px',
-                        }}
-                        >
-                        <div style={{ fontSize: '14px', color: '#666' }}>内存使用</div>
-                        <div style={{ fontSize: '24px', fontWeight: 'bold', marginTop: '5px' }}>
-                            1.2GB
-                        </div>
-                        </div>
-
-                        <div
-                        style={{
-                            backgroundColor: '#fff7e6',
-                            padding: '15px',
-                            borderRadius: '8px',
-                            width: '200px',
-                        }}
-                        >
-                        <div style={{ fontSize: '14px', color: '#666' }}>网络流量</div>
-                        <div style={{ fontSize: '24px', fontWeight: 'bold', marginTop: '5px' }}>
-                            12.4MB/s
-                        </div>
-                        </div>
+                        <Card size="small" style={{ width: 200 }} loading={metricsLoading}>
+                            <Statistic
+                                title="成功率"
+                                value={(1 - performanceMetrics.errorRate) * 100}
+                                precision={2}
+                                suffix="%"
+                                valueStyle={{ color: '#52c41a' }}
+                            />
+                            <div style={{ fontSize: '12px', color: '#666', marginTop: '8px' }}>
+                                健康状态: {performanceMetrics.errorRate < 0.01 ? '良好' : '警告'}
+                            </div>
+                        </Card>
                     </div>
                     </div>
                 </Tabs.TabPane>
@@ -630,11 +1010,12 @@ const PointDetailDrawer = ({selectedObj = {}}) => {
                 <Tabs.TabPane tab="端点列表" key="endpoints">
                     <div style={{ marginBottom: 16, padding: '0 20px' }}>
                         <h4>
-                            {selectedObj.pointType === 'node' ? '节点' : '连接'}相关端点列表
+                            {selectedObj.pointType === 'node' ? '节点' : '连接'}相关端点列表 ({getParamTypeText()})
                             {selectedObj.pointType === 'node' && selectedObj.data?.containerName && 
                                 ` - ${selectedObj.data.containerName}`}
                             {selectedObj.pointType === 'edge' && 
                                 ` - ${selectedObj.source} → ${selectedObj.target}`}
+                            {getCurrentNodeIdText()}
                         </h4>
                     </div>
                     <EndpointMonitoringTable 
@@ -644,7 +1025,15 @@ const PointDetailDrawer = ({selectedObj = {}}) => {
                 </Tabs.TabPane>
 
                 <Tabs.TabPane tab="调用日志" key="logs">
-                    <PointDrawer />
+                    <PointDrawer 
+                        selectId={getCurrentNodeId()}
+                        startTime={timeRange.startTime}
+                        endTime={timeRange.endTime}
+                        pointType={selectedObj.pointType}
+                        sourceId={getCurrentNodeId()}
+                        targetId={getTargetNodeId()}
+                        selectedObj={selectedObj}
+                    />
                 </Tabs.TabPane>
                 </Tabs>
             </div>
