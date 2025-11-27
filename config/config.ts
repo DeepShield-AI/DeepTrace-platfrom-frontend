@@ -5,9 +5,26 @@ import defaultSettings from './defaultSettings';
 import proxy from './proxy';
 import routes from './routes';
 
-const { REACT_APP_ENV = 'dev' } = process.env;
+const { REACT_APP_ENV = 'dev', ANALYZE} = process.env;
 
 export default defineConfig({
+
+   /**
+   * @name 打包分析配置
+   * @description 启用 webpack-bundle-analyzer 分析打包结果
+   */
+  analyze: ANALYZE
+    ? {
+        analyzerMode: 'server',
+        analyzerPort: 8888,
+        openAnalyzer: true,
+        // generate stats file
+        generateStatsFile: false,
+        statsFilename: 'stats.json',
+        logLevel: 'info',
+        defaultSizes: 'parsed', // stat  // gzip
+      }
+    : false,
   /**
    * @name 开启 hash 模式
    * @description 让 build 之后的产物包含 hash 后缀。通常用于增量发布和避免浏览器加载缓存。

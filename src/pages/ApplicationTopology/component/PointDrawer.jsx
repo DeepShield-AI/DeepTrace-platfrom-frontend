@@ -34,8 +34,6 @@ import {
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
-// import { Line, Area } from '@ant-design/charts';
-
 // 导入你的接口
 import FlameGraphMain from '../../../components/flamegraph/index.jsx';
 import GraphVisEGraphVisualizationxample from '../../../components/topology/index.jsx';
@@ -152,6 +150,47 @@ const latencyData = [
   },
 ];
 
+// 固定的筛选项数据
+const FIXED_ENDPOINTS = [
+  "UnknownEndpoint",
+  "ComposeUrls",
+  "endpoint3",
+  "endpoint4",
+  "WriteUserTimeline",
+  "ComposeCreatorWithUserId",
+  "GetFollowers",
+  "ComposeUniqueId",
+  "StorePost",
+  "WriteHomeTimeline",
+  "findAndModify",
+  "insert",
+  "ComposeMedia",
+  "ComposeUserMentions",
+  "find",
+  "ComposeText",
+  "ZADD"
+];
+
+const FIXED_PROTOCOLS = [
+  "MongoDB",
+  "Thrift",
+  "Redis",
+  "Memcached",
+  "Kafka"
+];
+
+const FIXED_STATUS_CODES = [
+  "400",
+  "503",
+  "500",
+  "502",
+  "404",
+  "401",
+  "403",
+  "200",
+  "201"
+];
+
 // 主监控组件
 const PointDrawer = ({ 
   selectId,
@@ -184,9 +223,9 @@ const PointDrawer = ({
     total: 0, // 数据总数
   });
 
-  const [allEndpoints, setAllEndpoints] = useState([]);
-  const [allProtocols, setAllProtocols] = useState([]);
-  const [allStatusOptions, setAllStatusOptions] = useState([]);
+  const [allEndpoints, setAllEndpoints] = useState(FIXED_ENDPOINTS);
+  const [allProtocols, setAllProtocols] = useState(FIXED_PROTOCOLS);
+  const [allStatusOptions, setAllStatusOptions] = useState(FIXED_STATUS_CODES);
 
   // 抽屉状态
   const [drawerVisible, setDrawerVisible] = useState(false);
@@ -239,50 +278,76 @@ const PointDrawer = ({
     setLoading(true);
     try {
       const baseParams = {
-        protocols: protocolFilters,
-        endpoints: endpointFilters,
-        statusCodes: statusFilters,
-        pageNo: pagination.pageNum,
-        pageSize: pagination.pageSize,
+        pageNum: pagination.pageNum,     // 当前页码
+        pageSize: pagination.pageSize,   // 每页大小
         startTime: startTime,
-        endTime: endTime
+        endTime: endTime,
+        endpoints: endpointFilters,      // 添加端点筛选
+        protocols: protocolFilters,      // 添加协议筛选
+        status_codes: statusFilters      // 添加状态码筛选
       };
 
       let response;
       
       // 根据pointType选择不同的接口
       if (pointType === 'node') {
-        // 节点日志接口
+        // 节点日志接口 - 统一使用 pageNum 和 pageSize
         const params = {
           ...baseParams,
           nodeId: selectId
         };
-        console.log('调用节点日志接口，参数:', params);
         response = await getEsNodesLog(params);
+
       } else if (pointType === 'edge') {
-        // 边日志接口
+        // 边日志接口 - 统一使用 pageNum 和 pageSize
         const params = {
           ...baseParams,
           srcNodeId: sourceId,
           dstNodeId: targetId
         };
-        console.log('调用边日志接口，参数:', params);
         response = await getEsEdgesLog(params);
       } else {
-        // 默认使用traceTableQuery（保留原有逻辑）
+        // 默认使用traceTableQuery
         response = await traceTableQuery(baseParams);
       }
 
-      // 统一处理响应数据
-      const data = response?.data || {};
-      setTableListDataSource(data.content || []);
+      // 统一处理响应数据 - 适配不同接口的返回结构
+      let dataList = [];
+      let totalCount = 0;
 
-      setPagination({
-        ...pagination,
-        total: data.totalElements || 0,
-      });
+      // 根据接口返回结构提取数据
+      if (response && typeof response === 'object') {
+        // 情况1: 直接包含 content 和 totalElements
+        if (response.content && typeof response.totalElements !== 'undefined') {
+          dataList = response.content;
+          totalCount = response.totalElements;
+        }
+        // 情况2: 包含 data 字段，data中有列表和总数
+        else if (response.data && response.data.records) {
+          dataList = response.data.records;
+          totalCount = response.data.total || 0;
+        }
+        // 情况3: 直接是数组
+        else if (Array.isArray(response)) {
+          dataList = response;
+          totalCount = response.length;
+        }
+        // 情况4: 其他结构，尝试提取
+        else {
+          dataList = response.records || response.list || response.data || [];
+          totalCount = response.total || response.totalElements || dataList.length;
+        }
+      }
 
-      console.log(`获取${pointType}类型日志数据成功，数据量:`, data.content?.length || 0);
+      setTableListDataSource(dataList);
+
+      // 更新分页信息
+      setPagination(prev => ({
+        ...prev,
+        total: totalCount,
+      }));
+
+      console.log(`获取${pointType}类型日志数据成功，数据量:`, dataList.length, '总数:', totalCount);
 
     } catch (error) {
       message.error(`${pointType === 'node' ? '节点' : '边'}日志数据获取失败，请刷新重试`);
@@ -294,50 +359,19 @@ const PointDrawer = ({
 
   const fetchFilterOptions = async () => {
     try {
-      // 根据pointType选择不同的接口获取筛选选项
-      let response;
-      if (pointType === 'node') {
-        response = await getEsNodesLog({
-          nodeId: selectId,
-          startTime: startTime,
-          endTime: endTime,
-          pageNo: 1,
-          pageSize: 10
-        });
-      } else if (pointType === 'edge') {
-        response = await getEsEdgesLog({
-          srcNodeId: sourceId,
-          dstNodeId: targetId,
-          startTime: startTime,
-          endTime: endTime,
-          pageNo: 1,
-          pageSize: 10
-        });
-      } else {
-        response = await traceTableQuery({
-          pageNum: 1,
-          pageSize: 10,
-        });
-      }
-
-      const filters = await getFilters();
-      console.log(filters, 'filters');
-
-      const data = response?.data || {};
-      const uniqueEndpoints = [...new Set(filters.allEndpoints || [])];
-      const uniqueProtocols = [...new Set(filters.allProtocols || [])];
-      const uniqueCode = [...new Set(filters.allStatusOptions || [])];
-
-      setAllEndpoints(uniqueEndpoints);
-      setAllProtocols(uniqueProtocols);
-      setAllStatusOptions(uniqueCode);
+      // 使用固定的筛选项，不再从接口获取
+      setAllEndpoints(FIXED_ENDPOINTS);
+      setAllProtocols(FIXED_PROTOCOLS);
+      setAllStatusOptions(FIXED_STATUS_CODES);
+      
       // 初始选中所有选项
-      setEndpointFilters(uniqueEndpoints);
-      setProtocolFilters(uniqueProtocols);
-      setStatusFilters(uniqueCode);
+      setEndpointFilters(FIXED_ENDPOINTS);
+      setProtocolFilters(FIXED_PROTOCOLS);
+      setStatusFilters(FIXED_STATUS_CODES);
+
     } catch (error) {
-      message.error('获取筛选选项失败');
-      console.error('Filter options fetch error:', error);
+      message.error('初始化筛选选项失败');
+      console.error('Filter options init error:', error);
     }
   };
 
@@ -448,17 +482,17 @@ const PointDrawer = ({
 
   // 筛选逻辑处理
   const handleStatusFilterChange = (checkedValues) => {
-    setPagination({ ...pagination, pageNum: 1 });
+    setPagination(prev => ({ ...prev, pageNum: 1 }));
     setStatusFilters(checkedValues);
   };
 
   const handleEndpointFilterChange = (checkedValues) => {
-    setPagination({ ...pagination, pageNum: 1 });
+    setPagination(prev => ({ ...prev, pageNum: 1 }));
     setEndpointFilters(checkedValues);
   };
 
   const handleProtocolFilterChange = (checkedValues) => {
-    setPagination({ ...pagination, pageNum: 1 });
+    setPagination(prev => ({ ...prev, pageNum: 1 }));
     setProtocolFilters(checkedValues);
   };
 
@@ -477,6 +511,7 @@ const PointDrawer = ({
     if ([200, 201, 202, 205].includes(code_num)) {
       return 'success';
     }
+    return 'error';
   };
 
   // 状态标签渲染
@@ -523,27 +558,16 @@ const PointDrawer = ({
     setSpanTableHeight(originalSpanTableHeight); // 重置表格高度
   };
 
-  // 处理表格分页变化
-  const handleTableChange = (pageConfig) => {
-    setPagination({
-      ...pagination,
-      pageNum: pageConfig.current,
-      pageSize: pageConfig.pageSize,
-    });
-  };
-
   // 图表配置
   const requestChartConfig = {
     data: requestData,
     xField: 'timeKey',
     yField: 'docCount',
     height: 200,
-    // 新增：配置x轴为时间类型，并格式化显示
     xAxis: {
-      type: 'time', // 指定为时间类型
+      type: 'time',
       label: {
         formatter: (v) => {
-          // 将时间戳转换为可读格式
           return new Date(v).toLocaleTimeString('zh-CN', {
             hour: '2-digit',
             minute: '2-digit',
@@ -554,7 +578,7 @@ const PointDrawer = ({
     yAxis: {
       label: {
         style: { fontSize: 12 },
-        formatter: (value) => `${value} 次`, // y轴标签添加单位（如 "166 次"）
+        formatter: (value) => `${value} 次`,
       },
     },
     point: {
@@ -564,7 +588,6 @@ const PointDrawer = ({
     interaction: {
       tooltip: {
         marker: false,
-        // 优化tooltip：显示格式化时间和请求数
         formatter: (datum) => {
           const formatTime = new Date(datum.timeKey).toLocaleString('zh-CN', {
             year: 'numeric',
@@ -584,38 +607,33 @@ const PointDrawer = ({
       lineWidth: 2,
     },
   };
-  // 1. 先确保转换后的数据格式正确（复用你的 transformData 函数，无需修改）
+
   const transformedErrorData = transformData(errorData);
 
-  // 2. 优化后的错误数图表配置（多线折线图）
   const errorChartConfig = {
-    data: transformedErrorData, // 转换后的数据（含 type、timeKey、docCount）
-    xField: 'timeKey', // X轴：时间戳
-    yField: 'docCount', // Y轴：错误数
-    seriesField: 'type', // 核心：按状态码（type）分组，生成多条线
+    data: transformedErrorData,
+    xField: 'timeKey',
+    yField: 'docCount',
+    seriesField: 'type',
     height: 200,
-    // 3. 自定义每条线的颜色（按状态码分配，区分明显）
     color: ({ type }) => {
       const colorMap = {
-        200: '#1890ff', // 200状态码：蓝色
-        201: '#52c41a', // 201状态码：绿色
-        404: '#faad14', // 若后续有404：橙色（提前预留）
-        500: '#ff4d4f', // 若后续有500：红色（提前预留）
+        200: '#1890ff',
+        201: '#52c41a',
+        404: '#faad14',
+        500: '#ff4d4f',
       };
-      return colorMap[type] || '#8c8c8c'; // 默认：灰色
+      return colorMap[type] || '#8c8c8c';
     },
-    // 4. 折线样式优化（线条宽度、点样式）
     line: {
       style: {
-        lineWidth: 2, // 线条宽度，确保清晰
+        lineWidth: 2,
       },
     },
-    // 5. 数据点样式（统一形状，按分组区分颜色）
     point: {
-      shape: 'circle', // 点形状：圆形（比方形更友好）
-      size: 4, // 点大小：适中，避免遮挡
+      shape: 'circle',
+      size: 4,
       fill: ({ type }) => {
-        // 点填充色与线条色一致
         const colorMap = {
           200: '#1890ff',
           201: '#52c41a',
@@ -624,54 +642,48 @@ const PointDrawer = ({
         };
         return colorMap[type] || '#8c8c8c';
       },
-      stroke: '#fff', // 点边框：白色，增强立体感
+      stroke: '#fff',
       strokeWidth: 1,
     },
-    // 6. X轴配置（时间格式化，与请求数图表保持一致）
     xAxis: {
       type: 'time',
-      tickCount: 5, // 控制刻度数量，避免标签重叠
+      tickCount: 5,
       label: {
         fontSize: 12,
         formatter: (timestamp) => {
-          // 时间格式：仅显示时分（适合当天内数据，若跨天可加年月日）
           return new Date(timestamp).toLocaleTimeString('zh-CN', {
             hour: '2-digit',
             minute: '2-digit',
           });
         },
       },
-      range: [0.05, 0.95], // 轴两端留空白，避免数据贴边
+      range: [0.05, 0.95],
     },
-    // 7. Y轴配置（从0开始，添加单位）
     yAxis: {
       label: {
         fontSize: 12,
-        formatter: (value) => `${value} 次`, // 单位：次
+        formatter: (value) => `${value} 次`,
       },
-      min: 0, // Y轴从0开始，避免数据比例失真
-      tickCount: 4, // 控制Y轴刻度数量
+      min: 0,
+      tickCount: 4,
     },
-    // 8. 图例配置（显示状态码，支持交互）
     legend: {
-      position: 'top', // 图例位置：顶部（可选 right/left/bottom）
+      position: 'top',
       title: {
-        text: '响应状态码', // 图例标题，明确含义
+        text: '响应状态码',
         fontSize: 12,
-        padding: [0, 0, 4, 0], // 标题与图例间距
+        padding: [0, 0, 4, 0],
       },
       label: {
         fontSize: 12,
-        formatter: (type) => `状态码 ${type}`, // 图例文本：优化为"状态码 200"
+        formatter: (type) => `状态码 ${type}`,
       },
-      interactive: true, // 支持点击图例隐藏/显示对应线条
+      interactive: true,
     },
-    // 9. Tooltip 配置（显示完整信息）
     interaction: {
       tooltip: {
-        marker: true, // 显示 tooltip 对应的点标记
+        marker: true,
         formatter: (datum) => {
-          // 格式化时间：显示完整年月日时分秒
           const fullTime = new Date(datum.timeKey).toLocaleString('zh-CN', {
             year: 'numeric',
             month: '2-digit',
@@ -688,7 +700,6 @@ const PointDrawer = ({
         },
       },
     },
-    // 10. 网格线配置（辅助读数，降低透明度避免干扰）
     grid: {
       horizontal: {
         visible: true,
@@ -698,7 +709,7 @@ const PointDrawer = ({
         },
       },
       vertical: {
-        visible: false, // 隐藏垂直网格线，保持图表简洁
+        visible: false,
       },
     },
   };
@@ -734,15 +745,13 @@ const PointDrawer = ({
       : 0;
 
   function addNodeLevels(nodes = []) {
-    // 1. 构建span_id到节点的映射（便于快速查找父/子节点）
     console.log(nodes, 'nodes2');
 
     const spanToNode = {};
     nodes.forEach((node) => {
-      spanToNode[node.span_id] = { ...node }; // 复制节点，避免修改原对象
+      spanToNode[node.span_id] = { ...node };
     });
 
-    // 2. 找到根节点（parent_id为null的节点）
     let root = null;
     for (const node of nodes) {
       if (node.parent_id === null) {
@@ -752,31 +761,24 @@ const PointDrawer = ({
     }
 
     if (!root) {
-      // throw new Error('未找到根节点（parent_id为null的节点）');
       root = { span_id: null, level: 0, child_ids: [] }
-
     }
 
-    // 3. 根节点层级为0
     root.level = 0;
 
-    // 4. 广度优先遍历（BFS）计算所有节点的层级
     const queue = [root];
     while (queue.length > 0) {
-      const currentNode = queue.shift(); // 取出当前层的节点
+      const currentNode = queue.shift();
 
-      // 遍历当前节点的子节点（child_ids中的span_id）
       currentNode.child_ids.forEach((childSpanId) => {
         const childNode = spanToNode[childSpanId];
         if (childNode) {
-          // 子节点层级 = 父节点层级 + 1
           childNode.level = currentNode.level + 1;
-          queue.push(childNode); // 加入队列，用于遍历其下一级子节点
+          queue.push(childNode);
         }
       });
     }
 
-    // 5. 返回添加了level字段的节点数组（保持原数组顺序）
     return nodes.map((node) => spanToNode[node.span_id]);
   }
 
@@ -822,7 +824,7 @@ const PointDrawer = ({
             >
               <Space direction="vertical" style={{ width: '100%' }}>
                 {allStatusOptions.map((option) => (
-                  <Checkbox key={option.value} value={option} style={{ width: '100%' }}>
+                  <Checkbox key={option} value={option} style={{ width: '100%' }}>
                     {option}
                   </Checkbox>
                 ))}
@@ -830,7 +832,7 @@ const PointDrawer = ({
             </Checkbox.Group>
           </div>
 
-          {/* 动态端点筛选 */}
+          {/* 端点筛选 */}
           <div style={{ marginBottom: 16 }}>
             <Divider orientation="left" plain>
               端点
@@ -850,7 +852,7 @@ const PointDrawer = ({
             </Checkbox.Group>
           </div>
 
-          {/* 动态协议筛选 */}
+          {/* 协议筛选 */}
           <div style={{ marginBottom: 16 }}>
             <Divider orientation="left" plain>
               应用协议
@@ -881,11 +883,10 @@ const PointDrawer = ({
                 setStatusFilters(allStatusOptions);
                 setEndpointFilters(allEndpoints);
                 setProtocolFilters(allProtocols);
-                setPagination({
+                setPagination(prev => ({
+                  ...prev,
                   pageNum: 1,
-                  pageSize: pagination.pageSize,
-                  total: pagination.total,
-                });
+                }));
               }}
               style={{ marginBottom: 8 }}
             >
@@ -926,7 +927,7 @@ const PointDrawer = ({
                 key: 'traceId',
                 width: 180,
                 render: (_, record) => {
-                  const traceId = record?.trace_id || '未知';
+                  const traceId = record?.context?.trace_id || '未知';
                   return <span title={traceId}>{traceId}</span>;
                 },
               },
@@ -934,48 +935,55 @@ const PointDrawer = ({
                 title: '链路状态',
                 key: 'status',
                 width: 140,
-                render: (_, record) => renderStatusTag(record),
+                render: (_, record) => renderStatusTag(record?.status_code),
               },
               {
                 title: '客户端IP',
                 dataIndex: 'client_ip',
                 key: 'client_ip',
+                render: (_, record) => record?.tag?.ebpf_tag?.dst_ip,
                 width: 120,
               },
               {
                 title: '客户端端口',
                 dataIndex: 'client_port',
                 key: 'client_port',
+                render: (_, record) => (record?.tag?.ebpf_tag?.dst_port),
                 width: 100,
               },
               {
                 title: '组件名称',
                 dataIndex: 'component_name',
                 key: 'component_name',
+                render: (_, record) => (record?.component),
                 width: 140,
               },
               {
                 title: '请求端点',
                 dataIndex: 'endpoint',
                 key: 'endpoint',
+                render: (_, record) => (record?.tag?.ebpf_tag?.endpoint),
                 width: 120,
               },
               {
                 title: '传输协议',
                 dataIndex: 'protocol',
                 key: 'protocol',
+                render: (_, record) => (record?.tag?.ebpf_tag?.protocol),
                 width: 100,
               },
               {
                 title: '服务端IP',
                 dataIndex: 'server_ip',
                 key: 'server_ip',
+                render: (_, record) => (record?.tag?.ebpf_tag?.src_ip),
                 width: 120,
               },
               {
                 title: '服务端端口',
                 dataIndex: 'server_port',
                 key: 'server_port',
+                render: (_, record) => (record?.tag?.ebpf_tag?.src_port),
                 width: 100,
               },
               {
@@ -983,7 +991,8 @@ const PointDrawer = ({
                 dataIndex: 'e2e_duration',
                 key: 'e2e_duration',
                 width: 130,
-                render: (duration) => {
+                render: (_, record) => {
+                  const duration = record?.metric?.duration || 0;
                   const ms = duration / 1000;
                   let color = '#52c41a';
                   if (ms > 10) color = '#ff4d4f';
@@ -992,17 +1001,12 @@ const PointDrawer = ({
                 },
               },
               {
-                title: 'Span数量',
-                dataIndex: 'span_num',
-                key: 'span_num',
-                width: 100,
-              },
-              {
                 title: '结束时间',
                 dataIndex: 'end_time',
                 key: 'end_time',
                 width: 160,
-                render: (time) => {
+                render: (_, record) => {
+                  const time = record?.metric?.end_time;
                   if (!time) return '未知';
                   return new Date(time).toLocaleString('zh-CN', {
                     year: 'numeric',
@@ -1034,8 +1038,21 @@ const PointDrawer = ({
               showQuickJumper: true,
               showTotal: (total) => `共 ${total} 条数据`,
               pageSizeOptions: ['10', '20', '50', '100'],
+              onChange: (page, pageSize) => {
+                setPagination(prev => ({
+                  ...prev,
+                  pageNum: page,
+                  pageSize: pageSize,
+                }));
+              },
+              onShowSizeChange: (current, size) => {
+                setPagination(prev => ({
+                  ...prev,
+                  pageNum: current,
+                  pageSize: size,
+                }));
+              }
             }}
-            onChange={handleTableChange}
             search={false}
             rowKey={(record) =>
               record.trace_id || `${record.client_ip}-${record.client_port}-${record.endpoint}`
@@ -1091,7 +1108,6 @@ const PointDrawer = ({
                 {/* Tab 1: 链路基本信息 */}
                 <TabPane tab="链路基本信息" key="1">
                   <div style={{ height: '100%', overflowY: 'auto' }}>
-                    {/* 基本信息卡片 */}
                     <Card
                       title="链路基本信息"
                       bordered={false}
@@ -1105,9 +1121,6 @@ const PointDrawer = ({
                               <Tag color="blue" style={{ fontSize: 14 }}>
                                 {currentTrace.trace_id}
                               </Tag>
-                            </Descriptions.Item>
-                            <Descriptions.Item label="状态">
-                              {/* {renderStatusTag(currentTrace)} */}
                             </Descriptions.Item>
                             <Descriptions.Item label="端点">
                               <div style={{ fontWeight: 'bold', fontSize: 15 }}>
@@ -1148,7 +1161,6 @@ const PointDrawer = ({
                       </Row>
                     </Card>
 
-                    {/* 原始数据卡片 */}
                     <Card
                       title="原始数据"
                       bordered={false}
@@ -1172,7 +1184,6 @@ const PointDrawer = ({
                   </div>
                 </TabPane>
 
-                {/* Tab 2: 拓扑图 */}
                 <TabPane tab="拓扑图" key="2">
                   <div style={{ height: '100%', overflowY: 'auto' }}>
                     <Card
@@ -1200,7 +1211,6 @@ const PointDrawer = ({
                   </div>
                 </TabPane>
 
-                {/* Tab 3: 火焰图 */}
                 <TabPane tab="火焰图" key="3">
                   <div style={{ height: '100%', overflowY: 'auto' }}>
                     <Card
@@ -1223,7 +1233,6 @@ const PointDrawer = ({
               </Tabs>
             </div>
 
-            {/* 可展开的Span表格 */}
             {showSpanTable && (
               <Card
                 title="调用详情"
@@ -1236,7 +1245,6 @@ const PointDrawer = ({
                       icon={<UpOutlined />}
                       size="small"
                       onClick={() => {
-                        // 保存当前高度作为原始高度
                         if (spanTableHeight === originalSpanTableHeight) {
                           setOriginalSpanTableHeight(spanTableHeight);
                         }
@@ -1367,7 +1375,7 @@ const PointDrawer = ({
                         <div>
                           <div>{record.container_name}</div>
                           <Tag color="volcano" title="容器ID">
-                            {record.container_id.slice(0, 12)}...
+                            {record.container_id?.slice(0, 12)}...
                           </Tag>
                         </div>
                       ),
@@ -1400,7 +1408,7 @@ const PointDrawer = ({
                   rowKey="id"
                   search={false}
                   toolBarRender={false}
-                  scroll={{ y: spanTableHeight - 100 }} // 根据高度调整滚动区域
+                  scroll={{ y: spanTableHeight - 100 }}
                 />
               </Card>
             )}

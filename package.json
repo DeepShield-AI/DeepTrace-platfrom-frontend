@@ -6,6 +6,9 @@
   "scripts": {
     "analyze": "cross-env ANALYZE=1 max build",
     "build": "max build",
+    
+    "build:analyze": "ANALYZE=1 umi build",
+    "build:analyze-server": "ANALYZE=1 umi build --analyze",
     "deploy": "npm run build && npm run gh-pages",
     "dev": "npm run start:dev",
     "gh-pages": "gh-pages -d dist",

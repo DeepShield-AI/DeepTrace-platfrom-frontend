@@ -187,7 +187,9 @@ const getFlamegraphDataByTraceId = async (traceId) => {
     try { 
         const res = await axios.get(`${flameIpAdress}/flamegraphList`, {
             params: {
-                traceId: traceId
+                traceId: "e82f030a88f458b"
+
+                // traceId: traceId
             }
         })
         const {data = {}} = res
