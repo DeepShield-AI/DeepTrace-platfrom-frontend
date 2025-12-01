@@ -31,7 +31,7 @@ import {
   Tag,
   Tooltip,
 } from 'antd';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 // 导入你的接口
@@ -179,17 +179,28 @@ const FIXED_PROTOCOLS = [
   "Kafka"
 ];
 
-const FIXED_STATUS_CODES = [
-  "400",
-  "503",
-  "500",
-  "502",
-  "404",
-  "401",
-  "403",
-  "200",
-  "201"
-];
+// 防抖函数
+const debounce = (func, wait) => {
+  let timeout;
+  const debounced = (...args) => {
+    clearTimeout(timeout);
+    timeout = setTimeout(() => func(...args), wait);
+  };
+  debounced.cancel = () => clearTimeout(timeout);
+  return debounced;
+};
+
+// 节流函数
+const throttle = (func, limit) => {
+  let inThrottle;
+  return function(...args) {
+    if (!inThrottle) {
+      func.apply(this, args);
+      inThrottle = true;
+      setTimeout(() => inThrottle = false, limit);
+    }
+  };
+};
 
 // 主监控组件
 const PointDrawer = ({ 
@@ -204,10 +215,35 @@ const PointDrawer = ({
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [chartLoading, setChartLoading] = useState(false);
-  const [statusFilters, setStatusFilters] = useState([]);
-  const [endpointFilters, setEndpointFilters] = useState([]);
-  const [protocolFilters, setProtocolFilters] = useState([]);
+  
+  // 移除了状态码筛选，只保留端点和协议筛选
+  const [endpointFilters, setEndpointFilters] = useState(FIXED_ENDPOINTS);
+  const [protocolFilters, setProtocolFilters] = useState(FIXED_PROTOCOLS);
   const [tableListDataSource, setTableListDataSource] = useState([]);
+
+  // 使用ref来存储当前筛选状态，避免闭包问题
+  const filtersRef = useRef({
+    endpointFilters: FIXED_ENDPOINTS,
+    protocolFilters: FIXED_PROTOCOLS,
+    pagination: {
+      pageNum: 1,
+      pageSize: 10,
+      total: 0,
+    }
+  });
+
+  // 更新ref中的筛选状态
+  useEffect(() => {
+    filtersRef.current.endpointFilters = endpointFilters;
+  }, [endpointFilters]);
+
+  useEffect(() => {
+    filtersRef.current.protocolFilters = protocolFilters;
+  }, [protocolFilters]);
+
+  useEffect(() => {
+    filtersRef.current.pagination = pagination;
+  }, [pagination]);
 
   // 图表数据状态
   const [chartData, setChartData] = useState({
@@ -218,14 +254,13 @@ const PointDrawer = ({
 
   // 分页相关状态
   const [pagination, setPagination] = useState({
-    pageNum: 1, // 当前页码
-    pageSize: 10, // 每页显示条数
-    total: 0, // 数据总数
+    pageNum: 1,
+    pageSize: 10,
+    total: 0,
   });
 
   const [allEndpoints, setAllEndpoints] = useState(FIXED_ENDPOINTS);
   const [allProtocols, setAllProtocols] = useState(FIXED_PROTOCOLS);
-  const [allStatusOptions, setAllStatusOptions] = useState(FIXED_STATUS_CODES);
 
   // 抽屉状态
   const [drawerVisible, setDrawerVisible] = useState(false);
@@ -240,15 +275,241 @@ const PointDrawer = ({
   const [flameTreeData, setFlameTreeData] = useState([]);
 
   const [showSpanTable, setShowSpanTable] = useState(false);
-  const [spanTableHeight, setSpanTableHeight] = useState(300); // 表格高度状态
+  const [spanTableHeight, setSpanTableHeight] = useState(300);
 
-  // 耗时阈值配置（单位：纳秒）
+  // 耗时阈值配置
   const DURATION_THRESHOLD = {
-    NORMAL: 5 * 1000 * 1000, // 5ms（正常）
-    UNKNOWN: 10 * 1000 * 1000, // 10ms（未知，超过5ms不足10ms）
+    NORMAL: 5 * 1000 * 1000,
+    UNKNOWN: 10 * 1000 * 1000,
   };
 
+  // 获取表格数据函数 - 修复闭包问题
+  const fetchTraceData = useCallback(async (currentFilters = null) => {
+    setLoading(true);
+    try {
+      // 使用传入的筛选条件，如果没有传入则使用ref中的最新值
+      const currentEndpointFilters = currentFilters?.endpointFilters || filtersRef.current.endpointFilters;
+      const currentProtocolFilters = currentFilters?.protocolFilters || filtersRef.current.protocolFilters;
+      const currentPagination = currentFilters?.pagination || filtersRef.current.pagination;
+
+      console.log('接口调用参数 - 端点筛选:', currentEndpointFilters);
+      console.log('接口调用参数 - 协议筛选:', currentProtocolFilters);
+      console.log('接口调用参数 - 分页:', currentPagination);
+
+      const baseParams = {
+        pageNum: currentPagination.pageNum,
+        pageSize: currentPagination.pageSize,
+        startTime: startTime,
+        endTime: endTime,
+        endpoints: currentEndpointFilters,
+        protocols: currentProtocolFilters,
+      };
+
+      let response;
+      
+      if (pointType === 'node') {
+        const params = {
+          ...baseParams,
+          nodeId: selectId
+        };
+        response = await getEsNodesLog(params);
+      } else if (pointType === 'edge') {
+        const params = {
+          ...baseParams,
+          srcNodeId: sourceId,
+          dstNodeId: targetId
+        };
+        response = await getEsEdgesLog(params);
+      } else {
+        response = await traceTableQuery(baseParams);
+      }
+
+      let dataList = [];
+      let totalCount = 0;
+
+      if (response && typeof response === 'object') {
+        if (response.content && typeof response.totalElements !== 'undefined') {
+          dataList = response.content;
+          totalCount = response.totalElements;
+        } else if (response.data && response.data.records) {
+          dataList = response.data.records;
+          totalCount = response.data.total || 0;
+        } else if (Array.isArray(response)) {
+          dataList = response;
+          totalCount = response.length;
+        } else {
+          dataList = response.records || response.list || response.data || [];
+          totalCount = response.total || response.totalElements || dataList.length;
+        }
+      }
+
+      setTableListDataSource(dataList);
+      setPagination(prev => ({
+        ...prev,
+        total: totalCount,
+      }));
+
+      console.log(`获取${pointType}类型日志数据成功，数据量:`, dataList.length, '总数:', totalCount);
+
+    } catch (error) {
+      message.error(`${pointType === 'node' ? '节点' : '边'}日志数据获取失败，请刷新重试`);
+      console.error(`${pointType}日志数据获取失败:`, error);
+    } finally {
+      setLoading(false);
+    }
+  }, [startTime, endTime, pointType, selectId, sourceId, targetId]);
+
+  // 修复的端点筛选处理函数
+  const handleEndpointFilterChange = (checkedValues) => {
+    console.log('端点筛选变化:', checkedValues);
+    
+    // 确保至少选择一项
+    if (checkedValues.length === 0) {
+      message.warning('至少需要选择一个端点');
+      setEndpointFilters(FIXED_ENDPOINTS);
+      return;
+    }
+    
+    // 立即设置loading状态
+    setLoading(true);
+    setPagination(prev => ({ ...prev, pageNum: 1 }));
+    
+    // 同步更新状态和ref
+    setEndpointFilters(checkedValues);
+    filtersRef.current.endpointFilters = checkedValues;
+    filtersRef.current.pagination = { ...filtersRef.current.pagination, pageNum: 1 };
+    
+    // 使用setTimeout确保状态更新后再调用API
+    setTimeout(() => {
+      fetchTraceData({
+        endpointFilters: checkedValues,
+        protocolFilters: filtersRef.current.protocolFilters,
+        pagination: { ...filtersRef.current.pagination, pageNum: 1 }
+      });
+    }, 0);
+  };
+
+  // 修复的协议筛选处理函数
+  const handleProtocolFilterChange = (checkedValues) => {
+    console.log('协议筛选变化:', checkedValues);
+    
+    // 确保至少选择一项
+    if (checkedValues.length === 0) {
+      message.warning('至少需要选择一个协议');
+      setProtocolFilters(FIXED_PROTOCOLS);
+      return;
+    }
+    
+    // 立即设置loading状态
+    setLoading(true);
+    setPagination(prev => ({ ...prev, pageNum: 1 }));
+    
+    // 同步更新状态和ref
+    setProtocolFilters(checkedValues);
+    filtersRef.current.protocolFilters = checkedValues;
+    filtersRef.current.pagination = { ...filtersRef.current.pagination, pageNum: 1 };
+    
+    // 使用setTimeout确保状态更新后再调用API
+    setTimeout(() => {
+      fetchTraceData({
+        endpointFilters: filtersRef.current.endpointFilters,
+        protocolFilters: checkedValues,
+        pagination: { ...filtersRef.current.pagination, pageNum: 1 }
+      });
+    }, 0);
+  };
+
+  // 修复的全选/取消全选处理函数
+  const handleToggleAllEndpoints = useCallback(() => {
+    const newFilters = endpointFilters.length === FIXED_ENDPOINTS.length ? [] : [...FIXED_ENDPOINTS];
+    
+    // 确保至少选择一项
+    if (newFilters.length === 0) {
+      message.warning('至少需要选择一个端点');
+      return;
+    }
+    
+    console.log('端点全选/取消全选:', newFilters);
+    
+    setLoading(true);
+    setPagination(prev => ({ ...prev, pageNum: 1 }));
+    
+    // 同步更新状态和ref
+    setEndpointFilters(newFilters);
+    filtersRef.current.endpointFilters = newFilters;
+    filtersRef.current.pagination = { ...filtersRef.current.pagination, pageNum: 1 };
+    
+    // 使用setTimeout确保状态更新后再调用API
+    setTimeout(() => {
+      fetchTraceData({
+        endpointFilters: newFilters,
+        protocolFilters: filtersRef.current.protocolFilters,
+        pagination: { ...filtersRef.current.pagination, pageNum: 1 }
+      });
+    }, 0);
+  }, [endpointFilters, fetchTraceData]);
+
+  const handleToggleAllProtocols = useCallback(() => {
+    const newFilters = protocolFilters.length === FIXED_PROTOCOLS.length ? [] : [...FIXED_PROTOCOLS];
+    
+    // 确保至少选择一项
+    if (newFilters.length === 0) {
+      message.warning('至少需要选择一个协议');
+      return;
+    }
+    
+    console.log('协议全选/取消全选:', newFilters);
+    
+    setLoading(true);
+    setPagination(prev => ({ ...prev, pageNum: 1 }));
+    
+    // 同步更新状态和ref
+    setProtocolFilters(newFilters);
+    filtersRef.current.protocolFilters = newFilters;
+    filtersRef.current.pagination = { ...filtersRef.current.pagination, pageNum: 1 };
+    
+    // 使用setTimeout确保状态更新后再调用API
+    setTimeout(() => {
+      fetchTraceData({
+        endpointFilters: filtersRef.current.endpointFilters,
+        protocolFilters: newFilters,
+        pagination: { ...filtersRef.current.pagination, pageNum: 1 }
+      });
+    }, 0);
+  }, [protocolFilters, fetchTraceData]);
+
+  // 初始化数据
+  useEffect(() => {
+    if (selectId) {
+      // 重置所有筛选条件为全选状态
+      setEndpointFilters(FIXED_ENDPOINTS);
+      setProtocolFilters(FIXED_PROTOCOLS);
+      
+      // 重置分页到第一页
+      setPagination(prev => ({
+        ...prev,
+        pageNum: 1
+      }));
+      
+      // 更新ref
+      filtersRef.current.endpointFilters = FIXED_ENDPOINTS;
+      filtersRef.current.protocolFilters = FIXED_PROTOCOLS;
+      filtersRef.current.pagination = { ...filtersRef.current.pagination, pageNum: 1 };
+      
+      // 重新获取数据
+      fetchFilterOptions();
+      fetchChartData();
+      fetchTraceData({
+        endpointFilters: FIXED_ENDPOINTS,
+        protocolFilters: FIXED_PROTOCOLS,
+        pagination: { ...filtersRef.current.pagination, pageNum: 1 }
+      });
+    }
+  }, [pointType, selectId, sourceId, targetId]);
+
   const getFlamegraphDataByTraceIdFun = async (traceId) => {
+    console.log(traceId, "ttttt1");
+
     const res = await getFlamegraphDataByTraceId(traceId);
     console.log(res, 'rrrrr');
 
@@ -273,101 +534,13 @@ const PointDrawer = ({
     setRelationData(relationData);
   };
 
-  // 获取表格数据函数 - 根据pointType选择不同的接口
-  const fetchTraceData = async () => {
-    setLoading(true);
-    try {
-      const baseParams = {
-        pageNum: pagination.pageNum,     // 当前页码
-        pageSize: pagination.pageSize,   // 每页大小
-        startTime: startTime,
-        endTime: endTime,
-        endpoints: endpointFilters,      // 添加端点筛选
-        protocols: protocolFilters,      // 添加协议筛选
-        status_codes: statusFilters      // 添加状态码筛选
-      };
-
-      let response;
-      
-      // 根据pointType选择不同的接口
-      if (pointType === 'node') {
-        // 节点日志接口 - 统一使用 pageNum 和 pageSize
-        const params = {
-          ...baseParams,
-          nodeId: selectId
-        };
-        response = await getEsNodesLog(params);
-
-      } else if (pointType === 'edge') {
-        // 边日志接口 - 统一使用 pageNum 和 pageSize
-        const params = {
-          ...baseParams,
-          srcNodeId: sourceId,
-          dstNodeId: targetId
-        };
-        response = await getEsEdgesLog(params);
-      } else {
-        // 默认使用traceTableQuery
-        response = await traceTableQuery(baseParams);
-      }
-
-      // 统一处理响应数据 - 适配不同接口的返回结构
-      let dataList = [];
-      let totalCount = 0;
-
-      // 根据接口返回结构提取数据
-      if (response && typeof response === 'object') {
-        // 情况1: 直接包含 content 和 totalElements
-        if (response.content && typeof response.totalElements !== 'undefined') {
-          dataList = response.content;
-          totalCount = response.totalElements;
-        }
-        // 情况2: 包含 data 字段，data中有列表和总数
-        else if (response.data && response.data.records) {
-          dataList = response.data.records;
-          totalCount = response.data.total || 0;
-        }
-        // 情况3: 直接是数组
-        else if (Array.isArray(response)) {
-          dataList = response;
-          totalCount = response.length;
-        }
-        // 情况4: 其他结构，尝试提取
-        else {
-          dataList = response.records || response.list || response.data || [];
-          totalCount = response.total || response.totalElements || dataList.length;
-        }
-      }
-
-      setTableListDataSource(dataList);
-
-      // 更新分页信息
-      setPagination(prev => ({
-        ...prev,
-        total: totalCount,
-      }));
-
-      console.log(`获取${pointType}类型日志数据成功，数据量:`, dataList.length, '总数:', totalCount);
-
-    } catch (error) {
-      message.error(`${pointType === 'node' ? '节点' : '边'}日志数据获取失败，请刷新重试`);
-      console.error(`${pointType}日志数据获取失败:`, error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const fetchFilterOptions = async () => {
     try {
-      // 使用固定的筛选项，不再从接口获取
       setAllEndpoints(FIXED_ENDPOINTS);
       setAllProtocols(FIXED_PROTOCOLS);
-      setAllStatusOptions(FIXED_STATUS_CODES);
       
-      // 初始选中所有选项
       setEndpointFilters(FIXED_ENDPOINTS);
       setProtocolFilters(FIXED_PROTOCOLS);
-      setStatusFilters(FIXED_STATUS_CODES);
 
     } catch (error) {
       message.error('初始化筛选选项失败');
@@ -376,23 +549,17 @@ const PointDrawer = ({
   };
 
   function transformData(originalData) {
-    // 创建一个空数组来存储转换后的结果
     const transformedData = [];
 
-    // 遍历原始数据中的每个状态码对象
     for (const statusObj of originalData) {
       const statusCode = statusObj.statusCode;
 
-      // 遍历该状态码下的每个时间桶数据
       for (const timeBucket of statusObj.timeBuckets) {
-        // 创建一个新对象，将状态码作为 type，并包含时间戳和文档计数
         const newObj = {
           type: statusCode,
           timeKey: timeBucket.timeKey,
           docCount: timeBucket.docCount,
         };
-
-        // 将新对象添加到结果数组中
         transformedData.push(newObj);
       }
     }
@@ -404,20 +571,13 @@ const PointDrawer = ({
   const fetchChartData = async () => {
     setChartLoading(true);
     try {
-      // 使用Promise.all并行请求三个图表数据
       const [requestResponse, errorResponse, latencyResponse] = await Promise.all([
-        traceChartQuery('count'), // 请求数
-        traceChartQuery('statusCount'), // 错误数
-        traceChartQuery('latencyStats'), // 响应时延
+        traceChartQuery('count'),
+        traceChartQuery('statusCount'),
+        traceChartQuery('latencyStats'),
       ]);
       console.log(requestResponse.data, errorResponse.data, latencyResponse.data, '0000');
 
-      // TODO 测试
-      // setChartData({
-      //     requestData: requestResponse?.data || [],
-      //     errorData: errorResponse?.data || [],
-      //     latencyData: latencyResponse?.data || []
-      // });
     } catch (error) {
       message.error('图表数据获取失败');
       console.error('Chart data fetch error:', error);
@@ -430,16 +590,13 @@ const PointDrawer = ({
   const fetchTraceDetail = async (traceId) => {
     setTraceDetailLoading(true);
     try {
-      // 调用接口获取Trace详情
       const response = await getTraceDetail(traceId);
       console.log(response, 'response');
 
       const traceDetail = response?.content[0] || {};
 
-      // 设置Trace详情
       setCurrentTrace(traceDetail);
 
-      // 设置Span数据
       if (traceDetail.spans && Array.isArray(traceDetail.spans)) {
         const spans = traceDetail.spans.map((span) => {
           return {
@@ -465,37 +622,6 @@ const PointDrawer = ({
     }
   };
 
-  // 监听pointType和相关参数变化，重新获取数据
-  useEffect(() => {
-    if (selectId) {
-      fetchFilterOptions();
-      fetchChartData();
-      fetchTraceData();
-    }
-  }, [pointType, selectId, sourceId, targetId, startTime, endTime]);
-
-  useEffect(() => {
-    if (selectId) {
-      fetchTraceData();
-    }
-  }, [statusFilters, endpointFilters, protocolFilters, pagination.pageNum, pagination.pageSize]);
-
-  // 筛选逻辑处理
-  const handleStatusFilterChange = (checkedValues) => {
-    setPagination(prev => ({ ...prev, pageNum: 1 }));
-    setStatusFilters(checkedValues);
-  };
-
-  const handleEndpointFilterChange = (checkedValues) => {
-    setPagination(prev => ({ ...prev, pageNum: 1 }));
-    setEndpointFilters(checkedValues);
-  };
-
-  const handleProtocolFilterChange = (checkedValues) => {
-    setPagination(prev => ({ ...prev, pageNum: 1 }));
-    setProtocolFilters(checkedValues);
-  };
-
   // 根据耗时计算状态
   const getStatusByDuration = (duration) => {
     if (duration <= DURATION_THRESHOLD.NORMAL) return 'normal';
@@ -516,7 +642,7 @@ const PointDrawer = ({
 
   // 状态标签渲染
   const renderStatusTag = (item) => {
-    const status = getStatusByCode(item.status_code);
+    const status = getStatusByCode(Number(item));
     const statusConfig = {
       success: { color: 'green', text: '正常', icon: <CheckCircleOutlined /> },
       handling: { color: 'orange', text: '处理中', icon: <QuestionCircleOutlined /> },
@@ -525,7 +651,7 @@ const PointDrawer = ({
     const config = statusConfig[status];
     return (
       <Tag color={config.color} icon={config.icon}>
-        {config.text}（{(item.e2e_duration / 1000).toFixed(2)}ms）
+        {config.text}（{item}）
       </Tag>
     );
   };
@@ -536,10 +662,9 @@ const PointDrawer = ({
     setDrawerVisible(true);
 
     try {
-      // 并行获取火焰图数据和Trace详情
       await Promise.all([
-        getFlamegraphDataByTraceIdFun(record.trace_id),
-        fetchTraceDetail(record.trace_id),
+        getFlamegraphDataByTraceIdFun(record.context.trace_id),
+        fetchTraceDetail(record.context.trace_id),
       ]);
     } catch (error) {
       console.error('获取详情数据失败:', error);
@@ -554,8 +679,7 @@ const PointDrawer = ({
     setCurrentTrace(null);
     setSpanData([]);
     setShowSpanTable(false);
-    setSpanTableHeight(300); // 重置表格高度
-    setSpanTableHeight(originalSpanTableHeight); // 重置表格高度
+    setSpanTableHeight(300);
   };
 
   // 图表配置
@@ -809,258 +933,283 @@ const PointDrawer = ({
         </div>
       }
     >
-      <ProCard split="vertical" gutter={16}>
-        {/* 左侧筛选面板 */}
-        <ProCard title="监控筛选" colSpan="20%" headerBordered extra={<ThunderboltOutlined />}>
-          {/* 状态筛选 */}
-          <div style={{ marginBottom: 16 }}>
-            <Divider orientation="left" plain>
-              响应状态
-            </Divider>
-            <Checkbox.Group
-              value={statusFilters}
-              onChange={handleStatusFilterChange}
-              style={{ width: '100%' }}
-            >
-              <Space direction="vertical" style={{ width: '100%' }}>
-                {allStatusOptions.map((option) => (
-                  <Checkbox key={option} value={option} style={{ width: '100%' }}>
-                    {option}
-                  </Checkbox>
-                ))}
-              </Space>
-            </Checkbox.Group>
-          </div>
+      {/* 使用Spin组件包裹整个内容区域 */}
+      <Spin spinning={loading} tip="数据加载中..." size="large" style={{ minHeight: 400 }}>
+        <ProCard split="vertical" gutter={16}>
+          {/* 左侧筛选面板 */}
+          <ProCard title="监控筛选" colSpan="20%" headerBordered extra={<ThunderboltOutlined />}>
+            {/* 端点筛选 */}
+            <div style={{ marginBottom: 16 }}>
+              <Divider orientation="left" plain>
+                端点
+              </Divider>
+              <div style={{ marginBottom: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span>已选择 {endpointFilters.length} 个</span>
+                <Button 
+                  type="link" 
+                  size="small" 
+                  onClick={handleToggleAllEndpoints}
+                >
+                  {endpointFilters.length === FIXED_ENDPOINTS.length ? '取消全选' : '全选'}
+                </Button>
+              </div>
+              <Checkbox.Group
+                value={endpointFilters}
+                onChange={handleEndpointFilterChange}
+                style={{ width: '100%' }}
+              >
+                <Row gutter={[8, 8]}>
+                  {allEndpoints.map((endpoint) => (
+                    <Col span={24} key={endpoint}>
+                      <Checkbox value={endpoint} style={{ fontSize: '12px', width: '100%' }}>
+                        {endpoint}
+                      </Checkbox>
+                    </Col>
+                  ))}
+                </Row>
+              </Checkbox.Group>
+            </div>
 
-          {/* 端点筛选 */}
-          <div style={{ marginBottom: 16 }}>
-            <Divider orientation="left" plain>
-              端点
-            </Divider>
-            <Checkbox.Group
-              value={endpointFilters}
-              onChange={handleEndpointFilterChange}
-              style={{ width: '100%' }}
-            >
-              <Space direction="vertical" style={{ width: '100%' }}>
-                {allEndpoints.map((endpoint) => (
-                  <Checkbox key={endpoint} value={endpoint} style={{ width: '100%' }}>
-                    {endpoint}
-                  </Checkbox>
-                ))}
-              </Space>
-            </Checkbox.Group>
-          </div>
+            {/* 协议筛选 */}
+            <div style={{ marginBottom: 16 }}>
+              <Divider orientation="left" plain>
+                应用协议
+              </Divider>
+              <div style={{ marginBottom: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span>已选择 {protocolFilters.length} 个</span>
+                <Button 
+                  type="link" 
+                  size="small" 
+                  onClick={handleToggleAllProtocols}
+                >
+                  {protocolFilters.length === FIXED_PROTOCOLS.length ? '取消全选' : '全选'}
+                </Button>
+              </div>
+              <Checkbox.Group
+                value={protocolFilters}
+                onChange={handleProtocolFilterChange}
+                style={{ width: '100%' }}
+              >
+                <Row gutter={[8, 8]}>
+                  {allProtocols.map((protocol) => (
+                    <Col span={24} key={protocol}>
+                      <Checkbox value={protocol} style={{ fontSize: '12px', width: '100%' }}>
+                        {protocol}
+                      </Checkbox>
+                    </Col>
+                  ))}
+                </Row>
+              </Checkbox.Group>
+            </div>
 
-          {/* 协议筛选 */}
-          <div style={{ marginBottom: 16 }}>
-            <Divider orientation="left" plain>
-              应用协议
-            </Divider>
-            <Checkbox.Group
-              value={protocolFilters}
-              onChange={handleProtocolFilterChange}
-              style={{ width: '100%' }}
-            >
-              <Space direction="vertical" style={{ width: '100%' }}>
-                {allProtocols.map((protocol) => (
-                  <Checkbox key={protocol} value={protocol} style={{ width: '100%' }}>
-                    {protocol}
-                  </Checkbox>
-                ))}
-              </Space>
-            </Checkbox.Group>
-          </div>
-
-          {/* 筛选统计与重置 */}
-          <Divider />
-          <div>
-            <Statistic title="总监控项" value={pagination.total} />
-            <Button
-              type="primary"
-              block
-              onClick={() => {
-                setStatusFilters(allStatusOptions);
-                setEndpointFilters(allEndpoints);
-                setProtocolFilters(allProtocols);
-                setPagination(prev => ({
-                  ...prev,
-                  pageNum: 1,
-                }));
-              }}
-              style={{ marginBottom: 8 }}
-            >
-              重置所有筛选
-            </Button>
-            <Button
-              block
-              onClick={() => {
-                fetchTraceData();
-                fetchChartData();
-              }}
-              loading={loading || chartLoading}
-              icon={<ReloadOutlined />}
-            >
-              刷新数据
-            </Button>
-          </div>
-        </ProCard>
-
-        {/* 右侧表格区域 */}
-        <ProCard title={`${pointType === 'node' ? '节点' : '边'}调用日志数据`} headerBordered>
-          {/* 空数据提示 */}
-          {tableListDataSource.length === 0 && !loading && (
-            <Alert
-              message={`暂无符合条件的${pointType === 'node' ? '节点' : '边'}调用日志数据`}
-              type="warning"
-              showIcon
-              style={{ marginBottom: 16 }}
-            />
-          )}
-
-          {/* 表格 */}
-          <ProTable
-            loading={loading}
-            columns={[
-              {
-                title: '追踪ID',
-                key: 'traceId',
-                width: 180,
-                render: (_, record) => {
-                  const traceId = record?.context?.trace_id || '未知';
-                  return <span title={traceId}>{traceId}</span>;
-                },
-              },
-              {
-                title: '链路状态',
-                key: 'status',
-                width: 140,
-                render: (_, record) => renderStatusTag(record?.status_code),
-              },
-              {
-                title: '客户端IP',
-                dataIndex: 'client_ip',
-                key: 'client_ip',
-                render: (_, record) => record?.tag?.ebpf_tag?.dst_ip,
-                width: 120,
-              },
-              {
-                title: '客户端端口',
-                dataIndex: 'client_port',
-                key: 'client_port',
-                render: (_, record) => (record?.tag?.ebpf_tag?.dst_port),
-                width: 100,
-              },
-              {
-                title: '组件名称',
-                dataIndex: 'component_name',
-                key: 'component_name',
-                render: (_, record) => (record?.component),
-                width: 140,
-              },
-              {
-                title: '请求端点',
-                dataIndex: 'endpoint',
-                key: 'endpoint',
-                render: (_, record) => (record?.tag?.ebpf_tag?.endpoint),
-                width: 120,
-              },
-              {
-                title: '传输协议',
-                dataIndex: 'protocol',
-                key: 'protocol',
-                render: (_, record) => (record?.tag?.ebpf_tag?.protocol),
-                width: 100,
-              },
-              {
-                title: '服务端IP',
-                dataIndex: 'server_ip',
-                key: 'server_ip',
-                render: (_, record) => (record?.tag?.ebpf_tag?.src_ip),
-                width: 120,
-              },
-              {
-                title: '服务端端口',
-                dataIndex: 'server_port',
-                key: 'server_port',
-                render: (_, record) => (record?.tag?.ebpf_tag?.src_port),
-                width: 100,
-              },
-              {
-                title: '端到端耗时',
-                dataIndex: 'e2e_duration',
-                key: 'e2e_duration',
-                width: 130,
-                render: (_, record) => {
-                  const duration = record?.metric?.duration || 0;
-                  const ms = duration / 1000;
-                  let color = '#52c41a';
-                  if (ms > 10) color = '#ff4d4f';
-                  else if (ms > 5) color = '#faad14';
-                  return <span style={{ color }}>{ms.toFixed(2)} ms</span>;
-                },
-              },
-              {
-                title: '结束时间',
-                dataIndex: 'end_time',
-                key: 'end_time',
-                width: 160,
-                render: (_, record) => {
-                  const time = record?.metric?.end_time;
-                  if (!time) return '未知';
-                  return new Date(time).toLocaleString('zh-CN', {
-                    year: 'numeric',
-                    month: '2-digit',
-                    day: '2-digit',
-                    hour: '2-digit',
-                    minute: '2-digit',
-                    second: '2-digit',
+            {/* 筛选统计与重置 */}
+            <Divider />
+            <div>
+              <Statistic title="总监控项" value={pagination.total} />
+              <Button
+                type="primary"
+                block
+                onClick={() => {
+                  // 重置为全选状态
+                  setEndpointFilters(FIXED_ENDPOINTS);
+                  setProtocolFilters(FIXED_PROTOCOLS);
+                  setPagination(prev => ({
+                    ...prev,
+                    pageNum: 1,
+                  }));
+                  
+                  // 更新ref
+                  filtersRef.current.endpointFilters = FIXED_ENDPOINTS;
+                  filtersRef.current.protocolFilters = FIXED_PROTOCOLS;
+                  filtersRef.current.pagination = { ...filtersRef.current.pagination, pageNum: 1 };
+                  
+                  setLoading(true);
+                  fetchTraceData({
+                    endpointFilters: FIXED_ENDPOINTS,
+                    protocolFilters: FIXED_PROTOCOLS,
+                    pagination: { ...filtersRef.current.pagination, pageNum: 1 }
                   });
+                }}
+                style={{ marginBottom: 8 }}
+              >
+                重置为全选
+              </Button>
+              <Button
+                block
+                onClick={() => {
+                  setLoading(true);
+                  setChartLoading(true);
+                  fetchTraceData();
+                  fetchChartData();
+                }}
+                loading={loading || chartLoading}
+                icon={<ReloadOutlined />}
+              >
+                刷新数据
+              </Button>
+            </div>
+          </ProCard>
+
+          {/* 右侧表格区域 */}
+          <ProCard title={`${pointType === 'node' ? '节点' : '边'}调用日志数据`} headerBordered>
+            {/* 空数据提示 */}
+            {tableListDataSource.length === 0 && !loading && (
+              <Alert
+                message={`暂无符合条件的${pointType === 'node' ? '节点' : '边'}调用日志数据`}
+                type="warning"
+                showIcon
+                style={{ marginBottom: 16 }}
+              />
+            )}
+
+            {/* 表格 */}
+            <ProTable
+              columns={[
+                {
+                  title: '追踪ID',
+                  key: 'traceId',
+                  width: 180,
+                  render: (_, record) => {
+                    const traceId = record?.context?.trace_id || '未知';
+                    return <span title={traceId}>{traceId}</span>;
+                  },
                 },
-              },
-              {
-                title: '操作',
-                key: 'action',
-                width: 80,
-                render: (_, record) => (
-                  <Button type="link" size="small" onClick={() => handleViewDetail(record)}>
-                    详情
-                  </Button>
-                ),
-              },
-            ]}
-            dataSource={tableListDataSource}
-            pagination={{
-              current: pagination.pageNum,
-              pageSize: pagination.pageSize,
-              total: pagination.total,
-              showSizeChanger: true,
-              showQuickJumper: true,
-              showTotal: (total) => `共 ${total} 条数据`,
-              pageSizeOptions: ['10', '20', '50', '100'],
-              onChange: (page, pageSize) => {
-                setPagination(prev => ({
-                  ...prev,
-                  pageNum: page,
-                  pageSize: pageSize,
-                }));
-              },
-              onShowSizeChange: (current, size) => {
-                setPagination(prev => ({
-                  ...prev,
-                  pageNum: current,
-                  pageSize: size,
-                }));
+                {
+                  title: '链路状态',
+                  key: 'status',
+                  width: 140,
+                  render: (_, record) => renderStatusTag(record?.status_code),
+                },
+                {
+                  title: '客户端IP',
+                  dataIndex: 'client_ip',
+                  key: 'client_ip',
+                  render: (_, record) => record?.tag?.ebpf_tag?.dst_ip,
+                  width: 120,
+                },
+                {
+                  title: '客户端端口',
+                  dataIndex: 'client_port',
+                  key: 'client_port',
+                  render: (_, record) => (record?.tag?.ebpf_tag?.dst_port),
+                  width: 100,
+                },
+                {
+                  title: '组件名称',
+                  dataIndex: 'component_name',
+                  key: 'component_name',
+                  render: (_, record) => (record?.component),
+                  width: 140,
+                },
+                {
+                  title: '请求端点',
+                  dataIndex: 'endpoint',
+                  key: 'endpoint',
+                  render: (_, record) => (record?.tag?.ebpf_tag?.endpoint),
+                  width: 120,
+                },
+                {
+                  title: '传输协议',
+                  dataIndex: 'protocol',
+                  key: 'protocol',
+                  render: (_, record) => (record?.tag?.ebpf_tag?.protocol),
+                  width: 100,
+                },
+                {
+                  title: '服务端IP',
+                  dataIndex: 'server_ip',
+                  key: 'server_ip',
+                  render: (_, record) => (record?.tag?.ebpf_tag?.src_ip),
+                  width: 120,
+                },
+                {
+                  title: '服务端端口',
+                  dataIndex: 'server_port',
+                  key: 'server_port',
+                  render: (_, record) => (record?.tag?.ebpf_tag?.src_port),
+                  width: 100,
+                },
+                {
+                  title: '端到端耗时',
+                  dataIndex: 'e2e_duration',
+                  key: 'e2e_duration',
+                  width: 130,
+                  render: (_, record) => {
+                    const duration = record?.metric?.duration || 0;
+                    const ms = duration / 1000;
+                    let color = '#52c41a';
+                    if (ms > 10) color = '#ff4d4f';
+                    else if (ms > 5) color = '#faad14';
+                    return <span style={{ color }}>{ms.toFixed(2)} ms</span>;
+                  },
+                },
+                {
+                  title: '结束时间',
+                  dataIndex: 'end_time',
+                  key: 'end_time',
+                  width: 160,
+                  render: (_, record) => {
+                    const time = record?.metric?.end_time;
+                    if (!time) return '未知';
+                    return new Date(time).toLocaleString('zh-CN', {
+                      year: 'numeric',
+                      month: '2-digit',
+                      day: '2-digit',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                      second: '2-digit',
+                    });
+                  },
+                },
+                {
+                  title: '操作',
+                  key: 'action',
+                  width: 80,
+                  render: (_, record) => (
+                    <Button type="link" size="small" onClick={() => handleViewDetail(record)}>
+                      详情
+                    </Button>
+                  ),
+                },
+              ]}
+              dataSource={tableListDataSource}
+              pagination={{
+                current: pagination.pageNum,
+                pageSize: pagination.pageSize,
+                total: pagination.total,
+                showSizeChanger: false,
+                showQuickJumper: true,
+                showTotal: (total) => `共 ${total} 条数据`,
+                onChange: (page, pageSize) => {
+                  setLoading(true);
+                  setPagination(prev => ({
+                    ...prev,
+                    pageNum: page,
+                  }));
+                  
+                  // 更新ref
+                  filtersRef.current.pagination = { ...filtersRef.current.pagination, pageNum: page };
+                  
+                  // 使用setTimeout确保状态更新后再调用API
+                  setTimeout(() => {
+                    fetchTraceData({
+                      endpointFilters: filtersRef.current.endpointFilters,
+                      protocolFilters: filtersRef.current.protocolFilters,
+                      pagination: { ...filtersRef.current.pagination, pageNum: page }
+                    });
+                  }, 0);
+                },
+              }}
+              search={false}
+              rowKey={(record) =>
+                record.trace_id || `${record.client_ip}-${record.client_port}-${record.endpoint}`
               }
-            }}
-            search={false}
-            rowKey={(record) =>
-              record.trace_id || `${record.client_ip}-${record.client_port}-${record.endpoint}`
-            }
-            toolBarRender={false}
-          />
+              toolBarRender={false}
+              style={{ minHeight: 400 }}
+            />
+          </ProCard>
         </ProCard>
-      </ProCard>
+      </Spin>
 
       {/* Trace详情抽屉 */}
       <Drawer
@@ -1091,331 +1240,328 @@ const PointDrawer = ({
         }
         bodyStyle={{ padding: 24, display: 'flex', flexDirection: 'column', height: '100%' }}
       >
-        {traceDetailLoading ? (
-          <div style={{ textAlign: 'center', padding: '80px 0' }}>
-            <Spin size="large" />
-            <p style={{ marginTop: 16 }}>加载Trace详情中...</p>
-          </div>
-        ) : currentTrace ? (
-          <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-            <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
-              <Tabs
-                defaultActiveKey="1"
-                type="card"
-                style={{ height: '100%' }}
-                tabBarStyle={{ marginBottom: 0 }}
-              >
-                {/* Tab 1: 链路基本信息 */}
-                <TabPane tab="链路基本信息" key="1">
-                  <div style={{ height: '100%', overflowY: 'auto' }}>
-                    <Card
-                      title="链路基本信息"
-                      bordered={false}
-                      style={{ marginBottom: 24 }}
-                      headStyle={{ fontSize: 16, fontWeight: 'bold' }}
-                    >
-                      <Row gutter={24}>
-                        <Col span={12}>
-                          <Descriptions column={1} size="middle">
-                            <Descriptions.Item label="追踪ID">
-                              <Tag color="blue" style={{ fontSize: 14 }}>
-                                {currentTrace.trace_id}
-                              </Tag>
-                            </Descriptions.Item>
-                            <Descriptions.Item label="端点">
-                              <div style={{ fontWeight: 'bold', fontSize: 15 }}>
-                                {currentTrace.endpoint}
-                              </div>
-                            </Descriptions.Item>
-                            <Descriptions.Item label="协议">
-                              <Tag color="purple" style={{ fontSize: 14 }}>
-                                {currentTrace.protocol}
-                              </Tag>
-                            </Descriptions.Item>
-                          </Descriptions>
-                        </Col>
-                        <Col span={12}>
-                          <Descriptions column={1} size="middle">
-                            <Descriptions.Item label="客户端">
-                              <div style={{ fontWeight: 'bold' }}>
-                                {currentTrace.client_ip}:{currentTrace.client_port}
-                              </div>
-                            </Descriptions.Item>
-                            <Descriptions.Item label="服务端">
-                              <div style={{ fontWeight: 'bold' }}>
-                                {currentTrace.server_ip}:{currentTrace.server_port}
-                              </div>
-                            </Descriptions.Item>
-                            <Descriptions.Item label="端到端耗时">
-                              <span style={{ fontWeight: 'bold', fontSize: 16, color: '#1890ff' }}>
-                                {(currentTrace.e2e_duration / 1000).toFixed(2)} ms
-                              </span>
-                            </Descriptions.Item>
-                            <Descriptions.Item label="Span数量">
-                              <span style={{ fontWeight: 'bold', fontSize: 16 }}>
-                                {currentTrace.span_num}
-                              </span>
-                            </Descriptions.Item>
-                          </Descriptions>
-                        </Col>
-                      </Row>
-                    </Card>
+        <Spin spinning={traceDetailLoading} tip="加载Trace详情中..." size="large">
+          {currentTrace ? (
+            <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+              <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
+                <Tabs
+                  defaultActiveKey="1"
+                  type="card"
+                  style={{ height: '100%' }}
+                  tabBarStyle={{ marginBottom: 0 }}
+                >
+                  {/* Tab 1: 链路基本信息 */}
+                  <TabPane tab="链路基本信息" key="1">
+                    <div style={{ height: '100%', overflowY: 'auto' }}>
+                      <Card
+                        title="链路基本信息"
+                        bordered={false}
+                        style={{ marginBottom: 24 }}
+                        headStyle={{ fontSize: 16, fontWeight: 'bold' }}
+                      >
+                        <Row gutter={24}>
+                          <Col span={12}>
+                            <Descriptions column={1} size="middle">
+                              <Descriptions.Item label="追踪ID">
+                                <Tag color="blue" style={{ fontSize: 14 }}>
+                                  {currentTrace.trace_id}
+                                </Tag>
+                              </Descriptions.Item>
+                              <Descriptions.Item label="端点">
+                                <div style={{ fontWeight: 'bold', fontSize: 15 }}>
+                                  {currentTrace.endpoint}
+                                </div>
+                              </Descriptions.Item>
+                              <Descriptions.Item label="协议">
+                                <Tag color="purple" style={{ fontSize: 14 }}>
+                                  {currentTrace.protocol}
+                                </Tag>
+                              </Descriptions.Item>
+                            </Descriptions>
+                          </Col>
+                          <Col span={12}>
+                            <Descriptions column={1} size="middle">
+                              <Descriptions.Item label="客户端">
+                                <div style={{ fontWeight: 'bold' }}>
+                                  {currentTrace.client_ip}:{currentTrace.client_port}
+                                </div>
+                              </Descriptions.Item>
+                              <Descriptions.Item label="服务端">
+                                <div style={{ fontWeight: 'bold' }}>
+                                  {currentTrace.server_ip}:{currentTrace.server_port}
+                                </div>
+                              </Descriptions.Item>
+                              <Descriptions.Item label="端到端耗时">
+                                <span style={{ fontWeight: 'bold', fontSize: 16, color: '#1890ff' }}>
+                                  {(currentTrace.e2e_duration / 1000).toFixed(2)} ms
+                                </span>
+                              </Descriptions.Item>
+                              <Descriptions.Item label="Span数量">
+                                <span style={{ fontWeight: 'bold', fontSize: 16 }}>
+                                  {currentTrace.span_num}
+                                </span>
+                              </Descriptions.Item>
+                            </Descriptions>
+                          </Col>
+                        </Row>
+                      </Card>
 
-                    <Card
-                      title="原始数据"
-                      bordered={false}
-                      headStyle={{ fontSize: 16, fontWeight: 'bold' }}
-                    >
-                      <pre
+                      <Card
+                        title="原始数据"
+                        bordered={false}
+                        headStyle={{ fontSize: 16, fontWeight: 'bold' }}
+                      >
+                        <pre
+                          style={{
+                            background: '#f6f8fa',
+                            padding: 16,
+                            borderRadius: 4,
+                            maxHeight: 300,
+                            overflowY: 'auto',
+                            fontSize: 13,
+                            whiteSpace: 'pre-wrap',
+                            wordBreak: 'break-all',
+                          }}
+                        >
+                          {JSON.stringify(currentTrace, null, 2)}
+                        </pre>
+                      </Card>
+                    </div>
+                  </TabPane>
+
+                  <TabPane tab="拓扑图" key="2">
+                    <div style={{ height: '100%', overflowY: 'auto' }}>
+                      <Card
+                        bordered={false}
                         style={{
-                          background: '#f6f8fa',
-                          padding: 16,
-                          borderRadius: 4,
-                          maxHeight: 300,
-                          overflowY: 'auto',
-                          fontSize: 13,
-                          whiteSpace: 'pre-wrap',
-                          wordBreak: 'break-all',
+                          height: '100%',
+                          minHeight: '600px',
+                        }}
+                        bodyStyle={{
+                          height: 'calc(100% - 6px)',
+                          display: 'flex',
+                          justifyContent: 'center',
+                          alignItems: 'center',
+                          background: '#f9f9f9',
                         }}
                       >
-                        {JSON.stringify(currentTrace, null, 2)}
-                      </pre>
-                    </Card>
-                  </div>
-                </TabPane>
+                        <div style={{ textAlign: 'center', width: '100%' }}>
+                          <GraphVisEGraphVisualizationxample
+                            nodes={addNodeLevels(graphData.nodes)}
+                            edges={graphData.edges}
+                            relationData={relationData}
+                          ></GraphVisEGraphVisualizationxample>
+                        </div>
+                      </Card>
+                    </div>
+                  </TabPane>
 
-                <TabPane tab="拓扑图" key="2">
-                  <div style={{ height: '100%', overflowY: 'auto' }}>
-                    <Card
-                      bordered={false}
-                      style={{
-                        height: '100%',
-                        minHeight: '600px',
-                      }}
-                      bodyStyle={{
-                        height: 'calc(100% - 6px)',
-                        display: 'flex',
-                        justifyContent: 'center',
-                        alignItems: 'center',
-                        background: '#f9f9f9',
-                      }}
-                    >
-                      <div style={{ textAlign: 'center', width: '100%' }}>
-                        <GraphVisEGraphVisualizationxample
-                          nodes={addNodeLevels(graphData.nodes)}
-                          edges={graphData.edges}
-                          relationData={relationData}
-                        ></GraphVisEGraphVisualizationxample>
-                      </div>
-                    </Card>
-                  </div>
-                </TabPane>
+                  <TabPane tab="火焰图" key="3">
+                    <div style={{ height: '100%', overflowY: 'auto' }}>
+                      <Card
+                        bordered={false}
+                        style={{ height: '100%' }}
+                        bodyStyle={{
+                          height: 'calc(100% - 56px)',
+                          display: 'flex',
+                          justifyContent: 'center',
+                          alignItems: 'center',
+                          background: '#f9f9f9',
+                        }}
+                      >
+                        <div style={{ width: '100%' }}>
+                          <FlameGraphMain data={flameTreeData}></FlameGraphMain>
+                        </div>
+                      </Card>
+                    </div>
+                  </TabPane>
+                </Tabs>
+              </div>
 
-                <TabPane tab="火焰图" key="3">
-                  <div style={{ height: '100%', overflowY: 'auto' }}>
-                    <Card
-                      bordered={false}
-                      style={{ height: '100%' }}
-                      bodyStyle={{
-                        height: 'calc(100% - 56px)',
-                        display: 'flex',
-                        justifyContent: 'center',
-                        alignItems: 'center',
-                        background: '#f9f9f9',
-                      }}
-                    >
-                      <div style={{ width: '100%' }}>
-                        <FlameGraphMain data={flameTreeData}></FlameGraphMain>
-                      </div>
-                    </Card>
-                  </div>
-                </TabPane>
-              </Tabs>
-            </div>
-
-            {showSpanTable && (
-              <Card
-                title="调用详情"
-                bordered={false}
-                style={{ marginTop: 16, flexShrink: 0, height: spanTableHeight }}
-                headStyle={{ fontSize: 16, fontWeight: 'bold' }}
-                extra={
-                  <Space>
-                    <Button
-                      icon={<UpOutlined />}
-                      size="small"
-                      onClick={() => {
-                        if (spanTableHeight === originalSpanTableHeight) {
-                          setOriginalSpanTableHeight(spanTableHeight);
-                        }
-                        setSpanTableHeight(800);
-                      }}
-                      title="增加高度"
-                    />
-                    <Button
-                      icon={<DownOutlined />}
-                      size="small"
-                      onClick={() => setSpanTableHeight(originalSpanTableHeight)}
-                      title="恢复高度"
-                    />
-                    <Button
-                      icon={<CloseOutlined />}
-                      size="small"
-                      onClick={() => setShowSpanTable(false)}
-                      title="关闭表格"
-                    />
-                  </Space>
-                }
-              >
-                <ProTable
-                  columns={[
-                    {
-                      title: 'Span ID',
-                      dataIndex: 'span_id',
-                      key: 'span_id',
-                      width: 180,
-                      render: (id) => {
-                        return (
-                          <Tooltip title={id}>
-                            <Tag
-                              color="blue"
-                              style={{
-                                maxWidth: 150,
-                                overflow: 'hidden',
-                                textOverflow: 'ellipsis',
-                              }}
-                            >
-                              {id}
-                            </Tag>
-                          </Tooltip>
-                        );
+              {showSpanTable && (
+                <Card
+                  title="调用详情"
+                  bordered={false}
+                  style={{ marginTop: 16, flexShrink: 0, height: spanTableHeight }}
+                  headStyle={{ fontSize: 16, fontWeight: 'bold' }}
+                  extra={
+                    <Space>
+                      <Button
+                        icon={<UpOutlined />}
+                        size="small"
+                        onClick={() => {
+                          if (spanTableHeight === originalSpanTableHeight) {
+                            setOriginalSpanTableHeight(spanTableHeight);
+                          }
+                          setSpanTableHeight(800);
+                        }}
+                        title="增加高度"
+                      />
+                      <Button
+                        icon={<DownOutlined />}
+                        size="small"
+                        onClick={() => setSpanTableHeight(originalSpanTableHeight)}
+                        title="恢复高度"
+                      />
+                      <Button
+                        icon={<CloseOutlined />}
+                        size="small"
+                        onClick={() => setShowSpanTable(false)}
+                        title="关闭表格"
+                      />
+                    </Space>
+                  }
+                >
+                  <ProTable
+                    columns={[
+                      {
+                        title: 'Span ID',
+                        dataIndex: 'span_id',
+                        key: 'span_id',
+                        width: 180,
+                        render: (id) => {
+                          return (
+                            <Tooltip title={id}>
+                              <Tag
+                                color="blue"
+                                style={{
+                                  maxWidth: 150,
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
+                                }}
+                              >
+                                {id}
+                              </Tag>
+                            </Tooltip>
+                          );
+                        },
                       },
-                    },
-                    {
-                      title: '组件',
-                      dataIndex: 'component',
-                      key: 'component',
-                      width: 150,
-                      render: (component) => <Tag color="purple">{component}</Tag>,
-                    },
-                    {
-                      title: '端点',
-                      dataIndex: 'endpoint',
-                      key: 'endpoint',
-                      width: 120,
-                    },
-                    {
-                      title: '协议',
-                      dataIndex: 'protocol',
-                      key: 'protocol',
-                      width: 100,
-                      render: (protocol) => <Tag color="cyan">{protocol}</Tag>,
-                    },
-                    {
-                      title: '方向',
-                      dataIndex: 'direction',
-                      key: 'direction',
-                      width: 100,
-                      render: (direction) => (
-                        <Tag color={direction === 'Ingress' ? 'green' : 'orange'}>{direction}</Tag>
-                      ),
-                    },
-                    {
-                      title: '耗时',
-                      dataIndex: 'duration',
-                      key: 'duration',
-                      width: 100,
-                      render: (duration) => (
-                        <span style={{ fontWeight: 'bold' }}>
-                          {(duration / 1000000).toFixed(2)}ms
-                        </span>
-                      ),
-                    },
-                    {
-                      title: '开始时间',
-                      dataIndex: 'start_time',
-                      key: 'start_time',
-                      width: 180,
-                      render: (time) => new Date(time).toLocaleString(),
-                    },
-                    {
-                      title: '结束时间',
-                      dataIndex: 'end_time',
-                      key: 'end_time',
-                      width: 180,
-                      render: (time) => new Date(time).toLocaleString(),
-                    },
-                    {
-                      title: '源地址',
-                      key: 'source',
-                      width: 180,
-                      render: (_, record) => (
-                        <div>
-                          <div>{record.src_ip}</div>
-                          <Tag color="geekblue">端口: {record.src_port}</Tag>
-                        </div>
-                      ),
-                    },
-                    {
-                      title: '目标地址',
-                      key: 'destination',
-                      width: 180,
-                      render: (_, record) => (
-                        <div>
-                          <div>{record.dst_ip}</div>
-                          <Tag color="geekblue">端口: {record.dst_port}</Tag>
-                        </div>
-                      ),
-                    },
-                    {
-                      title: '容器',
-                      key: 'container',
-                      width: 200,
-                      render: (_, record) => (
-                        <div>
-                          <div>{record.container_name}</div>
-                          <Tag color="volcano" title="容器ID">
-                            {record.container_id?.slice(0, 12)}...
-                          </Tag>
-                        </div>
-                      ),
-                    },
-                    {
-                      title: '请求/响应',
-                      key: 'sizes',
-                      width: 120,
-                      render: (_, record) => (
-                        <div>
-                          <Tag color="blue">请求: {record.req_size}字节</Tag>
-                          <Tag color="green">响应: {record.resp_size}字节</Tag>
-                        </div>
-                      ),
-                    },
-                    {
-                      title: '序列号',
-                      key: 'sequences',
-                      width: 120,
-                      render: (_, record) => (
-                        <div>
-                          <Tag color="gold">请求: {record.req_seq}</Tag>
-                          <Tag color="lime">响应: {record.resp_seq}</Tag>
-                        </div>
-                      ),
-                    },
-                  ]}
-                  dataSource={spanData}
-                  pagination={false}
-                  rowKey="id"
-                  search={false}
-                  toolBarRender={false}
-                  scroll={{ y: spanTableHeight - 100 }}
-                />
-              </Card>
-            )}
-          </div>
-        ) : (
-          <Alert message="未找到Trace详情信息" type="warning" showIcon style={{ marginTop: 24 }} />
-        )}
+                      {
+                        title: '组件',
+                        dataIndex: 'component',
+                        key: 'component',
+                        width: 150,
+                        render: (component) => <Tag color="purple">{component}</Tag>,
+                      },
+                      {
+                        title: '端点',
+                        dataIndex: 'endpoint',
+                        key: 'endpoint',
+                        width: 120,
+                      },
+                      {
+                        title: '协议',
+                        dataIndex: 'protocol',
+                        key: 'protocol',
+                        width: 100,
+                        render: (protocol) => <Tag color="cyan">{protocol}</Tag>,
+                      },
+                      {
+                        title: '方向',
+                        dataIndex: 'direction',
+                        key: 'direction',
+                        width: 100,
+                        render: (direction) => (
+                          <Tag color={direction === 'Ingress' ? 'green' : 'orange'}>{direction}</Tag>
+                        ),
+                      },
+                      {
+                        title: '耗时',
+                        dataIndex: 'duration',
+                        key: 'duration',
+                        width: 100,
+                        render: (duration) => (
+                          <span style={{ fontWeight: 'bold' }}>
+                            {(duration / 1000000).toFixed(2)}ms
+                          </span>
+                        ),
+                      },
+                      {
+                        title: '开始时间',
+                        dataIndex: 'start_time',
+                        key: 'start_time',
+                        width: 180,
+                        render: (time) => new Date(time).toLocaleString(),
+                      },
+                      {
+                        title: '结束时间',
+                        dataIndex: 'end_time',
+                        key: 'end_time',
+                        width: 180,
+                        render: (time) => new Date(time).toLocaleString(),
+                      },
+                      {
+                        title: '源地址',
+                        key: 'source',
+                        width: 180,
+                        render: (_, record) => (
+                          <div>
+                            <div>{record.src_ip}</div>
+                            <Tag color="geekblue">端口: {record.src_port}</Tag>
+                          </div>
+                        ),
+                      },
+                      {
+                        title: '目标地址',
+                        key: 'destination',
+                        width: 180,
+                        render: (_, record) => (
+                          <div>
+                            <div>{record.dst_ip}</div>
+                            <Tag color="geekblue">端口: {record.dst_port}</Tag>
+                          </div>
+                        ),
+                      },
+                      {
+                        title: '容器',
+                        key: 'container',
+                        width: 200,
+                        render: (_, record) => (
+                          <div>
+                            <div>{record.container_name}</div>
+                            <Tag color="volcano" title="容器ID">
+                              {record.container_id?.slice(0, 12)}...
+                            </Tag>
+                          </div>
+                        ),
+                      },
+                      {
+                        title: '请求/响应',
+                        key: 'sizes',
+                        width: 120,
+                        render: (_, record) => (
+                          <div>
+                            <Tag color="blue">请求: {record.req_size}字节</Tag>
+                            <Tag color="green">响应: {record.resp_size}字节</Tag>
+                          </div>
+                        ),
+                      },
+                      {
+                        title: '序列号',
+                        key: 'sequences',
+                        width: 120,
+                        render: (_, record) => (
+                          <div>
+                            <Tag color="gold">请求: {record.req_seq}</Tag>
+                            <Tag color="lime">响应: {record.resp_seq}</Tag>
+                          </div>
+                        ),
+                      },
+                    ]}
+                    dataSource={spanData}
+                    pagination={false}
+                    rowKey="id"
+                    search={false}
+                    toolBarRender={false}
+                    scroll={{ y: spanTableHeight - 100 }}
+                  />
+                </Card>
+              )}
+            </div>
+          ) : (
+            <Alert message="未找到Trace详情信息" type="warning" showIcon style={{ marginTop: 24 }} />
+          )}
+        </Spin>
       </Drawer>
     </PageContainer>
   );

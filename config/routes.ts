@@ -142,10 +142,10 @@ export default [
       // },
     ]
   },
-  // {
-  //   path: '/ActionDetail',
-  //   component: './ActionCollect/component/collectTableDetail.tsx'
-  // },
+  {
+    path: '/ActionDetail',
+    component: './ActionCollect/component/collectTableDetail.tsx'
+  },
   
   // {
   //   path: '/Network',

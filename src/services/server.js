@@ -10,6 +10,8 @@ let isMock = true
 // const ipAddress = "202.112.237.37"
 const ipAddress = "http://114.215.254.187:8081"
 const topologyIpAddress = "http://localhost:8081"
+// const topologyIpAddress = "http://114.215.254.187:8081"
+
 const flameIpAdress = "http://114.215.254.187:8080"
 // const flameIpAdress = "http://localhost:8080"
 axios.defaults.paramsSerializer = params => {
@@ -184,12 +186,11 @@ const traceChartQuery = async (type) => {
 }
 
 const getFlamegraphDataByTraceId = async (traceId) => {    
-    try { 
+    try {         
         const res = await axios.get(`${flameIpAdress}/flamegraphList`, {
             params: {
-                traceId: "e82f030a88f458b"
 
-                // traceId: traceId
+                traceId
             }
         })
         const {data = {}} = res

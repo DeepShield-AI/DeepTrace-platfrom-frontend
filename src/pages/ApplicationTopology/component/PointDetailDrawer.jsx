@@ -189,7 +189,7 @@ const PointDetailDrawer = ({selectedObj = {}}) => {
     };
 
     // 构建请求参数 - 根据pointType使用不同的参数名
-    const buildRequestParams = () => {
+    const buildRequestParams = (buildType) => {
         const nodeId = getCurrentNodeId();
         if (!nodeId) return null;
 
@@ -199,9 +199,9 @@ const PointDetailDrawer = ({selectedObj = {}}) => {
         };
 
         // 根据 pointType 添加不同的ID参数
-        if (selectedObj.pointType === 'node') {
+        if (selectedObj.pointType === 'node' || (selectedObj.pointType === 'edge' && buildType === 'CHART_3')) {
             params.nodeId = nodeId;
-        } else if (selectedObj.pointType === 'edge') {
+        } else if (selectedObj.pointType === 'edge' && buildType !== 'CHART_3') {
             params.srcNodeId = nodeId; // 边的情况使用srcId
             // 如果需要，也可以添加目标节点ID
             if (selectedObj.target) {
@@ -356,7 +356,7 @@ const PointDetailDrawer = ({selectedObj = {}}) => {
     const fetchChartData = async () => {
         setChartLoading(true);
         try {
-            const params = buildRequestParams();
+            const params = buildRequestParams("CHART_3");
             if (!params) {
                 console.warn('未找到节点ID，无法获取图表数据');
                 // 使用兜底数据

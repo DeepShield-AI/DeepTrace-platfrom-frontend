@@ -6,30 +6,32 @@ import {
   Button, 
   Typography,
   Space,
-  ConfigProvider,
-  Table,
-  Input,
-  Alert,
-  Modal,
-  Form,
-  Checkbox,
+  Tag,
   Card,
-  Radio
+  Tooltip,
+  Progress,
+  Radio,
+  Drawer,
+  Table,
+  Badge
 } from 'antd';
-import { Line } from '@ant-design/plots';
+import { Line, Area, Column } from '@ant-design/plots';
 import { 
   ReloadOutlined, 
-  CloseOutlined, 
-  PlusOutlined,
   DashboardOutlined,
-  CloudServerOutlined,
-  SearchOutlined,
-  ExclamationCircleOutlined,
-  DesktopOutlined,
-  LineChartOutlined,
   MonitorOutlined,
   DatabaseOutlined,
-  ApiOutlined
+  LineChartOutlined,
+  ApiOutlined,
+  ThunderboltOutlined,
+  FireOutlined,
+  CloudServerOutlined,
+  WifiOutlined,
+  HddOutlined,
+  RocketOutlined,
+  ExclamationCircleOutlined,
+  TableOutlined,
+  CloseOutlined
 } from '@ant-design/icons';
 import { ProCard, PageContainer } from '@ant-design/pro-components';
 
@@ -39,670 +41,516 @@ const { Option } = Select;
 const NetworkMetrics = () => {
   const [timeRange, setTimeRange] = useState('15分钟');
   const [autoRefresh, setAutoRefresh] = useState(true);
-  const [dataTable, setDataTable] = useState('硬件指标');
-  const [currentFocus, setCurrentFocus] = useState('cpu'); // 默认显示CPU指标
+  const [selectedTags, setSelectedTags] = useState(['all']);
   const [metricsData, setMetricsData] = useState([]);
-  const [tableData, setTableData] = useState([]);
-  const [filteredData, setFilteredData] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [searchText, setSearchText] = useState('');
-  const [pagination, setPagination] = useState({
-    current: 1,
-    pageSize: 10,
-    total: 0
-  });
-  const [isModalVisible, setIsModalVisible] = useState(false);
-  const [selectedFields, setSelectedFields] = useState([]);
-  const [selectedTable, setSelectedTable] = useState('硬件指标');
-  const [queries, setQueries] = useState([]);
-  const [form] = Form.useForm();
+  const [drawerVisible, setDrawerVisible] = useState(false);
+  const [currentChart, setCurrentChart] = useState(null);
+  const [logData, setLogData] = useState([]);
 
-  // 生成CPU指标图表数据
-  const generateCPUMetricsData = () => {
-    const baseData = [
-      { time: '15:02', value: 45, usage: 45, temperature: 65, load: 2.1 },
-      { time: '15:03', value: 52, usage: 52, temperature: 66, load: 2.3 },
-      { time: '15:04', value: 38, usage: 38, temperature: 63, load: 1.8 },
-      { time: '15:05', value: 65, usage: 65, temperature: 68, load: 2.8 },
-      { time: '15:06', value: 48, usage: 48, temperature: 64, load: 2.0 },
-      { time: '15:07', value: 61, usage: 61, temperature: 67, load: 2.5 },
-      { time: '15:08', value: 57, usage: 57, temperature: 66, load: 2.4 },
-      { time: '15:09', value: 63, usage: 63, temperature: 68, load: 2.6 },
-      { time: '15:10', value: 49, usage: 49, temperature: 65, load: 2.1 },
-      { time: '15:11', value: 66, usage: 66, temperature: 69, load: 2.9 },
-      { time: '15:12', value: 42, usage: 42, temperature: 63, load: 1.9 },
-      { time: '15:13', value: 64, usage: 64, temperature: 68, load: 2.7 }
-    ];
-    return baseData.map(item => ({ ...item }));
-  };
-
-  // 生成表格数据（CPU指标专用）
-  const generateCPUTableData = () => {
-    return [
-      { 
-        id: 1, 
-        name: '服务器CPU-01', 
-        status: '正常', 
-        usage: '45%', 
-        temperature: '65°C', 
-        load: '2.1',
-        coreCount: 8,
-        frequency: '3.2GHz',
-        cache: '16MB'
-      },
-      { 
-        id: 2, 
-        name: '服务器CPU-02', 
-        status: '正常', 
-        usage: '68%', 
-        temperature: '72°C', 
-        load: '3.4',
-        coreCount: 16,
-        frequency: '2.8GHz',
-        cache: '32MB'
-      },
-      { 
-        id: 3, 
-        name: '数据库服务器CPU', 
-        status: '警告', 
-        usage: '92%', 
-        temperature: '78°C', 
-        load: '4.2',
-        coreCount: 12,
-        frequency: '3.0GHz',
-        cache: '24MB'
-      },
-      { 
-        id: 4, 
-        name: '应用服务器CPU-01', 
-        status: '正常', 
-        usage: '38%', 
-        temperature: '58°C', 
-        load: '1.8',
-        coreCount: 6,
-        frequency: '3.5GHz',
-        cache: '12MB'
-      },
-      { 
-        id: 5, 
-        name: '应用服务器CPU-02', 
-        status: '正常', 
-        usage: '52%', 
-        temperature: '65°C', 
-        load: '2.3',
-        coreCount: 8,
-        frequency: '3.2GHz',
-        cache: '16MB'
-      },
-      { 
-        id: 6, 
-        name: '缓存服务器CPU', 
-        status: '警告', 
-        usage: '88%', 
-        temperature: '82°C', 
-        load: '3.8',
-        coreCount: 16,
-        frequency: '2.9GHz',
-        cache: '32MB'
-      },
-      { 
-        id: 7, 
-        name: '负载均衡器CPU', 
-        status: '正常', 
-        usage: '41%', 
-        temperature: '56°C', 
-        load: '1.9',
-        coreCount: 4,
-        frequency: '3.8GHz',
-        cache: '8MB'
-      },
-      { 
-        id: 8, 
-        name: '备份服务器CPU', 
-        status: '正常', 
-        usage: '35%', 
-        temperature: '51°C', 
-        load: '1.2',
-        coreCount: 4,
-        frequency: '3.0GHz',
-        cache: '8MB'
-      },
-      { 
-        id: 9, 
-        name: '文件服务器CPU', 
-        status: '正常', 
-        usage: '58%', 
-        temperature: '62°C', 
-        load: '2.4',
-        coreCount: 8,
-        frequency: '3.1GHz',
-        cache: '16MB'
-      },
-      { 
-        id: 10, 
-        name: '监控服务器CPU', 
-        status: '警告', 
-        usage: '79%', 
-        temperature: '68°C', 
-        load: '3.1',
-        coreCount: 12,
-        frequency: '2.7GHz',
-        cache: '24MB'
-      }
-    ];
-  };
-
-  // 生成其他硬件指标数据
-  const generateTableData = (tableType) => {
-    const baseDataMap = {
-      '硬件指标': generateCPUTableData(), // 默认使用CPU数据
-      '网络': [
-        { id: 1, name: 'API网关', status: '正常', throughput: '1.2Gbps', latency: '15ms', connections: 1200 },
-        { id: 2, name: '负载均衡', status: '正常', throughput: '980Mbps', latency: '8ms', connections: 850 },
-        { id: 3, name: 'CDN节点', status: '正常', throughput: '2.4Gbps', latency: '32ms', connections: 2400 },
-        { id: 4, name: '边缘节点1', status: '正常', throughput: '1.8Gbps', latency: '28ms', connections: 1800 },
-        { id: 5, name: '边缘节点2', status: '警告', throughput: '1.5Gbps', latency: '45ms', connections: 1500 },
-        { id: 6, name: '核心交换机', status: '正常', throughput: '3.2Gbps', latency: '5ms', connections: 3200 },
-        { id: 7, name: '接入交换机1', status: '正常', throughput: '1.1Gbps', latency: '12ms', connections: 1100 },
-        { id: 8, name: '接入交换机2', status: '警告', throughput: '0.9Gbps', latency: '25ms', connections: 900 },
-        { id: 9, name: '防火墙', status: '正常', throughput: '2.8Gbps', latency: '18ms', connections: 2800 },
-        { id: 10, name: 'VPN网关', status: '正常', throughput: '1.5Gbps', latency: '22ms', connections: 1500 }
-      ],
-      '事件': [
-        { id: 1, name: '安全告警', status: '紧急', level: '高危', time: '2023-05-15 14:23', source: '防火墙' },
-        { id: 2, name: '性能异常', status: '警告', level: '中危', time: '2023-05-15 14:15', source: '应用服务器' },
-        { id: 3, name: '连接超时', status: '正常', level: '低危', time: '2023-05-15 13:58', source: '负载均衡' },
-        { id: 4, name: '磁盘空间不足', status: '紧急', level: '高危', time: '2023-05-15 13:42', source: '存储设备' },
-        { id: 5, name: '网络延迟', status: '警告', level: '中危', time: '2023-05-15 13:25', source: '网络设备' },
-        { id: 6, name: '认证失败', status: '正常', level: '低危', time: '2023-05-15 13:10', source: '认证服务' },
-        { id: 7, name: '内存泄漏', status: '紧急', level: '高危', time: '2023-05-15 12:55', source: '应用服务器' },
-        { id: 8, name: '服务重启', status: '正常', level: '低危', time: '2023-05-15 12:40', source: '系统服务' },
-        { id: 9, name: '配置变更', status: '警告', level: '中危', time: '2023-05-15 12:20', source: '管理系统' },
-        { id: 10, name: '备份完成', status: '正常', level: '信息', time: '2023-05-15 12:05', source: '备份系统' }
-      ]
-    };
-    return baseDataMap[tableType] || [];
-  };
-
-  // CPU指标专用表格列定义
-  const cpuTableColumns = [
-    { 
-      title: 'CPU名称', 
-      dataIndex: 'name', 
-      key: 'name',
-      filterDropdown: ({ setSelectedKeys, selectedKeys, confirm }) => (
-        <div style={{ padding: 8 }}>
-          <Input
-            placeholder="搜索CPU名称"
-            value={selectedKeys[0]}
-            onChange={(e) => setSelectedKeys(e.target.value ? [e.target.value] : [])}
-            onPressEnter={() => confirm()}
-            style={{ width: 188, marginBottom: 8, display: 'block' }}
-          />
-          <Button
-            type="primary"
-            onClick={() => confirm()}
-            size="small"
-            style={{ width: 90 }}
-          >
-            搜索
-          </Button>
-        </div>
-      ),
-      filterIcon: (filtered) => (
-        <SearchOutlined style={{ color: filtered ? '#1890ff' : undefined }} />
-      ),
-      onFilter: (value, record) => record.name.toLowerCase().includes(value.toLowerCase())
-    },
-    { 
-      title: '状态', 
-      dataIndex: 'status', 
-      key: 'status',
-      filters: [
-        { text: '正常', value: '正常' },
-        { text: '警告', value: '警告' },
-        { text: '紧急', value: '紧急' },
-      ],
-      onFilter: (value, record) => record.status === value,
-      render: (status) => (
-        <span style={{
-          color: status === '正常' ? '#52c41a' : status === '警告' ? '#faad14' : '#f5222d',
-          fontWeight: 'bold'
-        }}>
-          {status}
-        </span>
-      )
-    },
-    { 
-      title: '使用率', 
-      dataIndex: 'usage', 
-      key: 'usage', 
-      sorter: (a, b) => parseFloat(a.usage) - parseFloat(b.usage),
-      render: (usage) => (
-        <span style={{
-          color: parseFloat(usage) > 80 ? '#f5222d' : parseFloat(usage) > 60 ? '#faad14' : '#52c41a',
-          fontWeight: 'bold'
-        }}>
-          {usage}
-        </span>
-      )
-    },
-    { 
-      title: '温度', 
-      dataIndex: 'temperature', 
-      key: 'temperature', 
-      sorter: (a, b) => parseInt(a.temperature) - parseInt(b.temperature),
-      render: (temperature) => (
-        <span style={{
-          color: parseInt(temperature) > 75 ? '#f5222d' : parseInt(temperature) > 65 ? '#faad14' : '#52c41a'
-        }}>
-          {temperature}
-        </span>
-      )
-    },
-    { 
-      title: '负载', 
-      dataIndex: 'load', 
-      key: 'load', 
-      sorter: (a, b) => parseFloat(a.load) - parseFloat(b.load),
-      render: (load) => (
-        <span style={{
-          color: parseFloat(load) > 3.0 ? '#f5222d' : parseFloat(load) > 2.0 ? '#faad14' : '#52c41a'
-        }}>
-          {load}
-        </span>
-      )
-    },
-    { title: '核心数', dataIndex: 'coreCount', key: 'coreCount' },
-    { title: '频率', dataIndex: 'frequency', key: 'frequency' },
-    { title: '缓存', dataIndex: 'cache', key: 'cache' }
+  // 图表标签配置
+  const chartTags = [
+    { key: 'all', label: '全部', color: 'blue', icon: <DashboardOutlined /> },
+    { key: 'cpu', label: 'CPU', color: 'red', icon: <MonitorOutlined /> },
+    { key: 'memory', label: '内存', color: 'green', icon: <DatabaseOutlined /> },
+    { key: 'network', label: '网络', color: 'orange', icon: <WifiOutlined /> },
+    { key: 'disk', label: '磁盘', color: 'purple', icon: <HddOutlined /> },
+    { key: 'system', label: '系统', color: 'cyan', icon: <CloudServerOutlined /> }
   ];
 
-  // 表格列定义（增加筛选功能）
-  const tableColumns = {
-    '硬件指标': cpuTableColumns,
-    '网络': [
-      { 
-        title: '节点名称', 
-        dataIndex: 'name', 
-        key: 'name',
-        filterDropdown: ({ setSelectedKeys, selectedKeys, confirm }) => (
-          <div style={{ padding: 8 }}>
-            <Input
-              placeholder="搜索节点名称"
-              value={selectedKeys[0]}
-              onChange={(e) => setSelectedKeys(e.target.value ? [e.target.value] : [])}
-              onPressEnter={() => confirm()}
-              style={{ width: 188, marginBottom: 8, display: 'block' }}
-            />
-            <Button
-              type="primary"
-              onClick={() => confirm()}
-              size="small"
-              style={{ width: 90 }}
-            >
-              搜索
-            </Button>
-          </div>
-        ),
-        filterIcon: (filtered) => (
-          <SearchOutlined style={{ color: filtered ? '#1890ff' : undefined }} />
-        ),
-        onFilter: (value, record) => record.name.toLowerCase().includes(value.toLowerCase())
-      },
-      { 
-        title: '状态', 
-        dataIndex: 'status', 
-        key: 'status',
-        filters: [
-          { text: '正常', value: '正常' },
-          { text: '警告', value: '警告' },
-        ],
-        onFilter: (value, record) => record.status === value
-      },
-      { title: '吞吐量', dataIndex: 'throughput', key: 'throughput', sorter: (a, b) => parseFloat(a.throughput) - parseFloat(b.throughput) },
-      { title: '延迟', dataIndex: 'latency', key: 'latency', sorter: (a, b) => parseInt(a.latency) - parseInt(b.latency) },
-      { title: '连接数', dataIndex: 'connections', key: 'connections', sorter: (a, b) => a.connections - b.connections }
-    ],
-    '事件': [
-      { 
-        title: '事件名称', 
-        dataIndex: 'name', 
-        key: 'name',
-        filterDropdown: ({ setSelectedKeys, selectedKeys, confirm }) => (
-          <div style={{ padding: 8 }}>
-            <Input
-              placeholder="搜索事件名称"
-              value={selectedKeys[0]}
-              onChange={(e) => setSelectedKeys(e.target.value ? [e.target.value] : [])}
-              onPressEnter={() => confirm()}
-              style={{ width: 188, marginBottom: 8, display: 'block' }}
-            />
-            <Button
-              type="primary"
-              onClick={() => confirm()}
-              size="small"
-              style={{ width: 90 }}
-            >
-              搜索
-            </Button>
-          </div>
-        ),
-        filterIcon: (filtered) => (
-          <SearchOutlined style={{ color: filtered ? '#1890ff' : undefined }} />
-        ),
-        onFilter: (value, record) => record.name.toLowerCase().includes(value.toLowerCase())
-      },
-      { 
-        title: '状态', 
-        dataIndex: 'status', 
-        key: 'status',
-        filters: [
-          { text: '正常', value: '正常' },
-          { text: '警告', value: '警告' },
-          { text: '紧急', value: '紧急' },
-        ],
-        onFilter: (value, record) => record.status === value
-      },
-      { title: '级别', dataIndex: 'level', key: 'level', 
-        filters: [
-          { text: '高危', value: '高危' },
-          { text: '中危', value: '中危' },
-          { text: '低危', value: '低危' },
-          { text: '信息', value: '信息' },
-        ],
-        onFilter: (value, record) => record.level === value
-      },
-      { title: '时间', dataIndex: 'time', key: 'time', sorter: (a, b) => new Date(a.time) - new Date(b.time) },
-      { title: '来源', dataIndex: 'source', key: 'source' }
-    ]
-  };
-
-  // 处理表格变化（分页、筛选、排序）
-  const handleTableChange = (pagination, filters, sorter) => {
-    setPagination(pagination);
-    
-    let filtered = [...tableData];
-    
-    // 应用筛选
-    Object.keys(filters).forEach(key => {
-      if (filters[key]) {
-        filtered = filtered.filter(item => filters[key].includes(item[key]));
-      }
-    });
-    
-    // 应用排序
-    if (sorter.field) {
-      filtered = filtered.sort((a, b) => {
-        if (sorter.order === 'ascend') {
-          return a[sorter.field] > b[sorter.field] ? 1 : -1;
-        } else {
-          return a[sorter.field] < b[sorter.field] ? 1 : -1;
-        }
-      });
+  // 图表数据配置 - 增加threshold字段
+  const chartConfigs = [
+    {
+      id: 1,
+      title: 'CPU使用率',
+      value: '45.2%',
+      trend: 'up',
+      change: '+2.1%',
+      tag: 'cpu',
+      type: 'area',
+      dataKey: 'usage',
+      color: '#ff4d4f',
+      icon: <MonitorOutlined />,
+      threshold: 80, // 阈值：80%
+      thresholdColor: '#ff7875',
+      unit: '%'
+    },
+    {
+      id: 2,
+      title: '内存使用率',
+      value: '68.7%',
+      trend: 'down',
+      change: '-1.3%',
+      tag: 'memory',
+      type: 'area',
+      dataKey: 'memory',
+      color: '#52c41a',
+      icon: <DatabaseOutlined />,
+      threshold: 85, // 阈值：85%
+      thresholdColor: '#ff7875',
+      unit: '%'
+    },
+    {
+      id: 3,
+      title: '网络吞吐量',
+      value: '2.4 Gbps',
+      trend: 'up',
+      change: '+0.3G',
+      tag: 'network',
+      type: 'line',
+      dataKey: 'network',
+      color: '#1890ff',
+      icon: <WifiOutlined />,
+      threshold: 2.8, // 阈值：2.8 Gbps
+      thresholdColor: '#ff7875',
+      unit: 'Gbps'
+    },
+    {
+      id: 4,
+      title: '磁盘IOPS',
+      value: '12.5K',
+      trend: 'stable',
+      change: '0.0',
+      tag: 'disk',
+      type: 'column',
+      dataKey: 'iops',
+      color: '#722ed1',
+      icon: <HddOutlined />,
+      threshold: 15, // 阈值：15K
+      thresholdColor: '#ff7875',
+      unit: 'K'
+    },
+    {
+      id: 5,
+      title: '系统负载',
+      value: '2.1',
+      trend: 'up',
+      change: '+0.2',
+      tag: 'system',
+      type: 'line',
+      dataKey: 'load',
+      color: '#fa8c16',
+      icon: <CloudServerOutlined />,
+      threshold: 3.0, // 阈值：3.0
+      thresholdColor: '#ff7875',
+      unit: ''
+    },
+    {
+      id: 6,
+      title: '温度监控',
+      value: '65°C',
+      trend: 'stable',
+      change: '0°',
+      tag: 'system',
+      type: 'area',
+      dataKey: 'temperature',
+      color: '#fa541c',
+      icon: <FireOutlined />,
+      threshold: 75, // 阈值：75°C
+      thresholdColor: '#ff7875',
+      unit: '°C'
+    },
+    {
+      id: 7,
+      title: '连接数',
+      value: '1.2K',
+      trend: 'up',
+      change: '+150',
+      tag: 'network',
+      type: 'column',
+      dataKey: 'connections',
+      color: '#13c2c2',
+      icon: <ApiOutlined />,
+      threshold: 1500, // 阈值：1500
+      thresholdColor: '#ff7875',
+      unit: ''
+    },
+    {
+      id: 8,
+      title: '缓存命中率',
+      value: '92.3%',
+      trend: 'down',
+      change: '-1.2%',
+      tag: 'memory',
+      type: 'line',
+      dataKey: 'cache',
+      color: '#eb2f96',
+      icon: <RocketOutlined />,
+      threshold: 90, // 阈值：90%
+      thresholdColor: '#52c41a', // 低于阈值才警告（绿色表示正常）
+      unit: '%',
+      reverseThreshold: true // 反向阈值：低于阈值才警告
     }
+  ];
+
+  // 生成模拟数据
+  const generateMetricsData = () => {
+    const baseTime = ['15:02', '15:03', '15:04', '15:05', '15:06', '15:07', '15:08', '15:09', '15:10', '15:11', '15:12', '15:13'];
     
-    setFilteredData(filtered);
+    return baseTime.map((time, index) => ({
+      time,
+      usage: 40 + Math.sin(index * 0.5) * 20 + Math.random() * 10, // CPU使用率
+      memory: 60 + Math.cos(index * 0.3) * 15 + Math.random() * 8, // 内存使用率
+      network: 1.5 + Math.sin(index * 0.4) * 0.8 + Math.random() * 0.3, // 网络吞吐量
+      iops: 8 + Math.sin(index * 0.6) * 4 + Math.random() * 2, // 磁盘IOPS
+      load: 1.5 + Math.sin(index * 0.4) * 0.8 + Math.random() * 0.3, // 系统负载
+      temperature: 60 + Math.sin(index * 0.3) * 8 + Math.random() * 3, // 温度
+      connections: 800 + Math.sin(index * 0.5) * 300 + Math.random() * 100, // 连接数
+      cache: 90 + Math.cos(index * 0.4) * 8 + Math.random() * 4 // 缓存命中率
+    }));
   };
 
-  // 根据当前关注的指标类型获取图表配置
-  const getChartConfig = (focusType) => {
-    const configMap = {
-      cpu: {
-        title: 'CPU使用率监控',
-        yField: 'usage',
-        color: '#1890ff',
-        yAxisTitle: '使用率 (%)',
-        tooltipName: 'CPU使用率'
-      },
-      memory: {
-        title: '内存使用率监控',
-        yField: 'usage',
-        color: '#52c41a',
-        yAxisTitle: '使用率 (%)',
-        tooltipName: '内存使用率'
-      },
-      virtual_memory: {
-        title: '虚拟内存监控',
-        yField: 'usage',
-        color: '#faad14',
-        yAxisTitle: '使用率 (%)',
-        tooltipName: '虚拟内存使用率'
-      },
-      disk: {
-        title: '磁盘使用率监控',
-        yField: 'usage',
-        color: '#f5222d',
-        yAxisTitle: '使用率 (%)',
-        tooltipName: '磁盘使用率'
-      },
-      network_interface: {
-        title: '网络接口流量监控',
-        yField: 'throughput',
-        color: '#722ed1',
-        yAxisTitle: '吞吐量 (Mbps)',
-        tooltipName: '网络吞吐量'
+  // 生成模拟日志数据
+  const generateLogData = (chart) => {
+    const statuses = ['正常', '警告', '错误'];
+    const levels = ['info', 'warning', 'error'];
+    const operations = ['读取', '写入', '处理', '响应', '连接', '断开'];
+    
+    return Array.from({ length: 50 }, (_, index) => {
+      const timestamp = new Date(Date.now() - (50 - index) * 60000).toLocaleTimeString();
+      const randomStatus = Math.floor(Math.random() * 3);
+      const value = Math.random() * 100;
+      
+      return {
+        key: index,
+        timestamp,
+        value: chart.dataKey === 'network' ? `${(value / 4).toFixed(2)} Gbps` :
+                chart.dataKey === 'iops' ? `${Math.round(value * 200)}` :
+                chart.dataKey === 'connections' ? `${Math.round(value * 20)}` :
+                chart.dataKey === 'temperature' ? `${Math.round(value + 20)}°C` :
+                `${value.toFixed(1)}%`,
+        status: statuses[randomStatus],
+        level: levels[randomStatus],
+        operation: operations[Math.floor(Math.random() * operations.length)],
+        message: `${chart.title} ${operations[Math.floor(Math.random() * operations.length)]}操作`,
+        source: `server-${Math.floor(Math.random() * 5) + 1}`
+      };
+    });
+  };
+
+  // 打开抽屉查看日志表格
+  const handleViewLogs = (chart) => {
+    setCurrentChart(chart);
+    setLogData(generateLogData(chart));
+    setDrawerVisible(true);
+  };
+
+  // 关闭抽屉
+  const handleCloseDrawer = () => {
+    setDrawerVisible(false);
+    setCurrentChart(null);
+    setLogData([]);
+  };
+
+  // 检查是否超过阈值
+  const checkThresholdExceeded = (chart) => {
+    if (!chart.threshold) return false;
+    
+    return metricsData.some(data => {
+      const value = data[chart.dataKey];
+      if (chart.reverseThreshold) {
+        return value < chart.threshold; // 反向阈值：低于阈值才警告
       }
-    };
-    
-    const config = configMap[focusType] || configMap.cpu;
-    
-    return {
+      return value > chart.threshold; // 正向阈值：高于阈值警告
+    });
+  };
+
+  // 获取图表配置
+  const getChartConfig = (chart) => {
+    const exceedsThreshold = checkThresholdExceeded(chart);
+    const baseConfig = {
       data: metricsData,
       xField: 'time',
-      yField: config.yField,
-      height: 300,
+      yField: chart.dataKey,
+      height: 120,
       autoFit: true,
+      smooth: true,
       loading: loading,
-      color: config.color,
-      lineStyle: {
-        stroke: config.color,
-        lineWidth: 3,
-      },
-      point: {
-        size: 4,
-        style: {
-          fill: config.color,
-          stroke: '#fff',
-          lineWidth: 2,
-        },
-      },
       xAxis: {
-        title: {
-          text: '时间',
-          style: {
-            fill: '#aaa',
-          },
-        },
         label: {
           style: {
-            fill: '#aaa',
+            fill: '#666',
+            fontSize: 10,
           },
         },
       },
       yAxis: {
-        title: {
-          text: config.yAxisTitle,
-          style: {
-            fill: '#aaa',
-          },
-        },
         label: {
           style: {
-            fill: '#aaa',
+            fill: '#666',
+            fontSize: 10,
           },
         },
-        min: 0,
-        max: focusType === 'network_interface' ? 1000 : 100,
       },
       tooltip: {
-        showMarkers: true,
+        showMarkers: false,
         formatter: (datum) => {
           return {
-            name: config.tooltipName,
-            value: focusType === 'network_interface' ? `${datum[config.yField]}Mbps` : `${datum[config.yField]}%`,
+            name: chart.title,
+            value: chart.dataKey === 'network' ? `${datum[chart.dataKey].toFixed(1)} Gbps` : 
+                   chart.dataKey === 'iops' ? `${datum[chart.dataKey].toFixed(0)}K` :
+                   chart.dataKey === 'connections' ? `${Math.round(datum[chart.dataKey])}` :
+                   chart.dataKey === 'temperature' ? `${datum[chart.dataKey].toFixed(0)}°C` :
+                   `${datum[chart.dataKey].toFixed(1)}%`,
           };
         },
       },
-      animation: false,
+      // 添加阈值线
+      annotations: chart.threshold ? [
+        {
+          type: 'line',
+          start: ['min', chart.threshold],
+          end: ['max', chart.threshold],
+          style: {
+            stroke: chart.thresholdColor,
+            lineWidth: 2,
+            lineDash: [4, 4],
+          },
+          text: {
+            content: `阈值: ${chart.threshold}${chart.unit}`,
+            position: 'end',
+            style: {
+              fill: chart.thresholdColor,
+              fontSize: 10,
+              fontWeight: 'bold',
+              textAlign: 'end',
+            },
+          },
+        },
+      ] : [],
     };
+
+    // 根据是否超过阈值调整颜色强度
+    const chartColor = exceedsThreshold ? chart.thresholdColor : chart.color;
+
+    switch (chart.type) {
+      case 'area':
+        return {
+          ...baseConfig,
+          areaStyle: {
+            fill: `l(270) 0:${chartColor}22 1:${chartColor}44`,
+          },
+          line: {
+            size: exceedsThreshold ? 3 : 2,
+            color: chartColor,
+          },
+        };
+      case 'line':
+        return {
+          ...baseConfig,
+          line: {
+            size: exceedsThreshold ? 3 : 2,
+            color: chartColor,
+          },
+        };
+      case 'column':
+        return {
+          ...baseConfig,
+          columnStyle: {
+            fill: chartColor,
+          },
+        };
+      default:
+        return baseConfig;
+    }
   };
+
+  // 处理标签选择
+  const handleTagSelect = (tagKey) => {
+    if (tagKey === 'all') {
+      setSelectedTags(['all']);
+    } else {
+      const newTags = selectedTags.includes('all') ? [] : [...selectedTags];
+      
+      if (newTags.includes(tagKey)) {
+        // 如果已经选中，则移除
+        const filtered = newTags.filter(tag => tag !== tagKey);
+        setSelectedTags(filtered.length === 0 ? ['all'] : filtered);
+      } else {
+        // 如果未选中，则添加
+        newTags.push(tagKey);
+        setSelectedTags(newTags);
+      }
+    }
+  };
+
+  // 获取趋势图标和颜色
+  const getTrendConfig = (trend) => {
+    switch (trend) {
+      case 'up':
+        return { color: '#ff4d4f', icon: '↗' };
+      case 'down':
+        return { color: '#52c41a', icon: '↘' };
+      case 'stable':
+        return { color: '#faad14', icon: '→' };
+      default:
+        return { color: '#d9d9d9', icon: '→' };
+    }
+  };
+
+  // 获取状态徽章颜色
+  const getStatusColor = (status) => {
+    switch (status) {
+      case '正常': return 'green';
+      case '警告': return 'orange';
+      case '错误': return 'red';
+      default: return 'default';
+    }
+  };
+
+  // 日志表格列配置
+  const logColumns = [
+    {
+      title: '时间',
+      dataIndex: 'timestamp',
+      key: 'timestamp',
+      width: 100,
+      sorter: (a, b) => a.timestamp.localeCompare(b.timestamp),
+    },
+    {
+      title: '数值',
+      dataIndex: 'value',
+      key: 'value',
+      width: 100,
+      render: (value) => <Text strong>{value}</Text>
+    },
+    {
+      title: '状态',
+      dataIndex: 'status',
+      key: 'status',
+      width: 80,
+      render: (status) => (
+        <Badge 
+          color={getStatusColor(status)} 
+          text={status} 
+        />
+      ),
+      filters: [
+        { text: '正常', value: '正常' },
+        { text: '警告', value: '警告' },
+        { text: '错误', value: '错误' },
+      ],
+      onFilter: (value, record) => record.status === value,
+    },
+    {
+      title: '操作类型',
+      dataIndex: 'operation',
+      key: 'operation',
+      width: 80,
+      filters: [
+        { text: '读取', value: '读取' },
+        { text: '写入', value: '写入' },
+        { text: '处理', value: '处理' },
+        { text: '响应', value: '响应' },
+        { text: '连接', value: '连接' },
+        { text: '断开', value: '断开' },
+      ],
+      onFilter: (value, record) => record.operation === value,
+    },
+    {
+      title: '来源',
+      dataIndex: 'source',
+      key: 'source',
+      width: 100,
+      filters: [
+        { text: 'server-1', value: 'server-1' },
+        { text: 'server-2', value: 'server-2' },
+        { text: 'server-3', value: 'server-3' },
+        { text: 'server-4', value: 'server-4' },
+        { text: 'server-5', value: 'server-5' },
+      ],
+      onFilter: (value, record) => record.source === value,
+    },
+    {
+      title: '消息',
+      dataIndex: 'message',
+      key: 'message',
+      ellipsis: true,
+    }
+  ];
+
+  // 过滤显示的图表
+  const filteredCharts = chartConfigs.filter(chart => 
+    selectedTags.includes('all') || selectedTags.includes(chart.tag)
+  );
 
   useEffect(() => {
     setLoading(true);
     
     const timer = setTimeout(() => {
-      setMetricsData(generateCPUMetricsData());
-      const newTableData = generateTableData(dataTable);
-      setTableData(newTableData);
-      setFilteredData(newTableData);
-      setPagination({
-        ...pagination,
-        total: newTableData.length
-      });
+      setMetricsData(generateMetricsData());
       setLoading(false);
-    }, 100);
+    }, 500);
 
     let interval;
     if (autoRefresh) {
       interval = setInterval(() => {
-        const newData = generateCPUMetricsData().map(item => ({
+        const newData = generateMetricsData().map(item => ({
           ...item,
-          usage: Math.max(10, Math.min(95, item.usage + Math.floor(Math.random() * 6) - 3)),
-          temperature: Math.max(40, Math.min(85, item.temperature + Math.floor(Math.random() * 4) - 2)),
-          load: Math.max(0.5, Math.min(5.0, item.load + (Math.random() * 0.4 - 0.2))).toFixed(1)
+          usage: Math.max(10, Math.min(95, item.usage + Math.random() * 4 - 2)),
+          memory: Math.max(20, Math.min(95, item.memory + Math.random() * 3 - 1.5)),
+          network: Math.max(0.5, Math.min(3.0, item.network + Math.random() * 0.2 - 0.1)),
         }));
         setMetricsData(newData);
-      }, 2000);
+      }, 3000);
     }
     
     return () => {
       clearTimeout(timer);
       if (interval) clearInterval(interval);
     };
-  }, [autoRefresh, dataTable, currentFocus]);
-
-  // 显示添加查询的模态框
-  const showAddQueryModal = () => {
-    setIsModalVisible(true);
-    setSelectedTable('硬件指标');
-    form.resetFields();
-  };
-
-  // 处理模态框确认
-  const handleModalOk = () => {
-    form.validateFields().then(values => {
-      const { table, focusItem, fields } = values;
-      const newQuery = {
-        id: Date.now(),
-        table,
-        focusItem: focusItem || 'cpu',
-        fields: fields || [],
-        data: generateTableData(table),
-        metrics: generateCPUMetricsData()
-      };
-      setQueries([...queries, newQuery]);
-      setIsModalVisible(false);
-    });
-  };
-
-  // 处理模态框取消
-  const handleModalCancel = () => {
-    setIsModalVisible(false);
-  };
-
-  // 根据表类型获取可选的字段
-  const getAvailableFields = (tableType) => {
-    const fieldsMap = {
-      '硬件指标': ['name', 'status', 'usage', 'temperature', 'load', 'coreCount', 'frequency', 'cache'],
-      '网络': ['name', 'status', 'throughput', 'latency', 'connections'],
-      '事件': ['name', 'status', 'level', 'time', 'source']
-    };
-    return fieldsMap[tableType] || [];
-  };
-
-  // 获取硬件指标关注项
-  const getHardwareFocusItems = () => {
-    return [
-      { 
-        key: 'cpu', 
-        name: 'CPU指标', 
-        icon: <MonitorOutlined />,
-        description: 'CPU使用率、负载、温度等核心指标',
-        color: '#1890ff'
-      },
-      { 
-        key: 'memory', 
-        name: '内存指标', 
-        icon: <DatabaseOutlined />,
-        description: '内存使用率、交换分区等内存相关指标',
-        color: '#52c41a'
-      },
-      { 
-        key: 'virtual_memory', 
-        name: '虚拟内存指标', 
-        icon: <LineChartOutlined />,
-        description: '虚拟内存使用情况、页面交换等指标',
-        color: '#faad14'
-      },
-      { 
-        key: 'disk', 
-        name: '磁盘指标', 
-        icon: <DatabaseOutlined />,
-        description: '磁盘IO、使用率、读写速度等存储指标',
-        color: '#f5222d'
-      },
-      { 
-        key: 'network_interface', 
-        name: '网络接口指标', 
-        icon: <ApiOutlined />,
-        description: '网络接口流量、错误率、连接数等指标',
-        color: '#722ed1'
-      }
-    ];
-  };
-
-  // 删除查询
-  const removeQuery = (id) => {
-    setQueries(queries.filter(query => query.id !== id));
-  };
+  }, [autoRefresh]);
 
   return (
     <PageContainer
-        content={
-            <div>
-                <Alert 
-                    message="指标查看模块提供对硬件指标的实时监控与可视化呈现，助力管理员快速掌握系统运行状态。" 
-                    type="info" 
-                    showIcon 
-                    style={{ marginBottom: 16 }}
-                />
-                <div style={{ display: 'flex', alignItems: 'center' }}>
-                    <DashboardOutlined style={{ marginRight: 8, fontSize: 18 }} />
-                    <span>硬件指标监控</span>
-                </div>
-            </div>
-        }
+      content={
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', marginBottom: 8 }}>
+            <DashboardOutlined style={{ marginRight: 8, fontSize: 18 }} />
+            <span style={{ fontSize: 16, fontWeight: 500 }}>系统指标监控面板</span>
+          </div>
+          <Text type="secondary">实时监控系统各项关键性能指标，支持多维度数据可视化展示</Text>
+        </div>
+      }
     >
-      <div className="network-metrics-dark">
-        {/* 头部区域 */}
-        <div className="metrics-header">
-          <div className="header-content">
-            <div className="header-right">
-              <Space>
-                <Button 
-                  type="primary" 
-                  icon={<PlusOutlined />}
-                  className="add-query-btn"
-                  onClick={showAddQueryModal}
-                >
-                  添加查询
-                </Button>
-                
+      <div className="network-metrics">
+        {/* 头部控制区域 */}
+        <ProCard 
+          className="control-section"
+          style={{ marginBottom: 16 }}
+          bodyStyle={{ padding: '16px 24px' }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Space size="middle">
+              <Text strong>筛选指标:</Text>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {chartTags.map(tag => (
+                  <Tag.CheckableTag
+                    key={tag.key}
+                    checked={selectedTags.includes(tag.key)}
+                    onChange={() => handleTagSelect(tag.key)}
+                    style={{
+                      padding: '4px 12px',
+                      border: `1px solid ${selectedTags.includes(tag.key) ? tag.color : '#d9d9d9'}`,
+                      borderRadius: '16px',
+                      cursor: 'pointer',
+                      background: selectedTags.includes(tag.key) ? `${tag.color}10` : '#fff',
+                      color: selectedTags.includes(tag.key) ? tag.color : '#666'
+                    }}
+                  >
+                    <span style={{ marginRight: 4 }}>{tag.icon}</span>
+                    {tag.label}
+                  </Tag.CheckableTag>
+                ))}
+              </div>
+            </Space>
+            
+            <Space>
                 <Select 
                   value={timeRange}
                   onChange={setTimeRange}
-                  className="time-select"
+                  style={{ width: 120 }}
+                  size="small"
                 >
                   <Option value="15分钟">最近15分钟</Option>
                   <Option value="30分钟">最近30分钟</Option>
@@ -712,353 +560,313 @@ const NetworkMetrics = () => {
                 <Button 
                   icon={<ReloadOutlined />}
                   type={autoRefresh ? 'primary' : 'default'}
-                  className="auto-refresh-btn"
+                  size="small"
                   onClick={() => setAutoRefresh(!autoRefresh)}
                 >
-                  自动(2s)
+                  自动刷新
                 </Button>
               </Space>
-            </div>
           </div>
-        </div>
-
-        {/* 主内容区域 */}
-        <ProCard 
-            className="metrics-content"
-            style={{backgroundColor: "#f5f5f5", marginTop: "20px", border: "1px solid #d9d9d9"}}
-            direction="column"
-        >
-          {/* 指标类型选择 */}
-          <ProCard className="focus-select-section" bordered={false}>
-            <Row gutter={16} align="middle">
-              <Col>
-                <div className="config-item">
-                  <Text strong style={{ marginRight: 12 }}>监控指标:</Text>
-                  <Radio.Group 
-                    value={currentFocus}
-                    onChange={(e) => setCurrentFocus(e.target.value)}
-                    buttonStyle="solid"
-                  >
-                    {getHardwareFocusItems().map(item => (
-                      <Radio.Button key={item.key} value={item.key}>
-                        <div style={{ display: 'flex', alignItems: 'center' }}>
-                          <span style={{ 
-                            color: item.color, 
-                            marginRight: 4,
-                            display: 'flex',
-                            alignItems: 'center'
-                          }}>
-                            {item.icon}
-                          </span>
-                          {item.name}
-                        </div>
-                      </Radio.Button>
-                    ))}
-                  </Radio.Group>
-                </div>
-              </Col>
-            </Row>
-          </ProCard>
-
-          {/* 数据表格 */}
-          <ProCard 
-            className="data-table-section" 
-            bordered={false} 
-            collapsible={true}
-            title={"CPU监控数据"}
-            style={{ marginTop: 16 }}
-          >
-            <Table 
-              columns={tableColumns[dataTable]} 
-              dataSource={filteredData}
-              size="middle"
-              pagination={{
-                ...pagination,
-                showSizeChanger: true,
-                pageSizeOptions: ['10', '20', '50'],
-                showTotal: (total) => `共 ${total} 条`,
-                position: ['bottomRight']
-              }}
-              bordered
-              loading={loading}
-              rowKey="id"
-              onChange={handleTableChange}
-              scroll={{ x: 1000 }}
-            />
-          </ProCard>
-
-          {/* 图表区域 */}
-          <ProCard 
-            className="chart-section" 
-            bordered={false}
-            title={
-              <div style={{ display: 'flex', alignItems: 'center' }}>
-                <LineChartOutlined style={{ marginRight: 8, color: '#1890ff' }} />
-                <span>CPU使用率趋势</span>
-              </div>
-            }
-            style={{ marginTop: 16 }}
-          >
-            <div className="chart-container">
-              <Line {...getChartConfig(currentFocus)} />
-            </div>
-          </ProCard>
         </ProCard>
 
-        {/* 新增的查询区域 */}
-        {queries.map((query) => (
-          <ProCard 
-            key={query.id}
-            className="metrics-content"
-            style={{backgroundColor: "#f5f5f5", marginTop: "20px", border: "1px solid #d9d9d9"}}
-            direction="column"
-          >
-            <ProCard 
-              extra={
-                <Button 
-                  icon={<CloseOutlined />} 
-                  onClick={() => removeQuery(query.id)}
+        {/* 图表网格 */}
+        <Row gutter={[16, 16]}>
+          {filteredCharts.map(chart => {
+            const trendConfig = getTrendConfig(chart.trend);
+            const ChartComponent = chart.type === 'column' ? Column : 
+                                 chart.type === 'area' ? Area : Line;
+            const exceedsThreshold = checkThresholdExceeded(chart);
+            
+            return (
+              <Col key={chart.id} xs={24} sm={12} md={12} lg={6}>
+                <Card 
                   size="small"
-                />
-              }
-              title={`自定义查询 - ${query.table} - ${getHardwareFocusItems().find(f => f.key === query.focusItem)?.name || 'CPU指标'}`}
-              bordered={false}
-              direction='column'
-            >
-              {/* 显示选择的关注项 */}
-              {query.focusItem && (
-                <ProCard 
-                  className="focus-items-section" 
-                  bordered={false}
-                  title="监控指标"
-                  style={{ marginBottom: 16 }}
+                  style={{ 
+                    height: '100%',
+                    borderRadius: '8px',
+                    border: exceedsThreshold ? `2px solid ${chart.thresholdColor}` : '1px solid #f0f0f0',
+                    boxShadow: exceedsThreshold 
+                      ? `0 4px 12px ${chart.thresholdColor}40` 
+                      : '0 2px 4px rgba(0,0,0,0.02)',
+                    position: 'relative',
+                    overflow: 'hidden',
+                    transition: 'all 0.3s ease'
+                  }}
+                  bodyStyle={{ 
+                    padding: '16px',
+                    height: '100%',
+                    display: 'flex',
+                    flexDirection: 'column'
+                  }}
+                  loading={loading}
+                  extra={
+                    <Tooltip title="查看详细日志">
+                      <Button 
+                        type="text" 
+                        icon={<TableOutlined />} 
+                        size="small"
+                        onClick={() => handleViewLogs(chart)}
+                        style={{ color: '#666' }}
+                      />
+                    </Tooltip>
+                  }
                 >
+                  {/* 阈值警告图标 */}
+                  {exceedsThreshold && (
+                    <div style={{
+                      position: 'absolute',
+                      top: '8px',
+                      right: '40px',
+                      color: chart.thresholdColor,
+                      animation: 'pulse 2s infinite'
+                    }}>
+                      <ExclamationCircleOutlined />
+                    </div>
+                  )}
+
+                  {/* 图表头部 */}
                   <div style={{ 
-                    padding: '8px 12px',
-                    backgroundColor: '#f0f8ff',
-                    border: '1px solid #d6e4ff',
-                    borderRadius: '6px',
-                    display: 'inline-block'
+                    display: 'flex', 
+                    justifyContent: 'space-between', 
+                    alignItems: 'flex-start',
+                    marginBottom: '12px'
                   }}>
-                    <div style={{ display: 'flex', alignItems: 'center' }}>
-                      <span style={{ 
-                        color: getHardwareFocusItems().find(f => f.key === query.focusItem)?.color || '#1890ff',
-                        marginRight: 8,
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <div style={{
+                        width: '32px',
+                        height: '32px',
+                        borderRadius: '6px',
+                        background: exceedsThreshold 
+                          ? `${chart.thresholdColor}10` 
+                          : `${chart.color}10`,
                         display: 'flex',
-                        alignItems: 'center'
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: exceedsThreshold ? chart.thresholdColor : chart.color
                       }}>
-                        {getHardwareFocusItems().find(f => f.key === query.focusItem)?.icon}
-                      </span>
-                      <span style={{ fontWeight: 'bold' }}>
-                        {getHardwareFocusItems().find(f => f.key === query.focusItem)?.name}
-                      </span>
+                        {chart.icon}
+                      </div>
+                      <div>
+                        <Text strong style={{ 
+                          fontSize: '14px', 
+                          display: 'block',
+                          color: exceedsThreshold ? chart.thresholdColor : 'inherit'
+                        }}>
+                          {chart.title}
+                          {exceedsThreshold && (
+                            <Tooltip title={`当前值已超过阈值 ${chart.threshold}${chart.unit}`}>
+                              <ExclamationCircleOutlined 
+                                style={{ 
+                                  marginLeft: 4, 
+                                  color: chart.thresholdColor,
+                                  fontSize: 12 
+                                }} 
+                              />
+                            </Tooltip>
+                          )}
+                        </Text>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <Text strong style={{ 
+                            fontSize: '18px', 
+                            color: exceedsThreshold ? chart.thresholdColor : chart.color,
+                            lineHeight: 1
+                          }}>
+                            {chart.value}
+                          </Text>
+                          <Text style={{ 
+                            fontSize: '12px', 
+                            color: trendConfig.color,
+                            lineHeight: 1
+                          }}>
+                            {trendConfig.icon} {chart.change}
+                          </Text>
+                        </div>
+                      </div>
                     </div>
                   </div>
-                </ProCard>
-              )}
-              
-              {/* 数据表格 */}
-              <ProCard 
-                className="data-table-section" 
-                bordered={false} 
-                collapsible={true}
-                title={`${query.table}数据`}
-              >
-                <Table
-                  columns={tableColumns[query.table].filter(col => 
-                    query.fields && query.fields.length > 0 
-                      ? query.fields.includes(col.key || col.dataIndex)
-                      : true
-                  )} 
-                  dataSource={query.data}
-                  size="middle"
-                  pagination={{
-                    pageSize: 10,
-                    showSizeChanger: true,
-                    showTotal: (total) => `共 ${total} 条`,
-                    position: ['bottomRight']
-                  }}
-                  bordered
-                  loading={loading}
-                  rowKey="id"
-                />
-              </ProCard>
 
-              {/* 图表区域 */}
-              <ProCard 
-                className="chart-section" 
-                bordered={false}
-                title={`${getHardwareFocusItems().find(f => f.key === query.focusItem)?.name || '指标'}趋势`}
-              >
-                <div className="chart-container">
-                  <Line {...{
-                    ...getChartConfig(query.focusItem || 'cpu'),
-                    data: query.metrics,
-                    color: getHardwareFocusItems().find(f => f.key === query.focusItem)?.color || '#13c2c2'
-                  }} />
-                </div>
-              </ProCard>
-            </ProCard>
-          </ProCard>
-        ))}
+                  {/* 图表区域 */}
+                  <div style={{ flex: 1, minHeight: '120px' }}>
+                    <ChartComponent {...getChartConfig(chart)} />
+                  </div>
 
-        {/* 添加查询的模态框 */}
-        <Modal
-          title={
-            <div style={{ display: 'flex', alignItems: 'center' }}>
-              <PlusOutlined style={{ marginRight: 8, color: '#1890ff' }} />
-              添加新查询
-            </div>
-          }
-          visible={isModalVisible}
-          onOk={handleModalOk}
-          onCancel={handleModalCancel}
-          width={700}
-          bodyStyle={{ padding: '24px' }}
-        >
-          <Form
-            form={form}
-            layout="vertical"
-            initialValues={{
-              table: '硬件指标',
-              focusItem: 'cpu',
-              fields: []
+                  {/* 底部状态 */}
+                  <div style={{ 
+                    display: 'flex', 
+                    justifyContent: 'space-between', 
+                    alignItems: 'center',
+                    marginTop: '8px',
+                    paddingTop: '8px',
+                    borderTop: '1px solid #f0f0f0'
+                  }}>
+                    <Text 
+                      type="secondary" 
+                      style={{ 
+                        fontSize: '12px',
+                        color: exceedsThreshold ? chart.thresholdColor : 'inherit'
+                      }}
+                    >
+                      最后更新: 刚刚
+                      {exceedsThreshold && ' • 超过阈值'}
+                    </Text>
+                    <div style={{
+                      padding: '2px 6px',
+                      background: exceedsThreshold ? `${chart.thresholdColor}10` : '#f0f0f0',
+                      borderRadius: '4px',
+                      fontSize: '10px',
+                      color: exceedsThreshold ? chart.thresholdColor : '#666',
+                      border: `1px solid ${exceedsThreshold ? chart.thresholdColor : 'transparent'}`
+                    }}>
+                      {chart.tag.toUpperCase()}
+                    </div>
+                  </div>
+                </Card>
+              </Col>
+            );
+          })}
+        </Row>
+
+        {/* 空状态提示 */}
+        {filteredCharts.length === 0 && (
+          <ProCard 
+            style={{ 
+              height: '200px', 
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'center',
+              marginTop: '16px'
             }}
           >
-            <Form.Item
-              name="table"
-              label={
-                <div style={{ display: 'flex', alignItems: 'center', fontWeight: 500 }}>
-                  <DashboardOutlined style={{ marginRight: 8, color: '#1890ff' }} />
-                  选择数据集
+            <div style={{ textAlign: 'center' }}>
+              <DashboardOutlined style={{ fontSize: '48px', color: '#d9d9d9', marginBottom: '16px' }} />
+              <Text type="secondary">没有找到匹配的指标图表，请调整筛选条件</Text>
+            </div>
+          </ProCard>
+        )}
+
+        {/* 统计信息 */}
+        <ProCard 
+          style={{ marginTop: '16px' }}
+          bodyStyle={{ padding: '12px 16px' }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div>
+              <Text type="secondary">
+                共显示 {filteredCharts.length} 个指标图表
+                {!selectedTags.includes('all') && ` (${selectedTags.join(', ')})`}
+              </Text>
+              {filteredCharts.some(chart => checkThresholdExceeded(chart)) && (
+                <Text type="danger" style={{ marginLeft: 16 }}>
+                  <ExclamationCircleOutlined /> 
+                  有 {filteredCharts.filter(chart => checkThresholdExceeded(chart)).length} 个指标超过阈值
+                </Text>
+              )}
+            </div>
+            <Text type="secondary" style={{ fontSize: '12px' }}>
+              数据更新时间: {new Date().toLocaleTimeString()}
+            </Text>
+          </div>
+        </ProCard>
+
+        {/* 日志表格抽屉 */}
+        <Drawer
+          title={
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                {currentChart?.icon}
+                <span>{currentChart?.title} - 详细日志</span>
+              </div>
+              <Button 
+                type="text" 
+                icon={<CloseOutlined />} 
+                onClick={handleCloseDrawer}
+                size="small"
+              />
+            </div>
+          }
+          placement="right"
+          onClose={handleCloseDrawer}
+          open={drawerVisible}
+          width="80%"
+          style={{ maxWidth: '1200px' }}
+        >
+          {currentChart && (
+            <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+              {/* 统计信息 */}
+              <ProCard 
+                style={{ marginBottom: 16 }}
+                bodyStyle={{ padding: '12px 16px' }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <Text strong>日志统计:</Text>
+                    <span style={{ marginLeft: 16 }}>
+                      <Badge color="green" text="正常" />
+                      <span style={{ margin: '0 8px' }}>{logData.filter(item => item.status === '正常').length}</span>
+                    </span>
+                    <span style={{ marginLeft: 16 }}>
+                      <Badge color="orange" text="警告" />
+                      <span style={{ margin: '0 8px' }}>{logData.filter(item => item.status === '警告').length}</span>
+                    </span>
+                    <span style={{ marginLeft: 16 }}>
+                      <Badge color="red" text="错误" />
+                      <span style={{ margin: '0 8px' }}>{logData.filter(item => item.status === '错误').length}</span>
+                    </span>
+                  </div>
+                  <Text type="secondary">共 {logData.length} 条日志记录</Text>
                 </div>
-              }
-              rules={[{ required: true, message: '请选择数据集' }]}
-            >
-              <Select 
-                onChange={(value) => setSelectedTable(value)}
-                style={{ width: '100%' }}
-                optionLabelProp="label"
-              >
-                <Option value="硬件指标" label="硬件指标">
-                  <div style={{ display: 'flex', alignItems: 'center', padding: '8px 0' }}>
-                    <DesktopOutlined style={{ marginRight: 8, color: '#1890ff' }} />
-                    <div>
-                      <div style={{ fontWeight: 500 }}>硬件指标</div>
-                      <div style={{ fontSize: '12px', color: '#999' }}>服务器、存储等硬件设备监控指标</div>
-                    </div>
-                  </div>
-                </Option>
-                <Option value="网络" label="网络">
-                  <div style={{ display: 'flex', alignItems: 'center', padding: '8px 0' }}>
-                    <CloudServerOutlined style={{ marginRight: 8, color: '#52c41a' }} />
-                    <div>
-                      <div style={{ fontWeight: 500 }}>网络</div>
-                      <div style={{ fontSize: '12px', color: '#999' }}>网络设备和流量监控指标</div>
-                    </div>
-                  </div>
-                </Option>
-                <Option value="事件" label="事件">
-                  <div style={{ display: 'flex', alignItems: 'center', padding: '8px 0' }}>
-                    <ExclamationCircleOutlined style={{ marginRight: 8, color: '#faad14' }} />
-                    <div>
-                      <div style={{ fontWeight: 500 }}>事件</div>
-                      <div style={{ fontSize: '12px', color: '#999' }}>系统事件和告警信息</div>
-                    </div>
-                  </div>
-                </Option>
-              </Select>
-            </Form.Item>
-            
-            {/* 硬件指标关注项选择（改为单选） */}
-            {selectedTable === '硬件指标' && (
-              <Form.Item
-                name="focusItem"
-                label={
-                  <div style={{ display: 'flex', alignItems: 'center', fontWeight: 500 }}>
-                    <LineChartOutlined style={{ marginRight: 8, color: '#1890ff' }} />
-                    选择监控指标（单选）
-                  </div>
-                }
-                rules={[{ required: true, message: '请选择一个监控指标' }]}
-              >
-                <Radio.Group style={{ width: '100%' }}>
-                  <Row gutter={[16, 16]}>
-                    {getHardwareFocusItems().map(item => (
-                      <Col span={12} key={item.key}>
-                        <Card 
-                          size="small" 
-                          style={{ 
-                            border: '1px solid #d9d9d9',
-                            borderRadius: '8px',
-                            cursor: 'pointer'
-                          }}
-                          bodyStyle={{ 
-                            padding: '12px',
-                            display: 'flex',
-                            alignItems: 'center'
-                          }}
-                          onClick={() => form.setFieldsValue({ focusItem: item.key })}
-                        >
-                          <Radio value={item.key} style={{ width: '100%' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', width: '100%' }}>
-                              <div 
-                                style={{ 
-                                  color: item.color, 
-                                  fontSize: '16px', 
-                                  marginRight: '8px',
-                                  display: 'flex',
-                                  alignItems: 'center'
-                                }}
-                              >
-                                {item.icon}
-                              </div>
-                              <div>
-                                <div style={{ fontWeight: 500, fontSize: '14px' }}>
-                                  {item.name}
-                                </div>
-                                <div style={{ fontSize: '12px', color: '#999', marginTop: '2px' }}>
-                                  {item.description}
-                                </div>
-                              </div>
-                            </div>
-                          </Radio>
-                        </Card>
-                      </Col>
-                    ))}
-                  </Row>
-                </Radio.Group>
-              </Form.Item>
-            )}
-            
-            {/* 其他数据集的字段选择 */}
-            {selectedTable !== '硬件指标' && (
-              <Form.Item
-                name="fields"
-                label={
-                  <div style={{ display: 'flex', alignItems: 'center', fontWeight: 500 }}>
-                    <LineChartOutlined style={{ marginRight: 8, color: '#1890ff' }} />
-                    选择关注的字段
-                  </div>
-                }
-                rules={[{ required: true, message: '请至少选择一个字段' }]}
-              >
-                <Checkbox.Group style={{ width: '100%' }}>
-                  <Row gutter={[16, 16]}>
-                    {getAvailableFields(selectedTable).map(field => (
-                      <Col span={8} key={field}>
-                        <Checkbox value={field}>
-                          {tableColumns[selectedTable].find(col => col.dataIndex === field)?.title || field}
-                        </Checkbox>
-                      </Col>
-                    ))}
-                  </Row>
-                </Checkbox.Group>
-              </Form.Item>
-            )}
-          </Form>
-        </Modal>
+              </ProCard>
+
+              {/* 日志表格 */}
+              <div style={{ flex: 1 }}>
+                <Table
+                  columns={logColumns}
+                  dataSource={logData}
+                  pagination={{
+                    pageSize: 20,
+                    showSizeChanger: true,
+                    showQuickJumper: true,
+                    showTotal: (total, range) => 
+                      `第 ${range[0]}-${range[1]} 条，共 ${total} 条记录`
+                  }}
+                  scroll={{ y: 'calc(100vh - 250px)' }}
+                  size="small"
+                />
+              </div>
+            </div>
+          )}
+        </Drawer>
       </div>
+
+      <style jsx>{`
+        .network-metrics {
+          padding: 0;
+        }
+        
+        .control-section {
+          background: #fff;
+          border-radius: 8px;
+        }
+        
+        .chart-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+          gap: 16px;
+          margin-top: 16px;
+        }
+        
+        @keyframes pulse {
+          0% { opacity: 1; }
+          50% { opacity: 0.5; }
+          100% { opacity: 1; }
+        }
+        
+        @media (max-width: 768px) {
+          .chart-grid {
+            grid-template-columns: 1fr;
+          }
+        }
+      `}</style>
     </PageContainer>
   );
 };
