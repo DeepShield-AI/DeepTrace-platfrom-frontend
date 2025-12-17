@@ -6,8 +6,9 @@ import type { RunTimeLayoutConfig } from '@umijs/max';
 import { history, Link } from '@umijs/max';
 import defaultSettings from '../config/defaultSettings';
 import { errorConfig } from './requestErrorConfig';
-import { currentUser as queryCurrentUser } from '@/services/ant-design-pro/api';
+// import { currentUser as queryCurrentUser } from '@/services/ant-design-pro/api';
 import React from 'react';
+import { queryCurrentUser } from "./services/server.js"
 const isDev = process.env.NODE_ENV === 'development';
 const loginPath = '/user/login';
 const trackPath = '/Application/track';
@@ -27,21 +28,28 @@ export async function getInitialState(): Promise<{
       const msg = await queryCurrentUser({
         skipErrorHandler: true,
       });
+      console.log(msg,"mmmsss");
+      
       return msg.data;
     } catch (error) {
-      // history.push(loginPath);
+      // 如果失败去登录
+      console.log("mmmsssxx");
+      
+      history.push(loginPath);
 
-      history.push(trackPath);
+      // history.push(trackPath);
     }
     return undefined;
   };
   // 如果不是登录页面，执行
   const { location } = history;
   if (location.pathname !== loginPath) {
-    const currentUser = await fetchUserInfo();
+    // const currentUser = await fetchUserInfo();
     return {
       fetchUserInfo,
-      currentUser,
+      currentUser: {
+        name: localStorage.getItem('username'),
+      },
       settings: defaultSettings as Partial<LayoutSettings>,
     };
   }

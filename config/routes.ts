@@ -24,6 +24,11 @@ export default [
         path: '/user/login',
         component: './User/Login',
       },
+      {
+        name: 'register',
+        path: '/user/register',
+        component: './User/Register',
+      },
     ],
   },
   // {
@@ -101,6 +106,12 @@ export default [
         path: "/Data/view",
         name: "指标查看",
         component: "./DataView"
+      },
+      {
+        path: "/Data/metricDetail",
+        // name: "指标详情",
+        layout: false,
+        component: "./DataViewDetail"
       },
       // {
       //   path: "/Data/summary",
