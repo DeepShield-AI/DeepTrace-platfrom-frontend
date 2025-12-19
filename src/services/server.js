@@ -22,6 +22,7 @@ const createAxiosInstance = (baseURL) => {
         baseURL,
         headers: {
             'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
+            // 'Authorization': `Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ0ZXN0XzIiLCJjcmVhdGVkIjoxNzY2MTI3NjMxMDc2LCJleHAiOjE3NjYxMzEyMzF9.i-sGD7wSEmcvfmZkvEUqJ7HA-OazKQEdZzxZkU2L6yw`
         }
     });
     
@@ -95,7 +96,7 @@ const getIPData = async () => {
 
 const getActionCollectList = async () => {
     try {
-        const res = await mainApi.get(`/api/esAgentBasic/search`)
+        const res = await topologyApi.get(`/api/esAgentBasic/search`)
         return res?.data
     } catch (error) {
         console.error("==ERROR==", error)
@@ -133,6 +134,16 @@ const deleteConfigTable = async (data) => {
         console.error("==ERROR==", error)
     }
 }
+
+const updateConfigTable = async (data) => {    
+    try { 
+        const res = await mainApi.delete(`/api/user/config/delete/${data}`)
+        return res
+    } catch (error) {
+        console.error("==ERROR==", error)
+    }
+}
+
 
 const logTableQuery = async (data) => {
     try { 
@@ -475,6 +486,46 @@ const queryCurrentUser = async (params) => {
     }
 }
 
+// 用户采集器注册
+const agentRegister = async (params) => { 
+    try { 
+        const res = await topologyApi.post(`/api/agent/register`, params)
+        return res
+    } catch (error) {
+        console.error("==ERROR==", error)
+    }
+}
+
+// 采集器启用
+const agentEnable = async (params) => { 
+    try { 
+        const res = await topologyApi.post(`/api/agent/enable`, params)
+        return res
+    } catch (error) {
+        console.error("==ERROR==", error)
+    }
+}
+
+// 采集器禁用
+const agentDisable = async (params) => { 
+    try { 
+        const res = await topologyApi.post(`/api/agent/disable`, params)
+        return res
+    } catch (error) {
+        console.error("==ERROR==", error)
+    }
+}
+
+// 采集器删除
+const agentDelete = async (params) => { 
+    try { 
+        const res = await topologyApi.post(`/api/agent/delete`, params)
+        return res
+    } catch (error) {
+        console.error("==ERROR==", error)
+    }
+}
+
 export {
     getAllOverView,
     getIPData,
@@ -482,6 +533,7 @@ export {
     getConfigTableList,
     addConfigTable,
     deleteConfigTable,
+    updateConfigTable,
     logTableQuery,
     basicTableQuery,
     monitorChartQuery,
@@ -502,5 +554,9 @@ export {
     getEsEdgesLog,
     register,
     login,
-    queryCurrentUser
+    queryCurrentUser,
+    agentRegister,
+    agentEnable,
+    agentDisable,
+    agentDelete,
 }
