@@ -2,7 +2,6 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { 
   DownloadOutlined, 
   DeleteOutlined, 
-  EditOutlined, 
   PlayCircleOutlined, 
   PauseCircleOutlined,
   ReloadOutlined,
@@ -997,7 +996,7 @@ export default () => {
     {
       title: '操作',
       key: 'action',
-      width: 240,
+      width: 200, // 宽度调整，因为删除了编辑按钮
       fixed: 'right',
       className: `${styles.tableCell} ${styles.actionCell}`,
       render: (_, record) => (
@@ -1011,18 +1010,6 @@ export default () => {
               onClick={() => navigate('/ActionDetail', { state: { item: record } })}
               className={styles.actionButton}
               style={{ borderColor: '#d9d9d9', color: '#595959' }}
-            />
-          </Tooltip>
-
-          {/* 编辑 */}
-          <Tooltip title="编辑">
-            <Button
-              type="text"
-              size="small"
-              icon={<EditOutlined />}
-              onClick={() => message.info('编辑功能开发中')}
-              className={styles.actionButton}
-              style={{ borderColor: '#1890ff', color: '#1890ff' }}
             />
           </Tooltip>
 
@@ -1187,7 +1174,7 @@ export default () => {
           rowKey="lcuuid"
           loading={loading}
           actionRef={actionRef}
-          scroll={{ x: 1350 }}
+          scroll={{ x: 1250 }} // 调整滚动宽度，因为删除了编辑按钮
           expandable={{
             expandedRowRender,
             expandIcon: ({ expanded, onExpand, record }) =>

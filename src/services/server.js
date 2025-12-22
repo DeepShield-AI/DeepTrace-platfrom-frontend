@@ -16,15 +16,26 @@ const topologyIpAddress = "http://localhost:8081"
 const flameIpAdress = "http://114.215.254.187:8080"
 // const flameIpAdress = "http://localhost:8080"
 
-// 创建带有请求头的 axios 实例
+// 创建带有请求拦截器的 axios 实例
 const createAxiosInstance = (baseURL) => {
     const instance = axios.create({
         baseURL,
-        headers: {
-            'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
-            // 'Authorization': `Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ0ZXN0XzIiLCJjcmVhdGVkIjoxNzY2MTI3NjMxMDc2LCJleHAiOjE3NjYxMzEyMzF9.i-sGD7wSEmcvfmZkvEUqJ7HA-OazKQEdZzxZkU2L6yw`
-        }
     });
+    
+    // 添加请求拦截器，动态获取token
+    instance.interceptors.request.use(
+        (config) => {
+            // 从localStorage动态获取最新的token
+            const token = localStorage.getItem('auth_token');
+            if (token) {
+                config.headers.Authorization = `Bearer ${token}`;
+            }
+            return config;
+        },
+        (error) => {
+            return Promise.reject(error);
+        }
+    );
     
     // 设置参数序列化
     instance.defaults.paramsSerializer = params => {
@@ -56,6 +67,17 @@ const repeatedParamSerializer = (params) => {
   });
   
   return parts.join('&');
+};
+
+// 手动更新所有axios实例的token（可选，用于特殊情况）
+const updateAllApiTokens = () => {
+    const token = localStorage.getItem('auth_token');
+    if (token) {
+        // 为所有已创建的实例更新默认header
+        [mainApi, topologyApi, flameApi].forEach(apiInstance => {
+            apiInstance.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+        });
+    }
 };
 
 const getAllOverView = async () => {
@@ -143,7 +165,6 @@ const updateConfigTable = async (data) => {
         console.error("==ERROR==", error)
     }
 }
-
 
 const logTableQuery = async (data) => {
     try { 
@@ -258,18 +279,6 @@ const getTraceDetail = async (traceId) => {
     } catch (error) {
         console.error("==ERROR==", error)
     }
-    
-    // try { 
-    //     const res = await flameApi.get(`/flamegraphList`, {
-    //         params: {
-    //             traceId: traceId
-    //         }
-    //     })
-    //     const {data = {}} = res
-    //     return data
-    // } catch (error) {
-    //     console.error("==ERROR==", error)
-    // }
 }
 
 const getTraceCharts = async (type) => {    
@@ -473,13 +482,11 @@ const queryCurrentUser = async (params) => {
     try { 
         const res = await topologyApi.get(`/api/esNodes/kpi/errorRate`, {
             params: {
-                
                 startTime: 1761840000000,
                 endTime: 1761926399000,
                 nodeId: 2374000
             }
         })
-        // const {data = {}} = res
         return res
     } catch (error) {
         console.error("==ERROR==", error)
@@ -559,4 +566,5 @@ export {
     agentEnable,
     agentDisable,
     agentDelete,
+    updateAllApiTokens, // 导出token更新函数，供外部调用
 }
