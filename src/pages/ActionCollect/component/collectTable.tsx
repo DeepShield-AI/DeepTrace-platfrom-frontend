@@ -17,7 +17,8 @@ import {
   RadarChartOutlined,
   UserOutlined,
   ExclamationCircleOutlined,
-  LockOutlined
+  LockOutlined,
+  CloseOutlined
 } from '@ant-design/icons';
 import type { ProColumns, ActionType } from '@ant-design/pro-components';
 import { 
@@ -45,7 +46,8 @@ import {
   Radio,
   Row,
   Col,
-  Divider
+  Divider,
+  Result
 } from 'antd';
 import { getActionCollectList } from "../../../services/server.js"
 import { useNavigate } from 'react-router-dom';
@@ -62,300 +64,7 @@ import {
 
 const { TextArea } = Input;
 const { Option } = Select;
-
-// 定义样式
-const useStyles = createStyles(({ token }) => ({
-  tableCard: {
-    background: 'white',
-    borderRadius: token.borderRadiusLG,
-    boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
-    border: `1px solid ${token.colorBorderSecondary}`,
-    overflow: 'hidden',
-  },
-  statusTag: {
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: 4,
-    fontWeight: 500,
-    borderRadius: 12,
-    padding: '2px 8px',
-  },
-  actionButton: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: 32,
-    height: 32,
-    borderRadius: 8,
-    border: '1px solid',
-    transition: 'all 0.3s',
-    '&:hover': {
-      transform: 'translateY(-2px)',
-        boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
-    },
-  },
-  textIconButton: {
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: 6,
-    padding: '4px 12px',
-    borderRadius: 6,
-    border: '1px solid',
-    transition: 'all 0.3s',
-    fontWeight: 500,
-    fontSize: 13,
-    '&:hover': {
-      transform: 'translateY(-2px)',
-      boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
-    },
-  },
-  tableRow: {
-    '&:hover': {
-      background: 'rgba(24, 144, 255, 0.02) !important',
-    },
-  },
-  expandContent: {
-    background: 'linear-gradient(135deg, #f6f8fc 0%, #f0f2f5 100%)',
-    borderRadius: token.borderRadiusLG,
-    margin: '0 0 8px 8px',
-    border: `1px solid ${token.colorBorderSecondary}`,
-  },
-  searchBar: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
-    padding: 16,
-    background: 'white',
-    borderRadius: token.borderRadiusLG,
-    boxShadow: '0 1px 4px rgba(0,0,0,0.05)',
-  },
-  emptyState: {
-    padding: '48px 24px', 
-    textAlign: 'center',
-  },
-  drawerFooter: {
-    position: 'absolute',
-    right: 0,
-    bottom: 0,
-    width: '100%',
-    borderTop: `1px solid ${token.colorBorderSecondary}`,
-    padding: '16px 24px',
-    background: '#fff',
-    textAlign: 'right',
-  },
-  registerButton: {
-    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-    border: 'none',
-    color: 'white',
-    fontWeight: 600,
-    boxShadow: '0 4px 12px rgba(102, 126, 234, 0.3)',
-    transition: 'all 0.3s',
-    '&:hover': {
-      transform: 'translateY(-2px)',
-      boxShadow: '0 6px 20px rgba(102, 126, 234, 0.4)',
-      background: 'linear-gradient(135deg, #5a6fd8 0%, #6a4090 100%)',
-    },
-  },
-  formItem: {
-    marginBottom: 20,
-  },
-  formLabel: {
-    fontWeight: 600,
-    color: token.colorTextHeading,
-    marginBottom: 8,
-    display: 'flex',
-    alignItems: 'center',
-    gap: 8,
-    fontSize: 14,
-  },
-  requiredMark: {
-    color: '#ff4d4f',
-    marginLeft: 4,
-  },
-  inputLarge: {
-    '& .ant-input, & .ant-input-number-input, & .ant-select-selector': {
-      height: '44px !important',
-      fontSize: '15px !important',
-      padding: '8px 12px !important',
-    },
-    '& .ant-input:focus, & .ant-input-number-focused, & .ant-select-focused .ant-select-selector': {
-      boxShadow: '0 0 0 2px rgba(24, 144, 255, 0.2)',
-    },
-  },
-  configSection: {
-    marginBottom: 24,
-    padding: 24,
-    background: 'white',
-    borderRadius: token.borderRadiusLG,
-    border: `1px solid ${token.colorBorderSecondary}`,
-    boxShadow: '0 2px 12px rgba(0,0,0,0.04)',
-    transition: 'all 0.3s',
-    '&:hover': {
-      boxShadow: '0 4px 16px rgba(0,0,0,0.06)',
-    },
-  },
-  configSectionTitle: {
-    fontSize: 16,
-    fontWeight: 600,
-    marginBottom: 20,
-    color: token.colorTextHeading,
-    display: 'flex',
-    alignItems: 'center',
-    gap: 10,
-    paddingBottom: 16,
-    borderBottom: `1px solid ${token.colorBorderTertiary}`,
-  },
-  tableHeader: {
-    background: 'linear-gradient(135deg, #f6f8fc 0%, #f0f2f5 100%)',
-    borderBottom: `2px solid ${token.colorBorderSecondary}`,
-  },
-  tableCell: {
-    fontSize: '13px !important',
-    fontWeight: 400,
-  },
-  tableRowHover: {
-    '&:hover': {
-      '& td': {
-        background: 'rgba(24, 144, 255, 0.04) !important',
-      },
-    },
-  },
-  actionCell: {
-    '& .ant-space': {
-      display: 'flex',
-      gap: 6,
-    },
-  },
-  compactProgress: {
-    '& .ant-progress-inner': {
-      width: '100% !important',
-    },
-  },
-  // 新增配置表单样式
-  configInput: {
-    '& .ant-input': {
-      borderRadius: token.borderRadiusMD,
-      border: `1px solid ${token.colorBorderSecondary}`,
-      transition: 'all 0.2s',
-      '&:focus': {
-        borderColor: '#722ed1',
-        boxShadow: '0 0 0 2px rgba(114, 46, 209, 0.1)',
-      },
-    },
-  },
-  configSelect: {
-    '& .ant-select-selector': {
-      borderRadius: token.borderRadiusMD,
-      border: `1px solid ${token.colorBorderSecondary}`,
-      '&:hover': {
-        borderColor: '#722ed1',
-      },
-      '&.ant-select-focused': {
-        borderColor: '#722ed1',
-        boxShadow: '0 0 0 2px rgba(114, 46, 209, 0.1)',
-      },
-    },
-  },
-  configNumber: {
-    '& .ant-input-number': {
-      borderRadius: token.borderRadiusMD,
-      '&:hover': {
-        borderColor: '#722ed1',
-      },
-      '&.ant-input-number-focused': {
-        borderColor: '#722ed1',
-        boxShadow: '0 0 0 2px rgba(114, 46, 209, 0.1)',
-      },
-    },
-  },
-  formHelpText: {
-    fontSize: 12,
-    color: token.colorTextSecondary,
-    marginTop: 4,
-    lineHeight: 1.4,
-  },
-  probeSelectContainer: {
-    maxHeight: 240,
-    overflow: 'auto',
-    border: `1px solid ${token.colorBorderSecondary}`,
-    borderRadius: token.borderRadiusMD,
-    padding: 4,
-    background: '#fafafa',
-    '&::-webkit-scrollbar': {
-      width: 6,
-    },
-    '&::-webkit-scrollbar-thumb': {
-      backgroundColor: token.colorBorderSecondary,
-      borderRadius: 3,
-    },
-  },
-  disabledInput: {
-    '& .ant-input': {
-      backgroundColor: '#f5f5f5',
-      color: '#666',
-      cursor: 'not-allowed',
-    },
-  },
-  // 新增提示信息样式
-  delayTip: {
-    display: 'flex',
-    alignItems: 'flex-start',
-    gap: 8,
-    padding: '12px 16px',
-    background: 'linear-gradient(135deg, #fff7e6 0%, #fff1e6 100%)',
-    border: '1px solid #ffd591',
-    borderRadius: token.borderRadiusLG,
-    marginBottom: 16,
-  },
-  delayTipIcon: {
-    color: '#fa8c16',
-    fontSize: 16,
-    marginTop: 2,
-  },
-  delayTipContent: {
-    flex: 1,
-  },
-  delayTipTitle: {
-    fontWeight: 600,
-    color: '#d46b08',
-    marginBottom: 4,
-    fontSize: 14,
-  },
-  delayTipText: {
-    color: '#d46b08',
-    fontSize: 13,
-    lineHeight: 1.5,
-  },
-  // 新增操作确认框样式
-  authFormItem: {
-    marginBottom: 16,
-  },
-  authFormLabel: {
-    fontWeight: 600,
-    color: token.colorTextHeading,
-    marginBottom: 8,
-    fontSize: 14,
-  },
-  authInput: {
-    '& .ant-input': {
-      borderRadius: token.borderRadiusMD,
-      border: `1px solid ${token.colorBorderSecondary}`,
-      transition: 'all 0.2s',
-      '&:focus': {
-        borderColor: '#1890ff',
-        boxShadow: '0 0 0 2px rgba(24, 144, 255, 0.2)',
-      },
-    },
-  },
-  readOnlyField: {
-    '& .ant-input': {
-      backgroundColor: '#f5f5f5',
-      color: '#666',
-      cursor: 'not-allowed',
-    },
-  },
-}));
+import { useStyles } from "./collectTableUseStyles.jsx";
 
 export default () => {
   const { styles } = useStyles();
@@ -372,7 +81,9 @@ export default () => {
   const [currentCollector, setCurrentCollector] = useState(null);
   const [authModalVisible, setAuthModalVisible] = useState(false);
   const [authModalLoading, setAuthModalLoading] = useState(false);
-  const [currentAction, setCurrentAction] = useState(null); // 'enable', 'disable', 'delete'
+  const [currentAction, setCurrentAction] = useState(null);
+  const [errorInfo, setErrorInfo] = useState(null);
+  const [useMockData, setUseMockData] = useState(false); // 新增状态：是否使用mock数据
   const navigate = useNavigate();
   const actionRef = React.useRef<ActionType>();
 
@@ -384,21 +95,142 @@ export default () => {
     warning: 0,
   }); 
 
-  // 加载数据
+  // 清除错误信息
+  const clearError = () => {
+    setErrorInfo(null);
+  };
+
+  // 解析错误信息
+  const parseError = (error) => {
+    if (!error) return { message: '未知错误', detail: '无错误详情' };
+    
+    if (typeof error === 'string') {
+      return {
+        message: error,
+        detail: error
+      };
+    }
+    
+    if (error instanceof Error) {
+      return {
+        message: error.message || '操作失败',
+        detail: error.stack || error.message
+      };
+    }
+    
+    if (error.response) {
+      const { status, data } = error.response;
+      let message = '请求失败';
+      let detail = `状态码: ${status}`;
+      
+      if (data) {
+        if (typeof data === 'string') {
+          message = data;
+          detail = data;
+        } else if (data.message) {
+          message = data.message;
+          detail = JSON.stringify(data, null, 2);
+        } else {
+          message = '服务器返回错误';
+          detail = JSON.stringify(data, null, 2);
+        }
+      }
+      
+      switch (status) {
+        case 400:
+          message = '请求参数错误，请检查输入信息';
+          break;
+        case 401:
+          message = '认证失败，请检查用户名和密码';
+          break;
+        case 403:
+          message = '权限不足，无法执行此操作';
+          break;
+        case 404:
+          message = '采集器不存在或网络不可达';
+          break;
+        case 409:
+          message = '采集器已存在或名称冲突';
+          break;
+        case 500:
+          message = '服务器内部错误，请稍后重试';
+          break;
+        case 502:
+          message = '网络连接异常，请检查网络配置';
+          break;
+        case 503:
+          message = '服务暂时不可用';
+          break;
+        case 504:
+          message = '请求超时，请检查网络连接';
+          break;
+        default:
+          message = `请求失败 (${status})`;
+      }
+      
+      return { message, detail: `HTTP ${status}: ${detail}` };
+    }
+    
+    if (error.code === 'NETWORK_ERROR' || error.message?.includes('Network Error')) {
+      return {
+        message: '网络连接失败',
+        detail: '请检查网络连接和采集器IP地址是否可达'
+      };
+    }
+    
+    if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
+      return {
+        message: '请求超时',
+        detail: '连接采集器超时，请检查网络状况和采集器状态'
+      };
+    }
+    
+    return {
+      message: error.message || '操作失败',
+      detail: JSON.stringify(error, null, 2)
+    };
+  };
+
+  // 显示错误信息
+  const showError = (error, operation = '操作') => {
+    const errorData = parseError(error);
+    setErrorInfo({
+      ...errorData,
+      operation,
+      timestamp: new Date().toLocaleString('zh-CN')
+    });
+    
+    message.error(`${operation}失败: ${errorData.message}`, 5);
+  };
+
+  // 加载数据 - 修改：只有当useMock为true时才使用mock数据
   const loadData = useCallback(async (useMock = false) => {
     setLoading(true);
+    clearError();
+    
+    // 设置是否使用mock数据的标志
+    if (useMock) {
+      setUseMockData(true);
+    }
+    
     try {
       let data = [];
       
-      if (!useMock) {
-        const response = await getActionCollectList();
-        data = response?.content || [];
-      }
-      
-      // 如果接口没有数据，使用Mock数据
-      if (!data || data.length === 0) {
+      // 只有当明确要求使用mock数据或者之前已经设置为使用mock数据时才使用
+      if (useMock || useMockData) {
         data = mockDataSource;
         console.log('使用Mock数据');
+      } else {
+        // 尝试从接口获取真实数据
+        try {
+          const response = await getActionCollectList();
+          data = response?.content || [];
+          console.log('从接口获取数据成功，数量:', data.length);
+        } catch (apiError) {
+          console.error('接口请求失败，但不会自动使用mock数据:', apiError);
+          // 接口失败时不自动使用mock数据，保持空数组
+          data = [];
+        }
       }
       
       setTableListDataSource(data);
@@ -417,38 +249,50 @@ export default () => {
       
     } catch (error) {
       console.error('加载数据失败:', error);
-      // 出错时使用Mock数据
-      setTableListDataSource(mockDataSource);
+      showError(error, '加载数据');
+      
+      // 出错时也不自动使用mock数据，保持空数组
+      setTableListDataSource([]);
       setStats({
-        total: mockDataSource.length,
-        running: mockDataSource.filter(item => item.status === 1).length,
-        stopped: mockDataSource.filter(item => item.status === 0).length,
-        warning: mockDataSource.filter(item => item.status === 2).length,
+        total: 0,
+        running: 0,
+        stopped: 0,
+        warning: 0,
       });
-      message.error('加载数据失败，已使用模拟数据');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [useMockData]); // 添加依赖
 
-  // 初始加载
-  useEffect(() => {
-    loadData();
+  // 加载真实数据（从接口）
+  const loadRealData = useCallback(async () => {
+    setUseMockData(false);
+    await loadData(false);
   }, [loadData]);
+
+  // 加载模拟数据
+  const loadMockData = useCallback(async () => {
+    await loadData(true);
+  }, [loadData]);
+
+  // 初始加载 - 只加载真实数据，不自动使用mock
+  useEffect(() => {
+    loadRealData();
+  }, []);
 
   // 打开认证模态框
   const showAuthModal = (record, action) => {
     setCurrentCollector(record);
     setCurrentAction(action);
     authForm.resetFields();
+    clearError();
     
-    // 设置默认值
     authForm.setFieldsValue({
       hostIp: record.launchServer || record.curControllerIp,
-      sshPort: 22, // 默认SSH端口
+      sshPort: 22,
       agentName: record.name,
-      userName: 'ubuntu', // 默认用户名
-      hostPassword: '' // 密码为空，需要用户填写
+      userName: 'ubuntu',
+      hostPassword: ''
     });
     
     setAuthModalVisible(true);
@@ -460,6 +304,7 @@ export default () => {
     setCurrentCollector(null);
     setCurrentAction(null);
     setAuthModalLoading(false);
+    clearError();
   };
 
   // 处理认证表单提交
@@ -469,6 +314,7 @@ export default () => {
       await executeActionWithAuth(values);
     } catch (error) {
       console.error('表单验证失败:', error);
+      showError(error, '表单验证');
     }
   };
 
@@ -477,6 +323,8 @@ export default () => {
     if (!currentCollector || !currentAction) return;
     
     setAuthModalLoading(true);
+    clearError();
+    
     try {
       console.log(`执行${currentAction}操作，参数:`, authParams);
       
@@ -497,15 +345,16 @@ export default () => {
       
       console.log(`${currentAction}操作响应:`, response);
       
-      // 根据操作类型更新界面
+      if (response && response.code !== 200 && response.code !== 0) {
+        throw new Error(response.message || `操作失败，错误码: ${response.code}`);
+      }
+      
       if (currentAction === 'delete') {
-        // 删除操作：从列表中移除
         setTableListDataSource(prev => 
           prev.filter(item => item.lcuuid !== currentCollector.lcuuid)
         );
         message.success('采集器已删除');
       } else {
-        // 启用/禁用操作：更新状态
         const newStatus = currentAction === 'enable' ? 1 : 0;
         const newState = currentAction === 'enable' ? 'running' : 'stopped';
         
@@ -527,23 +376,23 @@ export default () => {
       
     } catch (error) {
       console.error(`${currentAction}操作失败:`, error);
-      message.error(`${currentAction === 'enable' ? '启用' : currentAction === 'disable' ? '禁用' : '删除'}失败: ` + (error.message || '未知错误'));
+      showError(error, currentAction === 'enable' ? '启用' : currentAction === 'disable' ? '禁用' : '删除');
     } finally {
       setAuthModalLoading(false);
     }
   };
 
-  // 启用采集器 - 修改为打开认证模态框
+  // 启用采集器
   const handleEnable = (record) => {
     showAuthModal(record, 'enable');
   };
 
-  // 禁用采集器 - 修改为打开认证模态框
+  // 禁用采集器
   const handleDisable = (record) => {
     showAuthModal(record, 'disable');
   };
 
-  // 删除采集器 - 修改为打开认证模态框
+  // 删除采集器
   const handleDelete = (record) => {
     showAuthModal(record, 'delete');
   };
@@ -552,12 +401,13 @@ export default () => {
   const showConfigPushDrawer = (record) => {
     setCurrentCollector(record);
     configForm.resetFields();
-    // 设置默认值
+    clearError();
+    
     configForm.setFieldsValue({
-      agent_name: record.name, // 自动填入采集器名称
-      host_ip: record.launchServer || record.curControllerIp, // 自动填入采集器IP
-      host_password: '', // 初始为空，用户填写
-      ssh_port: 22, // 默认SSH端口22
+      agent_name: record.name,
+      host_ip: record.launchServer || record.curControllerIp,
+      host_password: '',
+      ssh_port: 22,
       log_level: 1,
       data_format: 'yyyy-MM-dd',
       interval: 10,
@@ -586,6 +436,7 @@ export default () => {
   const closeConfigPushDrawer = () => {
     setConfigPushDrawerOpen(false);
     setCurrentCollector(null);
+    clearError();
   };
 
   // 配置推送
@@ -593,15 +444,14 @@ export default () => {
     if (!currentCollector) return;
     
     setConfigPushLoading(true);
+    clearError();
+    
     try {
       console.log('配置推送参数:', values);
       console.log('目标采集器:', currentCollector.name);
       
-      // TODO: 调用配置推送接口
-      // 模拟推送配置
       await new Promise(resolve => setTimeout(resolve, 1000));
       
-      // 更新采集器状态
       setTableListDataSource(prev => prev.map(item => 
         item.lcuuid === currentCollector.lcuuid 
           ? { 
@@ -616,7 +466,7 @@ export default () => {
       
     } catch (error) {
       console.error('配置推送失败:', error);
-      message.error('配置推送失败: ' + error.message);
+      showError(error, '配置推送');
     } finally {
       setConfigPushLoading(false);
     }
@@ -629,6 +479,7 @@ export default () => {
       await handleConfigPush(values);
     } catch (error) {
       console.error('表单验证失败:', error);
+      showError(error, '表单验证');
     }
   };
 
@@ -636,41 +487,45 @@ export default () => {
   const showRegisterDrawer = () => {
     registerForm.resetFields();
     setRegisterDrawerOpen(true);
+    clearError();
   };
 
   // 关闭注册采集器抽屉
   const closeRegisterDrawer = () => {
     setRegisterDrawerOpen(false);
+    clearError();
   };
 
-  // 注册采集器 - 修改为调用真实接口
+  // 注册采集器
   const handleRegisterCollector = async (values) => {
     setRegisterLoading(true);
+    clearError();
+    
     try {
       console.log('注册采集器参数:', values);
       
-      // 构建请求参数
       const registerParams = {
-        hostIp: values.ip, // 采集器IP地址
-        userName: values.username, // 采集器用户名
-        hostPassword: values.password, // 采集器密码
-        sshPort: values.port, // SSH端口
-        agentName: values.name // 采集器名称
+        hostIp: values.ip,
+        userName: values.username,
+        hostPassword: values.password,
+        sshPort: values.port,
+        agentName: values.name
       };
       
       console.log('调用agentRegister接口，参数:', registerParams);
       
-      // 调用注册接口
       const response = await agentRegister(registerParams);
       console.log('注册接口响应:', response);
       
-      // 注册成功后，刷新数据
-      await loadData();
+      if (response && response.code !== 200 && response.code !== 0) {
+        throw new Error(response.message || `注册失败，错误码: ${response.code}`);
+      }
+      
+      await loadRealData();
       
       message.success('采集器注册成功');
       closeRegisterDrawer();
       
-      // 提示用户需要等待和刷新
       Modal.info({
         title: '注册成功',
         content: (
@@ -683,9 +538,8 @@ export default () => {
         ),
         okText: '知道了',
         onOk: () => {
-          // 5秒后自动刷新数据
           setTimeout(() => {
-            loadData();
+            loadRealData();
             message.info('已自动刷新数据');
           }, 5000);
         },
@@ -693,7 +547,7 @@ export default () => {
       
     } catch (error) {
       console.error('注册采集器失败:', error);
-      message.error('注册采集器失败: ' + (error.message || '未知错误'));
+      showError(error, '注册采集器');
     } finally {
       setRegisterLoading(false);
     }
@@ -706,10 +560,11 @@ export default () => {
       await handleRegisterCollector(values);
     } catch (error) {
       console.error('表单验证失败:', error);
+      showError(error, '表单验证');
     }
   };
 
-  // IP地址验证规则
+  // 验证规则函数保持不变
   const validateIP = (_, value) => {
     const ipPattern = /^(\d{1,3}\.){3}\d{1,3}$/;
     if (!value) {
@@ -719,7 +574,6 @@ export default () => {
       return Promise.reject(new Error('请输入正确的IP地址格式，如：192.168.1.100'));
     }
     
-    // 验证每个数字段是否在0-255之间
     const parts = value.split('.');
     for (let part of parts) {
       const num = parseInt(part, 10);
@@ -731,7 +585,6 @@ export default () => {
     return Promise.resolve();
   };
 
-  // 端口验证规则
   const validatePort = (_, value) => {
     if (!value) {
       return Promise.reject(new Error('请输入端口号'));
@@ -742,7 +595,6 @@ export default () => {
     return Promise.resolve();
   };
 
-  // SSH端口验证规则
   const validateSSHPort = (_, value) => {
     if (!value) {
       return Promise.reject(new Error('请输入SSH端口号'));
@@ -753,7 +605,6 @@ export default () => {
     return Promise.resolve();
   };
 
-  // 用户名验证规则
   const validateUsername = (_, value) => {
     if (!value) {
       return Promise.reject(new Error('请输入采集器用户名'));
@@ -770,7 +621,6 @@ export default () => {
     return Promise.resolve();
   };
 
-  // 密码验证规则
   const validatePassword = (_, value) => {
     if (!value) {
       return Promise.reject(new Error('请输入密码'));
@@ -836,8 +686,61 @@ export default () => {
     }
   };
 
+  // 错误信息显示组件
+  const ErrorDisplay = ({ onRetry }) => {
+    if (!errorInfo) return null;
+    
+    return (
+      <Alert
+        message={
+          <div className={styles.errorTitle}>
+            {errorInfo.operation}失败: {errorInfo.message}
+          </div>
+        }
+        description={
+          <div>
+            <div style={{ marginBottom: 8 }}>错误详情：</div>
+            <div className={styles.errorDetail}>
+              {errorInfo.detail}
+            </div>
+            <div style={{ marginTop: 8, fontSize: 12, color: '#666' }}>
+              发生时间: {errorInfo.timestamp}
+            </div>
+          </div>
+        }
+        type="error"
+        showIcon
+        closable
+        onClose={clearError}
+        className={styles.errorAlert}
+        action={
+          <Space>
+            <Button 
+              size="small" 
+              onClick={clearError}
+              icon={<CloseOutlined />}
+            >
+              关闭
+            </Button>
+            {onRetry && (
+              <Button 
+                size="small" 
+                type="primary" 
+                danger
+                onClick={onRetry}
+                className={styles.retryButton}
+              >
+                重试
+              </Button>
+            )}
+          </Space>
+        }
+      />
+    );
+  };
+
   // 列定义
-  const columns: ProColumns[] = [
+  const columns = [
     {
       title: '采集器名称',
       width: 200,
@@ -970,10 +873,10 @@ export default () => {
           color: '#1890ff',
           fontSize: '13px',
         }}>
-          {text.toLocaleString()}
+          {text?.toLocaleString() || '0'}
         </span>
       ),
-      sorter: (a, b) => a.traffic - b.traffic,
+      sorter: (a, b) => (a.traffic || 0) - (b.traffic || 0),
     },
     {
       title: '控制节点',
@@ -996,12 +899,11 @@ export default () => {
     {
       title: '操作',
       key: 'action',
-      width: 200, // 宽度调整，因为删除了编辑按钮
+      width: 200,
       fixed: 'right',
       className: `${styles.tableCell} ${styles.actionCell}`,
       render: (_, record) => (
         <Space>
-          {/* 查看详情 */}
           <Tooltip title="查看详情">
             <Button
               type="text"
@@ -1013,7 +915,6 @@ export default () => {
             />
           </Tooltip>
 
-          {/* 启用/禁用 */}
           {record.status === 0 ? (
             <Tooltip title="启用">
               <Button
@@ -1038,7 +939,6 @@ export default () => {
             </Tooltip>
           )}
 
-          {/* 删除 */}
           <Tooltip title="删除">
             <Button
               type="text"
@@ -1050,7 +950,6 @@ export default () => {
             />
           </Tooltip>
 
-          {/* 配置推送 - 文字图标按钮 */}
           <Button
             type="text"
             size="small"
@@ -1089,7 +988,6 @@ export default () => {
           ))}
         </ProDescriptions>
         
-        {/* 性能指标 */}
         <ProCard
           title="性能指标"
           style={{ marginTop: 16 }}
@@ -1141,16 +1039,21 @@ export default () => {
           value={searchText}
           onChange={(e) => setSearchText(e.target.value)}
           onSearch={(value) => {
-            // 实现搜索逻辑
             console.log('搜索:', value);
           }}
         />
         <Button 
           icon={<ReloadOutlined />} 
-          onClick={() => loadData()}
+          onClick={loadRealData}
         >
           刷新
         </Button>
+        {/* 显示当前数据来源提示 */}
+        {useMockData && (
+          <Tag color="orange" icon={<ExclamationCircleOutlined />}>
+            演示数据（模拟）
+          </Tag>
+        )}
       </Space>
       <Button
         type="primary"
@@ -1165,6 +1068,11 @@ export default () => {
 
   return (
     <>
+      {/* 错误信息显示 */}
+      {errorInfo && !registerDrawerOpen && !authModalVisible && !configPushDrawerOpen && (
+        <ErrorDisplay onRetry={loadRealData} />
+      )}
+
       <SearchBar />
 
       <ProCard className={styles.tableCard}>
@@ -1174,7 +1082,7 @@ export default () => {
           rowKey="lcuuid"
           loading={loading}
           actionRef={actionRef}
-          scroll={{ x: 1250 }} // 调整滚动宽度，因为删除了编辑按钮
+          scroll={{ x: 1250 }}
           expandable={{
             expandedRowRender,
             expandIcon: ({ expanded, onExpand, record }) =>
@@ -1237,14 +1145,14 @@ export default () => {
           options={{
             density: true,
             fullScreen: true,
-            reload: () => loadData(),
+            reload: () => loadRealData(),
             setting: true,
           }}
           toolBarRender={() => [
             <Button
               key="refresh"
               icon={<ReloadOutlined />}
-              onClick={() => loadData()}
+              onClick={loadRealData}
               style={{ border: '1px solid #d9d9d9' }}
             >
               刷新
@@ -1263,25 +1171,51 @@ export default () => {
             emptyText: (
               <Empty
                 image={Empty.PRESENTED_IMAGE_SIMPLE}
-                description="暂无采集器数据"
+                description={
+                  <div>
+                    <div>暂无采集器数据</div>
+                    {useMockData ? (
+                      <div style={{ marginTop: 8, fontSize: 12, color: '#999' }}>
+                        模拟数据加载完成，但仍无数据
+                      </div>
+                    ) : (
+                      <div style={{ marginTop: 8, fontSize: 12, color: '#999' }}>
+                        暂无真实采集器数据，您可以加载模拟数据进行演示
+                      </div>
+                    )}
+                  </div>
+                }
                 className={styles.emptyState}
               >
-                <Button 
-                  type="primary" 
-                  onClick={() => loadData(true)}
-                  icon={<ReloadOutlined />}
-                  style={{ marginRight: 8 }}
-                >
-                  加载模拟数据
-                </Button>
-                <Button 
-                  type="primary" 
-                  onClick={showRegisterDrawer}
-                  icon={<PlusOutlined />}
-                  className={styles.registerButton}
-                >
-                  注册采集器
-                </Button>
+                <Space direction="vertical" size={16}>
+                  <Space>
+                    <Button 
+                      type="primary" 
+                      onClick={loadMockData}
+                      icon={<ReloadOutlined />}
+                      disabled={useMockData}
+                    >
+                      {useMockData ? '已加载模拟数据' : '加载模拟数据'}
+                    </Button>
+                    <Button 
+                      type="primary" 
+                      onClick={showRegisterDrawer}
+                      icon={<PlusOutlined />}
+                      className={styles.registerButton}
+                    >
+                      注册采集器
+                    </Button>
+                  </Space>
+                  {!useMockData && (
+                    <Alert
+                      message="提示"
+                      description="如果您想查看界面效果，可以点击'加载模拟数据'按钮查看演示数据。"
+                      type="info"
+                      showIcon
+                      style={{ maxWidth: 400 }}
+                    />
+                  )}
+                </Space>
               </Empty>
             ),
           }}
@@ -1309,6 +1243,8 @@ export default () => {
         ]}
         width={520}
       >
+        {errorInfo && <ErrorDisplay onRetry={handleAuthSubmit} />}
+        
         <div style={{ marginBottom: 16 }}>
           <Alert
             message={getActionDescription()}
@@ -1457,7 +1393,8 @@ export default () => {
           </div>
         }
       >
-        {/* 新增：延迟显示提示信息 */}
+        {errorInfo && <ErrorDisplay onRetry={handleSubmitRegister} />}
+
         <div className={styles.delayTip}>
           <ExclamationCircleOutlined className={styles.delayTipIcon} />
           <div className={styles.delayTipContent}>
@@ -1500,7 +1437,6 @@ export default () => {
             </div>
           </div>
 
-          {/* 采集器用户名输入项 */}
           <div className={styles.formItem}>
             <Form.Item
               name="username"
@@ -1514,7 +1450,7 @@ export default () => {
                 { required: true, message: '请输入采集器用户名' },
                 { validator: validateUsername }
               ]}
-              initialValue="ubuntu" // 默认用户名改为ubuntu
+              initialValue="ubuntu"
             >
               <Input
                 size="large"
@@ -1593,7 +1529,7 @@ export default () => {
               rules={[
                 { validator: validateSSHPort }
               ]}
-              initialValue={22} // 默认SSH端口
+              initialValue={22}
             >
               <InputNumber
                 size="large"
@@ -1695,7 +1631,8 @@ export default () => {
           </div>
         }
       >
-        {/* 使用封装的组件 */}
+        {errorInfo && <ErrorDisplay onRetry={handleSubmitConfig} />}
+
         <CollectorConfigForm
           form={configForm}
           currentCollector={currentCollector}

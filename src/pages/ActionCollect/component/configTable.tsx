@@ -1,14 +1,14 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
   DownOutlined, DownloadOutlined, CopyOutlined, DeleteOutlined,
-  EditOutlined, PlusOutlined, ReloadOutlined, SearchOutlined
+  EditOutlined, PlusOutlined, ReloadOutlined, SearchOutlined,
+  EyeOutlined, PlayCircleOutlined, PauseCircleOutlined, SendOutlined
 } from '@ant-design/icons';
 import type { ProColumns, ActionType } from '@ant-design/pro-components';
-import { ProTable, TableDropdown } from '@ant-design/pro-components';
+import { ProTable } from '@ant-design/pro-components';
 import {
   Button,
   Tag,
-  Tabs,
   Descriptions,
   Select,
   Drawer,
@@ -23,18 +23,127 @@ import {
   Spin,
   Alert,
   Empty,
-  Tooltip
+  Tooltip,
+  Card,
+  Statistic,
+  Progress,
+  Divider,
+  Badge
 } from 'antd';
 import {
-  getActionCollectList,
   getConfigTableList,
   addConfigTable,
   deleteConfigTable,
-  updateConfigTable // 新增：假设存在更新接口
+  updateConfigTable
 } from "../../../services/server.js";
-import CollectorConfigForm from './CollectorConfigForm'; // 引入配置表单组件
+import CollectorConfigForm from './CollectorConfigForm';
 
 const { Option } = Select;
+
+// 内联样式定义
+const styles = {
+  container: {
+    padding: '24px',
+    background: 'linear-gradient(135deg, #f8f9fa 0%, #f0f2f5 100%)',
+    minHeight: '100vh',
+  },
+  tableCard: {
+    background: 'white',
+    borderRadius: 8,
+    boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
+    border: '1px solid #d9d9d9',
+    overflow: 'hidden',
+  },
+  toolbar: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+    padding: '16px 24px',
+    background: 'white',
+    borderRadius: 8,
+    border: '1px solid #d9d9d9',
+  },
+  statsCard: {
+    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+    borderRadius: 8,
+    marginBottom: 16,
+    border: 'none',
+    color: 'white',
+  },
+  statItem: {
+    textAlign: 'center',
+    padding: '16px',
+    borderRight: '1px solid rgba(255,255,255,0.2)',
+  },
+  primaryButton: {
+    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+    border: 'none',
+    color: 'white',
+    fontWeight: 600,
+    boxShadow: '0 4px 12px rgba(102, 126, 234, 0.3)',
+  },
+  secondaryButton: {
+    borderColor: '#d9d9d9',
+    color: '#595959',
+    fontWeight: 500,
+  },
+  actionButton: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: 32,
+    height: 32,
+    borderRadius: 6,
+    border: '1px solid',
+  },
+  tableHeader: {
+    background: 'linear-gradient(135deg, #f6f8fc 0%, #f0f2f5 100%)',
+    borderBottom: '2px solid #e8e8e8',
+  },
+  tableRow: {
+    transition: 'all 0.2s',
+  },
+  tableCell: {
+    fontSize: '13px',
+    borderBottom: '1px solid #f0f0f0',
+  },
+  searchBar: {
+    background: 'linear-gradient(135deg, #f6f8fc 0%, #f0f2f5 100%)',
+    borderBottom: '1px solid #d9d9d9',
+    padding: '16px 24px',
+  },
+  drawerHeader: {
+    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+    color: 'white',
+    borderBottom: 'none',
+  },
+  drawerBody: {
+    padding: '24px',
+    background: '#f8f9fa',
+  },
+  drawerFooter: {
+    background: 'white',
+    borderTop: '1px solid #d9d9d9',
+    padding: '16px 24px',
+  },
+  resourceUsage: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 8,
+  },
+  statusTag: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: 4,
+    fontWeight: 500,
+    borderRadius: 12,
+    padding: '2px 8px',
+  },
+  emptyState: {
+    padding: '48px 24px',
+  },
+};
 
 // 定义状态类型
 export type Status = {
@@ -44,54 +153,99 @@ export type Status = {
 
 // 表格列配置
 const getColumns = (handleEdit, handleDelete, handleCopy) => {
-  const columns: ProColumns[] = [
+  const columns = [
     {
       title: '采集器组',
       width: 200,
       dataIndex: 'groupName',
-      render: (value) => <a style={{ color: '#1890ff' }}>{value}</a>,
+      fixed: 'left',
+      render: (value, record) => (
+        <Space direction="vertical" size={2}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Badge 
+              dot 
+              status={record.status === 1 ? "success" : record.status === 2 ? "error" : "default"}
+            />
+            <a 
+              style={{ 
+                color: '#667eea', 
+                fontWeight: 600,
+                cursor: 'pointer'
+              }}
+              onClick={() => console.log('查看详情:', record)}
+            >
+              {value}
+            </a>
+          </div>
+          {record.teamName && (
+            <div style={{ fontSize: '12px', color: '#999', marginLeft: '20px' }}>
+              {record.teamName}
+            </div>
+          )}
+        </Space>
+      ),
       search: {
-        inputProps: { placeholder: '请输入采集器组名称' },
+        inputProps: { placeholder: '搜索采集器组...' },
       },
     },
     {
       title: '团队',
       dataIndex: 'teamName',
       search: {
-        inputProps: { placeholder: '请输入团队名称' },
+        inputProps: { placeholder: '搜索团队...' },
       },
     },
     {
       title: 'CPU限制',
       dataIndex: 'maxCpus',
-      render: (value) => `${value}核`,
+      render: (value) => (
+        <Tag color="blue" style={{ background: 'rgba(102, 126, 234, 0.1)', borderColor: '#667eea', color: '#667eea' }}>
+          {value}核
+        </Tag>
+      ),
       sorter: (a, b) => a.maxCpus - b.maxCpus,
     },
     {
       title: '内存限制',
       dataIndex: 'maxMemory',
-      render: (value) => `${value}MB`,
+      render: (value) => (
+        <Tag color="green" style={{ background: 'rgba(82, 196, 26, 0.1)', borderColor: '#52c41a', color: '#52c41a' }}>
+          {value}MB
+        </Tag>
+      ),
       sorter: (a, b) => a.maxMemory - b.maxMemory,
     },
     {
       title: '采集网口',
-      width: 400,
+      width: 150,
       dataIndex: 'collectionPort',
       ellipsis: true,
-      tooltip: true,
+      render: (text) => (
+        <Tooltip title={text}>
+          <span style={{ color: '#667eea', fontWeight: 500 }}>{text}</span>
+        </Tooltip>
+      ),
     },
     {
       title: '状态',
       dataIndex: 'status',
-      width: 120,
+      width: 100,
       render: (value) => {
         const statusMap = {
-          0: { color: 'default', text: '未启用' },
-          1: { color: 'success', text: '运行中' },
-          2: { color: 'warning', text: '异常' },
+          0: { color: 'default', text: '未启用', icon: <PauseCircleOutlined /> },
+          1: { color: 'success', text: '运行中', icon: <PlayCircleOutlined /> },
+          2: { color: 'error', text: '异常', icon: <SendOutlined /> },
         };
         const status = statusMap[value] || statusMap[0];
-        return <Tag color={status.color}>{status.text}</Tag>;
+        return (
+          <Tag
+            color={status.color}
+            icon={status.icon}
+            style={styles.statusTag}
+          >
+            {status.text}
+          </Tag>
+        );
       },
       filters: [
         { text: '未启用', value: 0 },
@@ -105,38 +259,43 @@ const getColumns = (handleEdit, handleDelete, handleCopy) => {
       valueType: 'option',
       key: 'option',
       fixed: 'right',
-      width: 200,
-      render: (text, record) => [
-        <Tooltip key="edit" title="编辑配置">
-          <Button
-            icon={<EditOutlined />}
-            onClick={() => handleEdit(record)}
-            size="small"
-            type="primary"
-          />
-        </Tooltip>,
-        <Tooltip key="copy" title="复制配置">
-          <Button
-            icon={<CopyOutlined />}
-            onClick={() => handleCopy(record)}
-            size="small"
-          />
-        </Tooltip>,
-        <Popconfirm
-          key="delete-confirm"
-          title="确定要删除吗？删除后不可恢复！"
-          onConfirm={() => handleDelete(record)}
-          okText="确定"
-          cancelText="取消"
-          placement="left"
-        >
-          <Button
-            icon={<DeleteOutlined />}
-            size="small"
-            danger
-          />
-        </Popconfirm>,
-      ],
+      width: 180,
+      render: (text, record) => (
+        <Space size="small">
+          <Tooltip title="编辑配置">
+            <Button
+              icon={<EditOutlined />}
+              onClick={() => handleEdit(record)}
+              style={styles.actionButton}
+              size="small"
+            />
+          </Tooltip>
+          <Tooltip title="复制配置">
+            <Button
+              icon={<CopyOutlined />}
+              onClick={() => handleCopy(record)}
+              style={styles.actionButton}
+              size="small"
+            />
+          </Tooltip>
+          <Popconfirm
+            title="确定要删除此配置吗？"
+            description="删除后配置将不可恢复！"
+            onConfirm={() => handleDelete(record)}
+            okText="确认删除"
+            cancelText="取消"
+            okType="danger"
+          >
+            <Tooltip title="删除配置">
+              <Button
+                icon={<DeleteOutlined />}
+                style={styles.actionButton}
+                size="small"
+              />
+            </Tooltip>
+          </Popconfirm>
+        </Space>
+      ),
     },
   ];
   return columns;
@@ -145,23 +304,45 @@ const getColumns = (handleEdit, handleDelete, handleCopy) => {
 export default () => {
   // 状态管理
   const [tableDataSource, setTableListDataSource] = useState([]);
-  const [form] = Form.useForm();
-  const [configForm] = Form.useForm(); // 配置表单的form实例
+  const [configForm] = Form.useForm();
   const [open, setOpen] = useState(false);
-  const [editOpen, setEditOpen] = useState(false); // 编辑抽屉状态
+  const [editOpen, setEditOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [submitLoading, setSubmitLoading] = useState(false);
-  const [currentRecord, setCurrentRecord] = useState(null); // 当前编辑/复制的记录
-  const tableRef = useRef<ActionType>(); // 表格引用
+  const [currentRecord, setCurrentRecord] = useState(null);
+  const tableRef = useRef();
+
+  // 统计数据
+  const [stats, setStats] = useState({
+    total: 0,
+    running: 0,
+    stopped: 0,
+    warning: 0,
+  });
 
   // 查询表格数据
   const queryTableList = async (params = {}) => {
     try {
       setLoading(true);
       const data = await getConfigTableList(params);
-      setTableListDataSource(data.content || []);
+      const content = data.content || [];
+      
+      setTableListDataSource(content);
+      
+      // 计算统计
+      const running = content.filter(item => item.status === 1).length;
+      const stopped = content.filter(item => item.status === 0).length;
+      const warning = content.filter(item => item.status === 2).length;
+      
+      setStats({
+        total: content.length,
+        running,
+        stopped,
+        warning,
+      });
+      
       return {
-        data: data.content || [],
+        data: content,
         total: data.totalElements || 0,
         success: true
       };
@@ -195,7 +376,6 @@ export default () => {
     setCurrentRecord(record);
     configForm.setFieldsValue({
       ...record,
-      // 适配表单字段名映射（如果有差异）
       agent_name: record.groupName,
       host_ip: record.collectionIp || '',
     });
@@ -204,7 +384,7 @@ export default () => {
 
   // 复制配置
   const handleCopy = (record) => {
-    setCurrentRecord({ ...record, id: undefined }); // 清除ID作为新记录
+    setCurrentRecord({ ...record, id: undefined });
     configForm.setFieldsValue({
       ...record,
       agent_name: `${record.groupName}_copy`,
@@ -220,7 +400,6 @@ export default () => {
       const res = await deleteConfigTable(record.id);
       if (res?.status === 200) {
         message.success('删除成功');
-        // 刷新表格
         await queryTableList();
         tableRef.current?.reload();
       } else {
@@ -232,13 +411,12 @@ export default () => {
     }
   };
 
-  // 提交配置（新增/编辑）
+  // 提交配置
   const submitForm = async () => {
     try {
       setSubmitLoading(true);
       const values = await configForm.validateFields();
       
-      // 字段映射：根据实际接口需求调整
       const submitData = {
         groupName: values.agent_name || values.groupName,
         teamName: values.teamName,
@@ -250,10 +428,8 @@ export default () => {
 
       let res;
       if (currentRecord?.id) {
-        // 编辑操作
         res = await updateConfigTable(currentRecord.id, submitData);
       } else {
-        // 新增操作
         res = await addConfigTable(submitData);
       }
 
@@ -281,10 +457,10 @@ export default () => {
     configForm.resetFields();
   };
 
-  // IP验证规则（传递给子组件）
+  // IP验证规则
   const validateIP = (_, value) => {
     const ipPattern = /^(\d{1,3}\.){3}\d{1,3}$/;
-    if (!value) return Promise.resolve(); // 非必填则返回成功
+    if (!value) return Promise.resolve();
     if (!ipPattern.test(value)) {
       return Promise.reject(new Error('请输入正确的IP地址格式'));
     }
@@ -298,74 +474,155 @@ export default () => {
     return Promise.resolve();
   };
 
+  // 统计头部
+  const StatsHeader = () => (
+    <Card style={styles.statsCard}>
+      <Row gutter={0}>
+        <Col span={6} style={styles.statItem}>
+          <Statistic
+            title="总配置数"
+            value={stats.total}
+            valueStyle={{ color: 'white', fontSize: '24px' }}
+          />
+        </Col>
+        <Col span={6} style={styles.statItem}>
+          <Statistic
+            title="运行中"
+            value={stats.running}
+            valueStyle={{ color: '#52c41a', fontSize: '24px' }}
+          />
+        </Col>
+        <Col span={6} style={styles.statItem}>
+          <Statistic
+            title="已停止"
+            value={stats.stopped}
+            valueStyle={{ color: '#faad14', fontSize: '24px' }}
+          />
+        </Col>
+        <Col span={6} style={styles.statItem}>
+          <Statistic
+            title="异常"
+            value={stats.warning}
+            valueStyle={{ color: '#ff4d4f', fontSize: '24px' }}
+          />
+        </Col>
+      </Row>
+    </Card>
+  );
+
   return (
-    <div style={{ padding: 24, background: '#f5f5f5', minHeight: '100vh' }}>
+    <div style={styles.container}>
+      {/* 统计头部 */}
+      <StatsHeader />
+      
       {/* 表格容器 */}
-      <div style={{ background: 'white', borderRadius: 8, boxShadow: '0 2px 8px rgba(0,0,0,0.06)', padding: 16 }}>
+      <div style={styles.tableCard}>
         {/* 工具栏 */}
-        <Space style={{ marginBottom: 16 }}>
-          <Button
-            type="primary"
-            icon={<PlusOutlined />}
-            onClick={showDrawer}
-          >
-            新增配置
-          </Button>
-          <Button
-            icon={<ReloadOutlined />}
-            onClick={() => queryTableList()}
-          >
-            刷新数据
-          </Button>
-          <Button
-            icon={<DownloadOutlined />}
-            onClick={() => tableRef.current?.exportData?.()}
-          >
-            导出数据
-          </Button>
-        </Space>
+        <div style={styles.toolbar}>
+          <Space>
+            <Button
+              type="primary"
+              icon={<PlusOutlined />}
+              onClick={showDrawer}
+              style={styles.primaryButton}
+            >
+              新增配置
+            </Button>
+            <Button
+              icon={<ReloadOutlined />}
+              onClick={() => queryTableList()}
+              style={styles.secondaryButton}
+            >
+              刷新数据
+            </Button>
+            <Button
+              icon={<DownloadOutlined />}
+              onClick={() => tableRef.current?.exportData?.()}
+              style={styles.secondaryButton}
+            >
+              导出数据
+            </Button>
+          </Space>
+          
+          <Space>
+            <Input.Search
+              placeholder="搜索配置名称、团队..."
+              style={{ width: 280 }}
+              onSearch={(value) => console.log('搜索:', value)}
+              enterButton={<SearchOutlined />}
+            />
+          </Space>
+        </div>
 
         {/* 表格 */}
         <ProTable
           scroll={{ x: 'max-content' }}
           columns={getColumns(handleEdit, handleDelete, handleCopy)}
           request={queryTableList}
-          rowKey="id" // 确保rowKey正确
+          rowKey="id"
+          rowClassName={() => styles.tableRow}
           pagination={{
             showQuickJumper: true,
             showSizeChanger: true,
             showTotal: (total) => `共 ${total} 条记录`,
             pageSizeOptions: ['10', '20', '50', '100']
           }}
-          search={{
-            labelWidth: 120,
-            collapseRender: (collapsed) => (
-              <Button
-                icon={collapsed ? <SearchOutlined /> : <DownOutlined />}
-                onClick={() => tableRef.current?.toggleCollapsed?.()}
-              >
-                {collapsed ? '高级搜索' : '收起搜索'}
-              </Button>
-            )
-          }}
+          search={false}
           dateFormatter="string"
           actionRef={tableRef}
           loading={loading}
+          components={{
+            header: {
+              cell: ({ children, ...props }) => (
+                <th
+                  {...props}
+                  style={{
+                    ...styles.tableHeader,
+                    padding: '12px 8px',
+                    fontWeight: 600,
+                    color: '#595959',
+                  }}
+                >
+                  {children}
+                </th>
+              ),
+            },
+            body: {
+              cell: ({ children, ...props }) => (
+                <td
+                  {...props}
+                  style={{
+                    ...styles.tableCell,
+                    padding: '12px 8px',
+                  }}
+                >
+                  {children}
+                </td>
+              ),
+            },
+          }}
+          options={{
+            density: true,
+            fullScreen: true,
+            reload: () => queryTableList(),
+            setting: true,
+          }}
           locale={{
             emptyText: (
               <Empty
                 image={Empty.PRESENTED_IMAGE_SIMPLE}
                 description="暂无配置数据"
+                style={styles.emptyState}
               >
-                <Button type="primary" onClick={showDrawer}>
+                <Button 
+                  type="primary" 
+                  onClick={showDrawer}
+                  style={styles.primaryButton}
+                >
                   新增第一条配置
                 </Button>
               </Empty>
             )
-          }}
-          options={{
-            density: true,
-            fullScreen: true,
           }}
         />
       </div>
@@ -377,24 +634,24 @@ export default () => {
         onClose={onClose}
         open={open}
         styles={{
-          body: {
-            paddingBottom: 80,
-            background: '#f8f9fa',
-            overflowY: 'auto',
-            maxHeight: 'calc(100vh - 160px)'
-          },
+          header: styles.drawerHeader,
+          body: styles.drawerBody,
+          footer: styles.drawerFooter
         }}
-        extra={
-          <Space>
-            <Button onClick={onClose}>取消</Button>
-            <Button
-              onClick={submitForm}
-              type="primary"
-              loading={submitLoading}
-            >
-              提交
-            </Button>
-          </Space>
+        footer={
+          <div style={{ textAlign: 'right' }}>
+            <Space>
+              <Button onClick={onClose}>取消</Button>
+              <Button
+                onClick={submitForm}
+                type="primary"
+                loading={submitLoading}
+                style={styles.primaryButton}
+              >
+                {currentRecord ? '复制配置' : '创建配置'}
+              </Button>
+            </Space>
+          </div>
         }
       >
         <CollectorConfigForm
@@ -412,24 +669,24 @@ export default () => {
         onClose={onClose}
         open={editOpen}
         styles={{
-          body: {
-            paddingBottom: 80,
-            background: '#f8f9fa',
-            overflowY: 'auto',
-            maxHeight: 'calc(100vh - 160px)'
-          },
+          header: styles.drawerHeader,
+          body: styles.drawerBody,
+          footer: styles.drawerFooter
         }}
-        extra={
-          <Space>
-            <Button onClick={onClose}>取消</Button>
-            <Button
-              onClick={submitForm}
-              type="primary"
-              loading={submitLoading}
-            >
-              保存修改
-            </Button>
-          </Space>
+        footer={
+          <div style={{ textAlign: 'right' }}>
+            <Space>
+              <Button onClick={onClose}>取消</Button>
+              <Button
+                onClick={submitForm}
+                type="primary"
+                loading={submitLoading}
+                style={styles.primaryButton}
+              >
+                保存修改
+              </Button>
+            </Space>
+          </div>
         }
       >
         <CollectorConfigForm

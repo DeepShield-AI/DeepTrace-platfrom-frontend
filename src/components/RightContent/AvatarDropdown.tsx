@@ -1,7 +1,6 @@
 import { outLogin } from '@/services/ant-design-pro/api';
 import { LogoutOutlined, SettingOutlined, UserOutlined } from '@ant-design/icons';
 import { history, useModel } from '@umijs/max';
-import { Spin } from 'antd';
 import { createStyles } from 'antd-style';
 import { stringify } from 'querystring';
 import type { MenuInfo } from 'rc-menu/lib/interface';
@@ -15,9 +14,9 @@ export type GlobalHeaderRightProps = {
 };
 
 export const AvatarName = () => {
-  const { initialState } = useModel('@@initialState');
-  const { currentUser } = initialState || {};
-  return <span className="anticon">{currentUser?.name}</span>;
+  // 直接从 localStorage 获取用户名
+  const username = localStorage.getItem('username') || '用户';
+  return <span className="anticon">{username}</span>;
 };
 
 const useStyles = createStyles(({ token }) => {
@@ -43,7 +42,17 @@ export const AvatarDropdown: React.FC<GlobalHeaderRightProps> = ({ menu, childre
    * 退出登录，并且将当前的 url 保存
    */
   const loginOut = async () => {
-    await outLogin();
+    // 清除 localStorage 中的认证信息
+    localStorage.removeItem('auth_token');
+    localStorage.removeItem('username');
+    
+    // 调用退出登录接口
+    try {
+      await outLogin();
+    } catch (error) {
+      console.error('退出登录接口调用失败:', error);
+    }
+    
     const { search, pathname } = window.location;
     const urlParams = new URL(window.location.href).searchParams;
     /** 此方法会跳转到 redirect 参数所在的位置 */
@@ -58,6 +67,7 @@ export const AvatarDropdown: React.FC<GlobalHeaderRightProps> = ({ menu, childre
       });
     }
   };
+  
   const { styles } = useStyles();
 
   const { initialState, setInitialState } = useModel('@@initialState');
@@ -69,6 +79,7 @@ export const AvatarDropdown: React.FC<GlobalHeaderRightProps> = ({ menu, childre
         flushSync(() => {
           setInitialState((s) => ({ ...s, currentUser: undefined }));
         });
+        // 调用退出登录函数
         loginOut();
         return;
       }
@@ -77,26 +88,12 @@ export const AvatarDropdown: React.FC<GlobalHeaderRightProps> = ({ menu, childre
     [setInitialState],
   );
 
-  const loading = (
-    <span className={styles.action}>
-      <Spin
-        size="small"
-        style={{
-          marginLeft: 8,
-          marginRight: 8,
-        }}
-      />
-    </span>
-  );
-
-  if (!initialState) {
-    return loading;
-  }
-
-  const { currentUser } = initialState;
-
-  if (!currentUser || !currentUser.name) {
-    return loading;
+  // 直接从 localStorage 检查是否有用户名，决定是否显示下拉菜单
+  const username = localStorage.getItem('username');
+  
+  // 如果没有用户名，不显示下拉菜单
+  if (!username) {
+    return null;
   }
 
   const menuItems = [

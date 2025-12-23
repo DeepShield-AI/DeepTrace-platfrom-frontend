@@ -613,7 +613,7 @@ const ApplicationTopology = () => {
                         <div style={{ padding: '16px' }}>
                             <h4 style={{ marginBottom: '12px' }}>服务节点状态</h4>
                             <div style={{ marginBottom: '20px', maxHeight: '200px', overflowY: 'auto' }}>
-                                {nodeData.map(node => (
+                                {nodeData?.map(node => (
                                     <Card 
                                         key={node.nodeId} 
                                         size="small"
@@ -640,9 +640,9 @@ const ApplicationTopology = () => {
                             
                             <h4 style={{ marginBottom: '12px' }}>数据概览</h4>
                             <div style={{ fontSize: '12px', color: '#666', marginBottom: '20px' }}>
-                                <p>• 节点总数: <strong>{nodeData.length}</strong> 个</p>
+                                <p>• 节点总数: <strong>{nodeData?.length}</strong> 个</p>
                                 <p>• 边总数: <strong>{totalEdges}</strong> 条</p>
-                                <p>• 异常节点: <strong>{nodeData.filter(n => n.errorRate > 0).length}</strong> 个</p>
+                                <p>• 异常节点: <strong>{nodeData?.filter(n => n.errorRate > 0).length}</strong> 个</p>
                             </div>
                             
                             <h4 style={{ marginBottom: '12px' }}>图例说明</h4>
@@ -674,7 +674,7 @@ const ApplicationTopology = () => {
                                     <h4 style={{ marginBottom: '12px', fontSize: '14px' }}>调用关系统计</h4>
                                     <div style={{ marginTop: '12px', maxHeight: '300px', overflowY: 'auto' }}>
                                         {Object.entries(edgeData).map(([srcId, edgesList]) => {
-                                            const srcNode = nodeData.find(n => n.nodeId === srcId);
+                                            const srcNode = nodeData?.find(n => n.nodeId === srcId);
                                             return (
                                                 <div key={srcId} style={{ marginBottom: '16px' }}>
                                                     <div style={{ fontWeight: '500', color: '#333' }}>
@@ -682,7 +682,7 @@ const ApplicationTopology = () => {
                                                     </div>
                                                     <div style={{ marginLeft: '16px', marginTop: '8px' }}>
                                                         {edgesList.map(edge => {
-                                                            const dstNode = nodeData.find(n => n.nodeId === edge.dstNodeId);
+                                                            const dstNode = nodeData?.find(n => n.nodeId === edge.dstNodeId);
                                                             return (
                                                                 <div key={`${srcId}-${edge.dstNodeId}`} style={{ marginBottom: '6px', fontSize: '13px' }}>
                                                                     <span style={{ color: '#1890ff' }}>→</span> 
@@ -702,7 +702,7 @@ const ApplicationTopology = () => {
                                 <Col span={12}>
                                     <h4 style={{ marginBottom: '12px', fontSize: '14px' }}>节点健康状态</h4>
                                     <div style={{ marginTop: '12px', maxHeight: '300px', overflowY: 'auto' }}>
-                                        {nodeData.map(node => (
+                                        {nodeData?.map(node => (
                                             <div 
                                                 key={node.nodeId} 
                                                 style={{ 

@@ -9,9 +9,15 @@ import { errorConfig } from './requestErrorConfig';
 // import { currentUser as queryCurrentUser } from '@/services/ant-design-pro/api';
 import React from 'react';
 import { queryCurrentUser } from "./services/server.js"
+
 const isDev = process.env.NODE_ENV === 'development';
 const loginPath = '/user/login';
 const trackPath = '/Application/track';
+
+// 检查是否已认证（有auth_token）
+const isAuthenticated = () => {
+  return !!localStorage.getItem('auth_token');
+};
 
 /**
  * @see  https://umijs.org/zh-CN/plugins/plugin-initial-state
@@ -23,36 +29,59 @@ export async function getInitialState(): Promise<{
   fetchUserInfo?: () => Promise<API.CurrentUser | undefined>;
 }> {
   const fetchUserInfo = async () => {
-
     try {
       const msg = await queryCurrentUser({
         skipErrorHandler: true,
       });
-      console.log(msg,"mmmsss");
-      
+      console.log(msg, "用户信息");
       return msg.data;
     } catch (error) {
-      // 如果失败去登录
-      console.log("mmmsssxx");
-      
+      // 如果获取用户信息失败，清除token并跳转到登录页
+      console.log("获取用户信息失败");
+      localStorage.removeItem('auth_token');
+      localStorage.removeItem('username');
       history.push(loginPath);
-
-      // history.push(trackPath);
     }
     return undefined;
   };
-  // 如果不是登录页面，执行
+
+  // 如果不是登录页面，检查认证状态
   const { location } = history;
   if (location.pathname !== loginPath) {
-    // const currentUser = await fetchUserInfo();
-    return {
-      fetchUserInfo,
-      currentUser: {
-        name: localStorage.getItem('username'),
-      },
-      settings: defaultSettings as Partial<LayoutSettings>,
-    };
+    // 检查是否有auth_token
+    if (!isAuthenticated()) {
+      // 没有token，强制跳转到登录页
+      console.log("未检测到auth_token，跳转到登录页");
+      history.push(loginPath);
+      return {
+        fetchUserInfo,
+        settings: defaultSettings as Partial<LayoutSettings>,
+      };
+    }
+
+    // 有token，尝试获取用户信息
+    try {
+      const currentUser = await fetchUserInfo();
+      return {
+        fetchUserInfo,
+        currentUser: currentUser || {
+          name: localStorage.getItem('username') || '未知用户',
+        },
+        settings: defaultSettings as Partial<LayoutSettings>,
+      };
+    } catch (error) {
+      // 获取用户信息失败，仍然返回基本结构，但currentUser为undefined
+      return {
+        fetchUserInfo,
+        currentUser: {
+          name: localStorage.getItem('username') || '未知用户',
+        },
+        settings: defaultSettings as Partial<LayoutSettings>,
+      };
+    }
   }
+
+  // 登录页面直接返回
   return {
     fetchUserInfo,
     settings: defaultSettings as Partial<LayoutSettings>,
@@ -76,10 +105,22 @@ export const layout: RunTimeLayoutConfig = ({ initialState, setInitialState }) =
     footerRender: () => <Footer />,
     onPageChange: () => {
       const { location } = history;
-      // 如果没有登录，重定向到 login
+      
+      // 路由守卫：如果没有auth_token且不在登录页面，强制跳转到登录页
+      if (!isAuthenticated() && location.pathname !== loginPath) {
+        console.log("路由守卫：检测到未认证，跳转到登录页");
+        history.push(loginPath);
+        return;
+      }
+      
+      // 如果有auth_token但是在登录页面，跳转到首页或其他指定页面
+      if (isAuthenticated() && location.pathname === loginPath) {
+        history.push('/');
+        return;
+      }
+      
+      // 原有的页面跳转逻辑（根据需要保留或修改）
       // if (!initialState?.currentUser && location.pathname !== loginPath) {
-      //   // history.push(loginPath);
-
       //   history.push(trackPath);
       // }
     },
