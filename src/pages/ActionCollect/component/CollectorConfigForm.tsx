@@ -3,7 +3,6 @@ import {
   Input,
   InputNumber,
   Select,
-  Radio,
   Form,
   Row,
   Col,
@@ -16,16 +15,14 @@ import {
   InfoCircleOutlined,
   SettingOutlined,
   RadarChartOutlined,
-  SendOutlined,
   LockOutlined,
   SafetyOutlined,
   ClockCircleOutlined
 } from '@ant-design/icons';
 
-const { TextArea } = Input;
 const { Option } = Select;
 
-// 创建样式（使用style对象替代createStyles）
+// 样式对象
 const styles = {
   configSection: {
     marginBottom: 24,
@@ -67,47 +64,27 @@ const styles = {
     lineHeight: 1.4,
   },
   configInput: {
-    '& .ant-input': {
-      borderRadius: 6,
-      border: '1px solid #d9d9d9',
-      transition: 'all 0.2s',
-      '&:focus': {
-        borderColor: '#722ed1',
-        boxShadow: '0 0 0 2px rgba(114, 46, 209, 0.1)',
-      },
-    },
+    borderRadius: 6,
+    border: '1px solid #d9d9d9',
+    transition: 'all 0.2s',
   },
   configSelect: {
+    width: '100%',
     '& .ant-select-selector': {
       borderRadius: 6,
       border: '1px solid #d9d9d9',
-      '&:hover': {
-        borderColor: '#722ed1',
-      },
-      '&.ant-select-focused': {
-        borderColor: '#722ed1',
-        boxShadow: '0 0 0 2px rgba(114, 46, 209, 0.1)',
-      },
     },
   },
   configNumber: {
+    width: '100%',
     '& .ant-input-number': {
       borderRadius: 6,
-      '&:hover': {
-        borderColor: '#722ed1',
-      },
-      '&.ant-input-number-focused': {
-        borderColor: '#722ed1',
-        boxShadow: '0 0 0 2px rgba(114, 46, 209, 0.1)',
-      },
     },
   },
   disabledInput: {
-    '& .ant-input': {
-      backgroundColor: '#f5f5f5',
-      color: '#666',
-      cursor: 'not-allowed',
-    },
+    backgroundColor: '#f5f5f5',
+    color: '#666',
+    cursor: 'not-allowed',
   },
   probeSelectContainer: {
     maxHeight: 240,
@@ -131,6 +108,79 @@ const styles = {
     fontSize: 12,
     marginTop: 4,
   },
+};
+
+// 默认启用的探针列表
+const DEFAULT_ENABLED_PROBES = [
+  "sys_enter_read",
+  "sys_exit_read",
+  "sys_enter_readv",
+  "sys_exit_readv",
+  "sys_enter_recvfrom",
+  "sys_exit_recvfrom",
+  "sys_enter_recvmsg",
+  "sys_exit_recvmsg",
+  "sys_enter_recvmmsg",
+  "sys_exit_recvmmsg",
+  "sys_enter_write",
+  "sys_exit_write",
+  "sys_enter_writev",
+  "sys_exit_writev",
+  "sys_enter_sendto",
+  "sys_exit_sendto",
+  "sys_enter_sendmsg",
+  "sys_exit_sendmsg",
+  "sys_enter_sendmmsg",
+  "sys_exit_sendmmsg",
+  "sys_exit_socket",
+  "sys_enter_close"
+];
+
+// 探针选项
+const probeOptions = DEFAULT_ENABLED_PROBES.map(value => ({
+  value,
+  label: value
+}));
+
+// 解析配置字符串为表单值
+const parseConfigToFormValues = (configString, currentCollector) => {
+  if (!configString) {
+    return null;
+  }
+  
+  try {
+    const config = JSON.parse(configString);
+    const agentInfo = config.agent_info || {};
+    const metric = config.metric || {};
+    const sender = config.sender || {};
+    const elastic = sender.elastic?.trace || {};
+    const file = sender.file?.metric || {};
+    const trace = config.trace || {};
+    const span = trace.span || {};
+    const ebpf = config.ebpf?.trace || {};
+    
+    return {
+      agent_name: agentInfo.agent_name || currentCollector?.agentName || '',
+      host_ip: agentInfo.host_ip || currentCollector?.hostIp || '',
+      host_password: '', // 密码不进行回显
+      ssh_port: agentInfo.ssh_port || 22,
+      interval: metric.interval || 10,
+      request_timeout: elastic.request_timeout || 10,
+      bulk_size: elastic.bulk_size || 64,
+      max_size: file.max_size || 512,
+      max_age: file.max_age || 6,
+      rotate_time: file.rotate_time || 1,
+      data_format: file.data_format || "%Y%m%d",
+      cleanup_interval: span.cleanup_interval || 30,
+      max_sockets: span.max_sockets || 1024,
+      log_level: ebpf.log_level || 1,
+      max_buffered_events: ebpf.max_buffered_events || 128,
+      enabled_probes: ebpf.enabled_probes || DEFAULT_ENABLED_PROBES
+    };
+  } catch (error) {
+    console.error('解析配置失败:', error);
+    return null;
+  }
 };
 
 const CollectorConfigForm = ({
@@ -158,7 +208,6 @@ const CollectorConfigForm = ({
         return Promise.reject(new Error('IP地址每个数字段应在0-255之间'));
       }
     }
-    
     return Promise.resolve();
   });
 
@@ -173,68 +222,76 @@ const CollectorConfigForm = ({
     return Promise.resolve();
   });
 
-  // 探针选项
-  const probeOptions = [
-    { value: 'sys_enter_read', label: 'sys_enter_read' },
-    { value: 'sys_exit_read', label: 'sys_exit_read' },
-    { value: 'sys_enter_readv', label: 'sys_enter_readv' },
-    { value: 'sys_exit_readv', label: 'sys_exit_readv' },
-    { value: 'sys_enter_recvfrom', label: 'sys_enter_recvfrom' },
-    { value: 'sys_exit_recvfrom', label: 'sys_exit_recvfrom' },
-    { value: 'sys_enter_recvmsg', label: 'sys_enter_recvmsg' },
-    { value: 'sys_exit_recvmsg', label: 'sys_exit_recvmsg' },
-    { value: 'sys_enter_recvmmsg', label: 'sys_enter_recvmmsg' },
-    { value: 'sys_exit_recvmmsg', label: 'sys_exit_recvmmsg' },
-    { value: 'sys_enter_write', label: 'sys_enter_write' },
-    { value: 'sys_exit_write', label: 'sys_exit_write' },
-    { value: 'sys_enter_writev', label: 'sys_enter_writev' },
-    { value: 'sys_exit_writev', label: 'sys_exit_writev' },
-    { value: 'sys_enter_sendto', label: 'sys_enter_sendto' },
-    { value: 'sys_exit_sendto', label: 'sys_exit_sendto' },
-    { value: 'sys_enter_sendmsg', label: 'sys_enter_sendmsg' },
-    { value: 'sys_exit_sendmsg', label: 'sys_exit_sendmsg' },
-    { value: 'sys_enter_sendmmsg', label: 'sys_enter_sendmmsg' },
-    { value: 'sys_exit_sendmmsg', label: 'sys_exit_sendmmsg' },
-    { value: 'sys_exit_socket', label: 'sys_exit_socket' },
-    { value: 'sys_enter_close', label: 'sys_enter_close' },
-  ];
-
-  // 默认值
-  const defaultValues = {
-    agent_name: currentCollector?.name || '',
-    host_ip: currentCollector?.launchServer || currentCollector?.curControllerIp || '',
-    host_password: '',
-    ssh_port: 22,
-    log_level: 1,
-    data_format: 'yyyy-MM-dd',
-    interval: 10,
-    request_timeout: 10,
-    bulk_size: 512,
-    max_size: 512,
-    max_age: 7,
-    rotate_time: 1,
-    cleanup_interval: 30,
-    max_sockets: 1024,
-    max_buffered_events: 256,
-    enabled_probes: [
-      "sys_enter_read",
-      "sys_exit_read",
-      "sys_enter_write",
-      "sys_exit_write",
-      "sys_enter_close"
-    ],
-    restartMode: 'restart',
-    description: ''
-  };
-
-  // 初始化表单值
+  // 初始化表单值 - 只在组件挂载或currentCollector变化时执行
   React.useEffect(() => {
-    if (form && currentCollector) {
-      form.setFieldsValue({
-        ...defaultValues,
-        agent_name: currentCollector.name,
-        host_ip: currentCollector.launchServer || currentCollector.curControllerIp,
-      });
+    if (form) {
+      console.log('初始化表单值，currentCollector:', currentCollector);
+      
+      if (currentCollector?.config) {
+        // 如果是编辑模式，从配置字符串解析
+        const parsedValues = parseConfigToFormValues(currentCollector.config, currentCollector);
+        if (parsedValues) {
+          console.log('从配置解析的表单值:', parsedValues);
+          form.setFieldsValue(parsedValues);
+        } else {
+          // 解析失败，使用默认值
+          form.setFieldsValue({
+            agent_name: currentCollector.agentName || '',
+            host_ip: currentCollector.hostIp || '',
+            host_password: '',
+            ssh_port: 22,
+            interval: 10,
+            request_timeout: 10,
+            bulk_size: 64,
+            max_size: 512,
+            max_age: 6,
+            rotate_time: 1,
+            data_format: "%Y%m%d",
+            cleanup_interval: 30,
+            max_sockets: 1024,
+            log_level: 1,
+            max_buffered_events: 128,
+            enabled_probes: DEFAULT_ENABLED_PROBES
+          });
+        }
+      } else if (currentCollector) {
+        // 如果有currentCollector但没有config，使用基本信息
+        form.setFieldsValue({
+          agent_name: currentCollector.agentName || '',
+          host_ip: currentCollector.hostIp || '',
+          host_password: '',
+          ssh_port: 22,
+          interval: 10,
+          request_timeout: 10,
+          bulk_size: 64,
+          max_size: 512,
+          max_age: 6,
+          rotate_time: 1,
+          data_format: "%Y%m%d",
+          cleanup_interval: 30,
+          max_sockets: 1024,
+          log_level: 1,
+          max_buffered_events: 128,
+          enabled_probes: DEFAULT_ENABLED_PROBES
+        });
+      } else {
+        // 新增模式，设置默认值
+        form.setFieldsValue({
+          ssh_port: 22,
+          interval: 10,
+          request_timeout: 10,
+          bulk_size: 64,
+          max_size: 512,
+          max_age: 6,
+          rotate_time: 1,
+          data_format: "%Y%m%d",
+          cleanup_interval: 30,
+          max_sockets: 1024,
+          log_level: 1,
+          max_buffered_events: 128,
+          enabled_probes: DEFAULT_ENABLED_PROBES
+        });
+      }
     }
   }, [form, currentCollector]);
 
@@ -244,15 +301,18 @@ const CollectorConfigForm = ({
       layout="vertical"
       requiredMark="optional"
       autoComplete="off"
-      initialValues={defaultValues}
       {...formItemLayout}
+      onValuesChange={(changedValues, allValues) => {
+        console.log('表单值变化:', changedValues);
+        console.log('当前所有值:', allValues);
+      }}
     >
-      {/* 采集器标识配置 */}
+      {/* Agent信息配置 */}
       <div style={styles.configSection}>
         <div style={styles.configSectionTitle}>
           <InfoCircleOutlined style={{ color: '#1890ff' }} />
-          <span>采集器标识</span>
-          <Tag style={styles.infoTag}>只读</Tag>
+          <span>Agent信息配置</span>
+          <Tag style={styles.infoTag}>基本信息</Tag>
         </div>
         
         <Row gutter={24}>
@@ -272,13 +332,16 @@ const CollectorConfigForm = ({
             >
               <Input
                 size="large"
-                // disabled
+                disabled={!!currentCollector?.id}
                 placeholder="采集器名称"
-                style={styles.disabledInput}
+                style={{
+                  ...styles.configInput,
+                  ...(currentCollector?.id ? styles.disabledInput : {})
+                }}
               />
             </Form.Item>
             <div style={styles.formHelpText}>
-              采集器唯一标识
+              采集器唯一标识，创建后不可修改
             </div>
           </Col>
           
@@ -299,9 +362,12 @@ const CollectorConfigForm = ({
             >
               <Input
                 size="large"
-                // disabled
+                disabled={!!currentCollector?.id}
                 placeholder="主机IP地址"
-                style={styles.disabledInput}
+                style={{
+                  ...styles.configInput,
+                  ...(currentCollector?.id ? styles.disabledInput : {})
+                }}
               />
             </Form.Item>
             <div style={styles.formHelpText}>
@@ -325,18 +391,19 @@ const CollectorConfigForm = ({
               }
               style={styles.formItem}
               rules={[
-                { required: true, message: '请输入主机密码' },
+                { required: !currentCollector?.id, message: '请输入主机密码' },
                 { min: 6, message: '密码长度至少6位' }
               ]}
             >
               <Input.Password
                 size="large"
-                placeholder="请输入主机SSH登录密码"
+                placeholder={currentCollector?.id ? "留空则不修改密码" : "请输入主机SSH登录密码"}
+                disabled={loading}
                 style={styles.configInput}
               />
             </Form.Item>
             <div style={styles.formHelpText}>
-              用于登录主机的SSH密码，建议使用强密码
+              {currentCollector?.id ? '留空则不修改原密码' : '用于登录主机的SSH密码'}
             </div>
           </Col>
           
@@ -354,16 +421,17 @@ const CollectorConfigForm = ({
               }
               style={styles.formItem}
               rules={[
+                { required: true, message: '请输入SSH端口号' },
                 { validator: internalValidateSSHPort }
               ]}
             >
               <InputNumber
-                style={{ width: '100%' }}
                 placeholder="SSH端口号"
                 min={1}
                 max={65535}
                 size="large"
-                style={styles.configNumber}
+                disabled={loading}
+                style={{ ...styles.configNumber, width: '100%' }}
               />
             </Form.Item>
             <div style={styles.formHelpText}>
@@ -373,43 +441,120 @@ const CollectorConfigForm = ({
         </Row>
       </div>
 
-      {/* 基本配置 */}
+      {/* Metric配置 */}
       <div style={styles.configSection}>
         <div style={styles.configSectionTitle}>
           <SettingOutlined style={{ color: '#722ed1' }} />
-          <span>基本配置</span>
+          <span>Metric配置</span>
         </div>
         
         <Row gutter={24}>
           <Col span={12}>
             <Form.Item
-              name="log_level"
+              name="interval"
               label={
                 <div style={styles.formLabel}>
-                  日志级别
+                  采集间隔(秒)
                 </div>
               }
               style={styles.formItem}
               rules={[
-                { required: true, message: '请选择日志级别' }
+                { required: true, message: '请输入采集间隔' },
+                { type: 'number', min: 1, max: 100, message: '采集间隔必须在1-100之间' }
               ]}
             >
-              <Select 
-                placeholder="请选择日志级别" 
-                size="large"
-                style={styles.configSelect}
-              >
-                <Option value={0}>off (关闭)</Option>
-                <Option value={1}>debug (调试)</Option>
-                <Option value={3}>verbose (详细)</Option>
-                <Option value={4}>stats (统计)</Option>
-              </Select>
+              <Tooltip title="数据采集的时间间隔">
+                <InputNumber
+                  placeholder="采集间隔"
+                  min={1}
+                  max={100}
+                  size="large"
+                  disabled={loading}
+                  style={{ ...styles.configNumber, width: '100%' }}
+                />
+              </Tooltip>
             </Form.Item>
             <div style={styles.formHelpText}>
-              控制日志输出的详细程度，生产环境建议使用stats级别
+              数据采集的时间间隔
+            </div>
+          </Col>
+        </Row>
+      </div>
+
+      {/* Elastic发送器配置 */}
+      <div style={styles.configSection}>
+        <div style={styles.configSectionTitle}>
+          <RadarChartOutlined style={{ color: '#1890ff' }} />
+          <span>Elastic发送器配置</span>
+        </div>
+        
+        <Row gutter={24}>
+          <Col span={12}>
+            <Form.Item
+              name="request_timeout"
+              label={
+                <div style={styles.formLabel}>
+                  请求超时(秒)
+                </div>
+              }
+              style={styles.formItem}
+              rules={[
+                { required: true, message: '请输入请求超时时间' },
+                { type: 'number', min: 1, max: 60, message: '请求超时必须在1-60之间' }
+              ]}
+            >
+              <InputNumber
+                placeholder="请求超时"
+                min={1}
+                max={60}
+                size="large"
+                disabled={loading}
+                style={{ ...styles.configNumber, width: '100%' }}
+              />
+            </Form.Item>
+            <div style={styles.formHelpText}>
+              Elasticsearch请求超时时间
             </div>
           </Col>
           
+          <Col span={12}>
+            <Form.Item
+              name="bulk_size"
+              label={
+                <div style={styles.formLabel}>
+                  批量大小(KB)
+                </div>
+              }
+              style={styles.formItem}
+              rules={[
+                { required: true, message: '请输入批量大小' },
+                { type: 'number', min: 16, max: 1024, message: '批量大小必须在16-1024之间' }
+              ]}
+            >
+              <InputNumber
+                placeholder="批量大小"
+                min={16}
+                max={1024}
+                size="large"
+                disabled={loading}
+                style={{ ...styles.configNumber, width: '100%' }}
+              />
+            </Form.Item>
+            <div style={styles.formHelpText}>
+              批量处理的数据包大小
+            </div>
+          </Col>
+        </Row>
+      </div>
+
+      {/* 文件发送器配置 */}
+      <div style={styles.configSection}>
+        <div style={styles.configSectionTitle}>
+          <SettingOutlined style={{ color: '#52c41a' }} />
+          <span>文件发送器配置</span>
+        </div>
+        
+        <Row gutter={24}>
           <Col span={12}>
             <Form.Item
               name="data_format"
@@ -426,115 +571,20 @@ const CollectorConfigForm = ({
               <Select 
                 placeholder="请选择数据格式" 
                 size="large"
+                disabled={loading}
                 style={styles.configSelect}
               >
-                <Option value="yyyy-MM-dd">yyyy-MM-dd</Option>
-                <Option value="yyyy/MM/dd">yyyy/MM/dd</Option>
-                <Option value="yyyyMMdd">yyyyMMdd</Option>
-                <Option value="yy-MM-dd">yy-MM-dd</Option>
-                <Option value="yy/MM/dd">yy/MM/dd</Option>
-                <Option value="yyMMdd">yyMMdd</Option>
+                <Option value="%Y%m%d">%Y%m%d</Option>
+                <Option value="%Y-%m-%d">%Y-%m-%d</Option>
+                <Option value="%Y/%m/%d">%Y/%m/%d</Option>
+                <Option value="%Y%m%d_%H">%Y%m%d_%H</Option>
               </Select>
             </Form.Item>
             <div style={styles.formHelpText}>
-              时间戳的显示格式，建议使用标准的yyyy-MM-dd格式
-            </div>
-          </Col>
-        </Row>
-        
-        <Row gutter={24}>
-          <Col span={8}>
-            <Form.Item
-              name="interval"
-              label={
-                <div style={styles.formLabel}>
-                  采集间隔(秒)
-                </div>
-              }
-              style={styles.formItem}
-              rules={[
-                { required: true, message: '请输入采集间隔' },
-                { type: 'number', min: 1, max: 100, message: '采集间隔必须在1-100之间' }
-              ]}
-            >
-              <Tooltip title="数据采集的时间间隔，越小越实时但资源消耗越高">
-                <InputNumber
-                  style={{ width: '100%' }}
-                  placeholder="采集间隔"
-                  min={1}
-                  max={100}
-                  size="large"
-                  style={styles.configNumber}
-                />
-              </Tooltip>
-            </Form.Item>
-            <div style={styles.formHelpText}>
-              数据采集的时间间隔，越小越实时但资源消耗越高
+              时间戳的显示格式
             </div>
           </Col>
           
-          <Col span={8}>
-            <Form.Item
-              name="request_timeout"
-              label={
-                <div style={styles.formLabel}>
-                  请求超时(秒)
-                </div>
-              }
-              style={styles.formItem}
-              rules={[
-                { required: true, message: '请输入请求超时时间' },
-                { type: 'number', min: 1, max: 20, message: '请求超时必须在1-20之间' }
-              ]}
-            >
-              <Tooltip title="网络请求的超时时间，避免长时间阻塞">
-                <InputNumber
-                  style={{ width: '100%' }}
-                  placeholder="请求超时"
-                  min={1}
-                  max={20}
-                  size="large"
-                  style={styles.configNumber}
-                />
-              </Tooltip>
-            </Form.Item>
-            <div style={styles.formHelpText}>
-              网络请求的超时时间，避免长时间阻塞
-            </div>
-          </Col>
-          
-          <Col span={8}>
-            <Form.Item
-              name="bulk_size"
-              label={
-                <div style={styles.formLabel}>
-                  批量大小(KB)
-                </div>
-              }
-              style={styles.formItem}
-              rules={[
-                { required: true, message: '请输入批量大小' },
-                { type: 'number', min: 16, max: 1024, message: '批量大小必须在16-1024之间' }
-              ]}
-            >
-              <Tooltip title="批量处理的数据包大小，影响传输效率">
-                <InputNumber
-                  style={{ width: '100%' }}
-                  placeholder="批量大小"
-                  min={16}
-                  max={1024}
-                  size="large"
-                  style={styles.configNumber}
-                />
-              </Tooltip>
-            </Form.Item>
-            <div style={styles.formHelpText}>
-              批量处理的数据包大小，影响传输效率
-            </div>
-          </Col>
-        </Row>
-        
-        <Row gutter={24}>
           <Col span={12}>
             <Form.Item
               name="max_size"
@@ -549,31 +599,20 @@ const CollectorConfigForm = ({
                 { type: 'number', min: 256, max: 1024, message: '最大文件大小必须在256-1024之间' }
               ]}
             >
-              <Tooltip title="单个日志文件的最大大小，超过后会自动轮转">
-                <InputNumber
-                  style={{ width: '100%' }}
-                  placeholder="最大文件大小"
-                  min={256}
-                  max={1024}
-                  size="large"
-                  style={styles.configNumber}
-                />
-              </Tooltip>
+              <InputNumber
+                placeholder="最大文件大小"
+                min={256}
+                max={1024}
+                size="large"
+                disabled={loading}
+                style={{ ...styles.configNumber, width: '100%' }}
+              />
             </Form.Item>
             <div style={styles.formHelpText}>
-              单个日志文件的最大大小，超过后会自动轮转
+              单个日志文件的最大大小
             </div>
           </Col>
         </Row>
-      </div>
-
-      {/* 高级配置 */}
-      <div style={styles.configSection}>
-        <div style={styles.configSectionTitle}>
-          <RadarChartOutlined style={{ color: '#1890ff' }} />
-          <span>高级配置</span>
-          <Tag color="blue">推荐配置</Tag>
-        </div>
         
         <Row gutter={24}>
           <Col span={8}>
@@ -581,29 +620,26 @@ const CollectorConfigForm = ({
               name="max_age"
               label={
                 <div style={styles.formLabel}>
-                  <Space>
-                    <ClockCircleOutlined />
-                    <span>最大保存天数</span>
-                  </Space>
+                  最大保存天数
                 </div>
               }
               style={styles.formItem}
               rules={[
                 { required: true, message: '请输入最大保存天数' },
-                { type: 'number', min: 1, max: 7, message: '最大保存天数必须在1-7之间' }
+                { type: 'number', min: 1, max: 30, message: '最大保存天数必须在1-30之间' }
               ]}
             >
               <InputNumber
-                style={{ width: '100%' }}
                 placeholder="最大保存天数"
                 min={1}
-                max={7}
+                max={30}
                 size="large"
-                style={styles.configNumber}
+                disabled={loading}
+                style={{ ...styles.configNumber, width: '100%' }}
               />
             </Form.Item>
             <div style={styles.formHelpText}>
-              日志文件的最大保存天数，超过后会自动清理
+              日志文件的最大保存天数
             </div>
           </Col>
           
@@ -616,28 +652,44 @@ const CollectorConfigForm = ({
                 </div>
               }
               style={styles.formItem}
+              rules={[
+                { required: true, message: '请输入轮转时间' },
+                { type: 'number', min: 1, max: 24, message: '轮转时间必须在1-24之间' }
+              ]}
             >
               <InputNumber
-                style={{ width: '100%' }}
                 placeholder="轮转时间"
                 min={1}
-                max={1}
+                max={24}
                 size="large"
-                style={styles.configNumber}
-                disabled
+                disabled={loading}
+                style={{ ...styles.configNumber, width: '100%' }}
               />
             </Form.Item>
             <div style={styles.formHelpText}>
-              日志文件的轮转时间间隔，当前固定为1小时
+              日志文件的轮转时间间隔
             </div>
           </Col>
-          
-          <Col span={8}>
+        </Row>
+      </div>
+
+      {/* Trace配置 */}
+      <div style={styles.configSection}>
+        <div style={styles.configSectionTitle}>
+          <RadarChartOutlined style={{ color: '#fa8c16' }} />
+          <span>Trace配置</span>
+        </div>
+        
+        <Row gutter={24}>
+          <Col span={12}>
             <Form.Item
               name="cleanup_interval"
               label={
                 <div style={styles.formLabel}>
-                  清理间隔(分钟)
+                  <Space>
+                    <ClockCircleOutlined />
+                    <span>清理间隔(分钟)</span>
+                  </Space>
                 </div>
               }
               style={styles.formItem}
@@ -647,21 +699,19 @@ const CollectorConfigForm = ({
               ]}
             >
               <InputNumber
-                style={{ width: '100%' }}
                 placeholder="清理间隔"
                 min={10}
                 max={60}
                 size="large"
-                style={styles.configNumber}
+                disabled={loading}
+                style={{ ...styles.configNumber, width: '100%' }}
               />
             </Form.Item>
             <div style={styles.formHelpText}>
               定期清理过期文件的时间间隔
             </div>
           </Col>
-        </Row>
-        
-        <Row gutter={24}>
+          
           <Col span={12}>
             <Form.Item
               name="max_sockets"
@@ -677,20 +727,62 @@ const CollectorConfigForm = ({
               ]}
             >
               <InputNumber
-                style={{ width: '100%' }}
                 placeholder="最大连接数"
                 min={510}
                 max={2048}
                 size="large"
-                style={styles.configNumber}
+                disabled={loading}
+                style={{ ...styles.configNumber, width: '100%' }}
               />
             </Form.Item>
             <div style={styles.formHelpText}>
-              允许的最大网络连接数，影响并发处理能力
+              允许的最大网络连接数
+            </div>
+          </Col>
+        </Row>
+      </div>
+
+      {/* eBPF配置 */}
+      <div style={styles.configSection}>
+        <div style={styles.configSectionTitle}>
+          <RadarChartOutlined style={{ color: '#eb2f96' }} />
+          <span>eBPF配置</span>
+          <Tag color="orange">系统资源敏感</Tag>
+        </div>
+        
+        <Row gutter={24}>
+          <Col span={8}>
+            <Form.Item
+              name="log_level"
+              label={
+                <div style={styles.formLabel}>
+                  日志级别
+                </div>
+              }
+              style={styles.formItem}
+              rules={[
+                { required: true, message: '请选择日志级别' }
+              ]}
+            >
+              <Select 
+                placeholder="请选择日志级别" 
+                size="large"
+                disabled={loading}
+                style={styles.configSelect}
+              >
+                <Option value={0}>off (关闭)</Option>
+                <Option value={1}>debug (调试)</Option>
+                <Option value={2}>info (信息)</Option>
+                <Option value={3}>verbose (详细)</Option>
+                <Option value={4}>stats (统计)</Option>
+              </Select>
+            </Form.Item>
+            <div style={styles.formHelpText}>
+              控制日志输出的详细程度
             </div>
           </Col>
           
-          <Col span={12}>
+          <Col span={8}>
             <Form.Item
               name="max_buffered_events"
               label={
@@ -705,28 +797,19 @@ const CollectorConfigForm = ({
               ]}
             >
               <InputNumber
-                style={{ width: '100%' }}
                 placeholder="最大缓冲事件数"
                 min={128}
                 max={512}
                 size="large"
-                style={styles.configNumber}
+                disabled={loading}
+                style={{ ...styles.configNumber, width: '100%' }}
               />
             </Form.Item>
             <div style={styles.formHelpText}>
-              内存中缓冲的最大事件数量，防止内存溢出
+              内存中缓冲的最大事件数量
             </div>
           </Col>
         </Row>
-      </div>
-
-      {/* 探针配置 */}
-      <div style={styles.configSection}>
-        <div style={styles.configSectionTitle}>
-          <RadarChartOutlined style={{ color: '#fa8c16' }} />
-          <span>探针配置</span>
-          <Tag color="orange">系统资源敏感</Tag>
-        </div>
         
         <Form.Item
           name="enabled_probes"
@@ -745,15 +828,15 @@ const CollectorConfigForm = ({
               mode="multiple"
               placeholder="请选择要启用的探针"
               size="large"
-              style={{ width: '100%' }}
+              disabled={loading}
               optionLabelProp="label"
-              style={styles.configSelect}
               maxTagCount="responsive"
               allowClear
               showSearch
               filterOption={(input, option) =>
                 option.children.toLowerCase().indexOf(input.toLowerCase()) >= 0
               }
+              style={styles.configSelect}
             >
               {probeOptions.map(probe => (
                 <Option key={probe.value} value={probe.value} label={probe.label}>
@@ -782,77 +865,14 @@ const CollectorConfigForm = ({
         </div>
       </div>
 
-      {/* 推送选项 */}
-      <div style={styles.configSection}>
-        <div style={styles.configSectionTitle}>
-          <SendOutlined style={{ color: '#52c41a' }} />
-          <span>推送选项</span>
-        </div>
-        
-        <Row gutter={24}>
-          <Col span={12}>
-            <Form.Item
-              name="restartMode"
-              label={
-                <div style={styles.formLabel}>
-                  重启模式
-                </div>
-              }
-              style={styles.formItem}
-            >
-              <Radio.Group size="large">
-                <Radio value="restart" style={{ marginRight: 16 }}>
-                  <Tooltip title="立即重启采集器，配置立即生效但会中断当前任务">
-                    立即重启
-                  </Tooltip>
-                </Radio>
-                <Radio value="delay" style={{ marginRight: 16 }}>
-                  <Tooltip title="延迟重启，在下一次采集器启动时应用配置">
-                    延迟重启
-                  </Tooltip>
-                </Radio>
-                <Radio value="none">
-                  <Tooltip title="不重启采集器，配置在采集器下次运行时生效">
-                    不重启
-                  </Tooltip>
-                </Radio>
-              </Radio.Group>
-            </Form.Item>
-            <div style={styles.formHelpText}>
-              配置生效的方式，立即重启会立即应用配置但会中断当前任务
-            </div>
-          </Col>
-        </Row>
-        
-        <Form.Item
-          name="description"
-          label={
-            <div style={styles.formLabel}>
-              推送描述
-            </div>
-          }
-          style={styles.formItem}
-          help="可选，描述本次配置推送的内容和目的"
-        >
-          <TextArea
-            rows={4}
-            placeholder="请输入配置推送的描述信息，例如：优化采集间隔，增加探针监控"
-            maxLength={200}
-            showCount
-            size="large"
-            style={styles.configInput}
-          />
-        </Form.Item>
-      </div>
-
       <Alert
-        message="推送说明"
+        message="配置说明"
         description={
           <div style={{ lineHeight: 1.6, fontSize: 13 }}>
-            <div>1. 配置推送后，采集器将根据选择的模式重启以应用新配置</div>
-            <div>2. 立即重启会中断当前的采集任务，建议在非高峰时段操作</div>
-            <div>3. 延迟重启会在下次采集器启动时应用新配置</div>
-            <div>4. 推送过程中请勿关闭页面，以免推送失败</div>
+            <div>1. 配置保存后，采集器将根据配置参数进行工作</div>
+            <div>2. 请根据实际监控需求和系统资源情况合理配置各项参数</div>
+            <div>3. 过多的探针和过短的采集间隔可能会影响系统性能</div>
+            <div>4. 配置过程中请确保参数设置合理，以免影响采集效果</div>
           </div>
         }
         type="info"

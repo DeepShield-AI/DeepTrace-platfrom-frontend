@@ -8,6 +8,7 @@ import {
   WeiboCircleOutlined,
   TaobaoCircleOutlined,
   MailOutlined,
+  ExperimentOutlined,
 } from '@ant-design/icons';
 import {
   LoginForm,
@@ -16,7 +17,7 @@ import {
   ProFormCheckbox,
 } from '@ant-design/pro-components';
 import { FormattedMessage, history, SelectLang, useIntl, useModel, Helmet } from '@umijs/max';
-import { Alert, message, Tabs, Modal, Button, Row, Col, Spin } from 'antd';
+import { Alert, message, Tabs, Modal, Button, Row, Col, Spin, Tooltip } from 'antd';
 import Settings from '../../../../config/defaultSettings';
 import React, { useState } from 'react';
 import { flushSync } from 'react-dom';
@@ -71,7 +72,6 @@ const useStyles = createStyles(({ token }) => {
         zIndex: 0,
       },
     },
-    // 全局加载遮罩层样式
     loadingOverlay: {
       position: 'absolute',
       top: 0,
@@ -86,7 +86,6 @@ const useStyles = createStyles(({ token }) => {
       borderRadius: '8px',
       backdropFilter: 'blur(10px)',
     },
-    // 登录卡片容器
     loginContent: {
       position: 'relative',
       zIndex: 1,
@@ -96,7 +95,6 @@ const useStyles = createStyles(({ token }) => {
       justifyContent: 'center',
       padding: '32px 24px',
     },
-    // 玻璃态登录卡片
     glassCard: {
       background: 'rgba(255, 255, 255, 0.95)',
       backdropFilter: 'blur(20px)',
@@ -119,7 +117,39 @@ const useStyles = createStyles(({ token }) => {
         background: 'linear-gradient(90deg, #667eea, #764ba2, #f093fb)',
       },
     },
-    // 登录按钮样式
+    testModeBtn: {
+      position: 'absolute',
+      top: '16px',
+      right: '16px',
+      zIndex: 10,
+      background: 'linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%)',
+      border: 'none',
+      borderRadius: '8px',
+      color: 'white',
+      fontSize: '12px',
+      fontWeight: '600',
+      padding: '6px 12px',
+      height: 'auto',
+      boxShadow: '0 2px 8px rgba(255, 107, 107, 0.4)',
+      transition: 'all 0.3s ease',
+      display: 'flex',
+      alignItems: 'center',
+      gap: '4px',
+      '&:hover': {
+        transform: 'translateY(-1px)',
+        boxShadow: '0 4px 12px rgba(255, 107, 107, 0.6)',
+        background: 'linear-gradient(135deg, #ff5252 0%, #d63031 100%)',
+      },
+      '&:active': {
+        transform: 'translateY(0)',
+      },
+      '&:disabled': {
+        background: 'rgba(153, 153, 153, 0.6)',
+        cursor: 'not-allowed',
+        transform: 'none',
+        boxShadow: 'none',
+      },
+    },
     loginBtn: {
       width: '100%',
       height: '48px',
@@ -138,8 +168,15 @@ const useStyles = createStyles(({ token }) => {
       '&:active': {
         transform: 'translateY(0)',
       },
+      '&:disabled': {
+        background: 'rgba(0, 0, 0, 0.1)',
+        borderColor: 'rgba(0, 0, 0, 0.1)',
+        color: 'rgba(0, 0, 0, 0.3)',
+        cursor: 'not-allowed',
+        transform: 'none',
+        boxShadow: 'none',
+      },
     },
-    // 注册按钮样式
     registerBtn: {
       height: '48px',
       marginLeft: '12px',
@@ -166,7 +203,6 @@ const useStyles = createStyles(({ token }) => {
         boxShadow: 'none',
       },
     },
-    // 按钮行容器
     buttonRow: {
       display: 'flex',
       alignItems: 'center',
@@ -174,14 +210,12 @@ const useStyles = createStyles(({ token }) => {
       position: 'relative',
       marginTop: '8px',
     },
-    // 禁用状态的表单容器
     formDisabled: {
       pointerEvents: 'none',
       opacity: 0.7,
       transition: 'all 0.3s ease',
       filter: 'blur(1px)',
     },
-    // 标题样式
     title: {
       textAlign: 'center',
       marginBottom: '8px',
@@ -192,14 +226,12 @@ const useStyles = createStyles(({ token }) => {
       fontSize: '32px',
       fontWeight: '700',
     },
-    // 副标题样式
     subtitle: {
       textAlign: 'center',
       color: 'rgba(0, 0, 0, 0.6)',
       marginBottom: '32px',
       fontSize: '14px',
     },
-    // 输入框样式
     inputField: {
       borderRadius: '12px',
       border: '2px solid rgba(0, 0, 0, 0.1)',
@@ -220,9 +252,9 @@ const useStyles = createStyles(({ token }) => {
         background: 'rgba(255, 255, 255, 0.5)',
         borderColor: 'rgba(0, 0, 0, 0.05)',
         cursor: 'not-allowed',
+        transform: 'none',
       },
     },
-    // 标签页样式
     tabs: {
       '& .ant-tabs-tab': {
         padding: '12px 24px',
@@ -243,7 +275,6 @@ const useStyles = createStyles(({ token }) => {
         borderRadius: '2px',
       },
     },
-    // 注册弹窗高级样式
     registerModal: {
       '&.ant-modal': {
         zIndex: 1001,
@@ -320,6 +351,7 @@ const useStyles = createStyles(({ token }) => {
         '&:focus': {
           borderColor: '#667eea',
           boxShadow: '0 0 0 3px rgba(102, 126, 234, 0.1)',
+          background: 'rgba(255, 255, 255, 0.95)',
           transform: 'translateY(-1px)',
         },
         '&:hover': {
@@ -358,7 +390,6 @@ const useStyles = createStyles(({ token }) => {
         },
       },
     },
-    // 动画定义
     '@global': {
       '@keyframes gradientShift': {
         '0%': { backgroundPosition: '0% 50%' },
@@ -418,7 +449,6 @@ const LoginMessage: React.FC<{
   );
 };
 
-// 优化后的注册弹窗组件
 const RegisterModal: React.FC<{
   visible: boolean;
   onCancel: () => void;
@@ -676,6 +706,69 @@ const Login: React.FC = () => {
     }
   };
 
+  // 修改后的测试模式函数 - 添加跳转逻辑
+  const enterTestMode = async () => {
+    const testToken = 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ0ZXN0XzUiLCJjcmVhdGVkIjoxNzY2NjQ4MTM1NDEwLCJleHAiOjE3NjY2NTE3MzV9.PR3KKVdFHNgpeJ-LtL2EwUJuFHGWFNOnX5Hc4GJdPGk';
+    const testUsername = '当前是mock模式';
+    
+    try {
+      setLoginLoading(true);
+      
+      // 存储到localStorage
+      localStorage.setItem('auth_token', testToken);
+      localStorage.setItem('username', testUsername);
+      localStorage.setItem('test_mode', 'true');
+      localStorage.setItem('test_mode_activated_time', new Date().toISOString());
+      
+      console.log('测试模式已激活');
+      console.log('Token:', testToken);
+      console.log('用户名:', testUsername);
+      
+      // 模拟用户信息，用于设置初始状态
+      const mockUserInfo = {
+        name: testUsername,
+        avatar: '',
+        userid: 'test_user_001',
+        email: 'test@example.com',
+        signature: '测试用户',
+        title: '测试员',
+        group: '测试组',
+        tags: [{ key: 'test', label: '测试用户' }],
+        notifyCount: 0,
+        unreadCount: 0,
+        country: 'China',
+        access: 'admin',
+        geographic: {
+          province: { label: '浙江省', key: '330000' },
+          city: { label: '杭州市', key: '330100' }
+        },
+        address: '测试地址',
+        phone: '13800000000',
+      };
+      
+      // 设置初始状态，模拟登录成功
+      flushSync(() => {
+        setInitialState((s) => ({
+          ...s,
+          currentUser: mockUserInfo,
+        }));
+      });
+      
+      message.success('测试模式登录成功！正在跳转到首页...');
+      
+      // 延迟跳转，让用户看到成功消息
+      setTimeout(() => {
+        const urlParams = new URL(window.location.href).searchParams;
+        history.push(urlParams.get('redirect') || '/');
+      }, 1000);
+      
+    } catch (error) {
+      console.error('设置测试模式失败:', error);
+      message.error('测试模式设置失败，请检查控制台');
+      setLoginLoading(false);
+    }
+  };
+
   const handleSubmit = async (values: API.LoginParams) => {
     try {
       setLoginLoading(true);
@@ -746,12 +839,26 @@ const Login: React.FC = () => {
       
       {loginLoading && (
         <div className={styles.loadingOverlay}>
-          <Spin size="large" tip="登录中，请稍候..." />
+          <Spin size="large" tip={loginLoading ? "登录中，请稍候..." : "跳转中..."} />
         </div>
       )}
       
       <div className={styles.loginContent}>
         <div className={styles.glassCard}>
+          <Tooltip title="点击进入测试模式，自动设置Mock Token并跳转到首页" placement="left">
+            <Button
+              type="primary"
+              className={styles.testModeBtn}
+              onClick={enterTestMode}
+              icon={<ExperimentOutlined />}
+              size="small"
+              disabled={loginLoading}
+              loading={loginLoading}
+            >
+              {loginLoading ? '跳转中...' : '测试模式'}
+            </Button>
+          </Tooltip>
+          
           <LoginForm
             contentStyle={{
               minWidth: 280,
@@ -759,7 +866,6 @@ const Login: React.FC = () => {
             }}
             logo={<img alt="logo" src="/logo.svg" style={{ height: '48px', marginBottom: '8px' }} />}
             title={<div className={styles.title}>网络设施防范</div>}
-            // subTitle={<div className={styles.subtitle}>安全登录，守护您的数字资产</div>}
             initialValues={{
               autoLogin: true,
             }}
