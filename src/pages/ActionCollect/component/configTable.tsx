@@ -520,10 +520,12 @@ export default () => {
       max_sockets: 1024,
       log_level: 1,
       max_buffered_events: 128,
-      enabled_probes: DEFAULT_ENABLED_PROBES
+      enabled_probes: [] // 默认为空数组，让用户自己选择
     };
     
     setFormInitialValues(defaultValues);
+    // 直接初始化表单值
+    configForm.setFieldsValue(defaultValues);
     setOpen(true);
   };
 
@@ -562,6 +564,8 @@ export default () => {
     
     console.log('编辑模式初始值:', parsedValues);
     setFormInitialValues(parsedValues);
+    // 直接初始化表单值
+    configForm.setFieldsValue(parsedValues);
     setEditOpen(true);
   };
 
@@ -570,6 +574,8 @@ export default () => {
     console.log('构建配置数据，表单值:', values);
     console.log('从localStorage获取的userName:', userName);
     console.log('是否为编辑模式:', isEdit);
+    // 特别打印interval值
+    console.log('interval值:', values.interval);
     
     const configData = {
       agent_info: {
@@ -607,7 +613,8 @@ export default () => {
         trace: {
           log_level: values.log_level || 1,
           max_buffered_events: values.max_buffered_events || 128,
-          enabled_probes: values.enabled_probes || DEFAULT_ENABLED_PROBES,
+          // 特殊处理数组字段，确保使用表单中的值（即使是空数组）
+          enabled_probes: Array.isArray(values.enabled_probes) ? values.enabled_probes : DEFAULT_ENABLED_PROBES,
         }
       }
     };
@@ -630,37 +637,60 @@ export default () => {
     try {
       setSubmitLoading(true);
       
+      console.log('开始提交表单...');
+      
       // 验证表单
+      console.log('正在验证表单...');
       const values = await configForm.validateFields();
       console.log('表单验证通过，值:', values);
+      
+      // 特别打印enabled_probes值
+      console.log('enabled_probes值:', values.enabled_probes);
       
       // 从localStorage获取userName
       const userName = localStorage.getItem('username');
       console.log('从localStorage获取userName:', userName);
       
       // 构建配置数据，将userName作为参数传入
+      console.log('正在构建配置数据...');
       const agentConfigData = buildAgentConfigData(values, userName, !!currentRecord?.id);
       
       console.log('最终提交数据:', JSON.stringify(agentConfigData, null, 2));
+      
+      // 恢复接口调用
+      console.log('=== 恢复接口调用 ===');
       
       let res;
       if (currentRecord?.id) {
         // 编辑配置
         console.log('编辑配置，ID:', currentRecord.id);
-        res = await updateAgentConfigTable(currentRecord.id, agentConfigData);
+        // 将id包含在配置数据中，以便API能够识别要更新的记录
+        const updatedConfigData = {
+          ...agentConfigData,
+          id: currentRecord.id
+        };
+        console.log('编辑模式提交数据:', JSON.stringify(updatedConfigData, null, 2));
+        // 恢复接口调用
+        res = await updateAgentConfigTable(updatedConfigData);
       } else {
         // 新增配置
         console.log('新增配置');
+        console.log('新增模式提交数据:', JSON.stringify(agentConfigData, null, 2));
+        // 恢复接口调用
         res = await updateAgentConfigTable(agentConfigData);
       }
       
       console.log('API响应:', res);
       
-      if (res?.code === 200) {
+      // 处理axios响应对象，获取实际的API响应数据
+      const apiResponse = res?.data || res;
+      console.log('实际API响应数据:', apiResponse);
+      
+      if (apiResponse?.code === 200) {
         const operationType = currentRecord?.id ? '修改' : '新增';
         message.success(`${operationType}成功`);
         
-        // 刷新表格
+        // 刷新表格，显示最新数据
         if (tableRef.current) {
           tableRef.current.reload();
         } else {
@@ -673,11 +703,13 @@ export default () => {
         setFormInitialValues(null);
       } else {
         const operationType = currentRecord?.id ? '修改' : '新增';
-        message.error(`${operationType}失败：${res?.message || '未知错误'}`);
+        message.error(`${operationType}失败：${apiResponse?.message || '未知错误'}`);
       }
     } catch (error) {
       console.error("提交配置出错:", error);
-      message.error('操作失败：' + error.message);
+      console.error("错误详情:", error.errors);
+      console.error("错误消息:", error.message);
+      message.error('操作失败：' + (error.message || '表单验证失败'));
     } finally {
       setSubmitLoading(false);
     }
@@ -722,7 +754,7 @@ export default () => {
               onClick={showDrawer}
               style={styles.primaryButton}
             >
-              新增采集器
+              新增配置
             </Button>
             <Button
               icon={<ReloadOutlined />}
@@ -882,7 +914,7 @@ export default () => {
 
       {/* 新增配置抽屉 */}
       <Drawer
-        title="创建采集器配置"
+        title="创建配置"
         width={900}
         onClose={onClose}
         open={open}
@@ -901,7 +933,7 @@ export default () => {
                 loading={submitLoading}
                 style={styles.primaryButton}
               >
-                创建配置
+                保存配置
               </Button>
             </Space>
           </div>
@@ -913,6 +945,14 @@ export default () => {
           validateIP={validateIP}
           loading={submitLoading}
           initialValues={formInitialValues}
+          onValuesChange={(changedValues, allValues) => {
+            console.log('子组件表单值变化:', changedValues);
+            console.log('子组件当前所有值:', allValues);
+            // 特别打印enabled_probes值
+            console.log('子组件enabled_probes值:', allValues.enabled_probes);
+            // 特别打印interval值
+            console.log('子组件interval值:', allValues.interval);
+          }}
         />
       </Drawer>
 

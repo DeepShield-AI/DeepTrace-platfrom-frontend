@@ -1,0 +1,16 @@
+[
+    {
+        "starttime": 123323423,
+        "endtime": 123323423,
+        "nice_usage": 123,
+        "cpu_usage": 123,
+        "memory_usage": 123
+    },
+    {
+        "starttime": 123323423,
+        "endtime": 123323423,
+        "nice_usage": 123,
+        "cpu_usage": 123,
+        "memory_usage": 123
+    }
+]

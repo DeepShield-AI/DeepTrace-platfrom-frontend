@@ -185,11 +185,13 @@ const parseConfigToFormValues = (configString, currentCollector) => {
 
 const CollectorConfigForm = ({
   form,
+  onValuesChange,
   currentCollector,
   validateIP,
   validateSSHPort,
   formItemLayout = {},
-  loading = false
+  loading = false,
+  initialValues = null
 }) => {
   // IP地址验证规则
   const internalValidateIP = validateIP || ((_, value) => {
@@ -222,78 +224,7 @@ const CollectorConfigForm = ({
     return Promise.resolve();
   });
 
-  // 初始化表单值 - 只在组件挂载或currentCollector变化时执行
-  React.useEffect(() => {
-    if (form) {
-      console.log('初始化表单值，currentCollector:', currentCollector);
-      
-      if (currentCollector?.config) {
-        // 如果是编辑模式，从配置字符串解析
-        const parsedValues = parseConfigToFormValues(currentCollector.config, currentCollector);
-        if (parsedValues) {
-          console.log('从配置解析的表单值:', parsedValues);
-          form.setFieldsValue(parsedValues);
-        } else {
-          // 解析失败，使用默认值
-          form.setFieldsValue({
-            agent_name: currentCollector.agentName || '',
-            host_ip: currentCollector.hostIp || '',
-            host_password: '',
-            ssh_port: 22,
-            interval: 10,
-            request_timeout: 10,
-            bulk_size: 64,
-            max_size: 512,
-            max_age: 6,
-            rotate_time: 1,
-            data_format: "%Y%m%d",
-            cleanup_interval: 30,
-            max_sockets: 1024,
-            log_level: 1,
-            max_buffered_events: 128,
-            enabled_probes: DEFAULT_ENABLED_PROBES
-          });
-        }
-      } else if (currentCollector) {
-        // 如果有currentCollector但没有config，使用基本信息
-        form.setFieldsValue({
-          agent_name: currentCollector.agentName || '',
-          host_ip: currentCollector.hostIp || '',
-          host_password: '',
-          ssh_port: 22,
-          interval: 10,
-          request_timeout: 10,
-          bulk_size: 64,
-          max_size: 512,
-          max_age: 6,
-          rotate_time: 1,
-          data_format: "%Y%m%d",
-          cleanup_interval: 30,
-          max_sockets: 1024,
-          log_level: 1,
-          max_buffered_events: 128,
-          enabled_probes: DEFAULT_ENABLED_PROBES
-        });
-      } else {
-        // 新增模式，设置默认值
-        form.setFieldsValue({
-          ssh_port: 22,
-          interval: 10,
-          request_timeout: 10,
-          bulk_size: 64,
-          max_size: 512,
-          max_age: 6,
-          rotate_time: 1,
-          data_format: "%Y%m%d",
-          cleanup_interval: 30,
-          max_sockets: 1024,
-          log_level: 1,
-          max_buffered_events: 128,
-          enabled_probes: DEFAULT_ENABLED_PROBES
-        });
-      }
-    }
-  }, [form, currentCollector]);
+  // 表单初始化逻辑已移至父组件，避免在用户编辑过程中重置表单值
 
   return (
     <Form
@@ -305,6 +236,10 @@ const CollectorConfigForm = ({
       onValuesChange={(changedValues, allValues) => {
         console.log('表单值变化:', changedValues);
         console.log('当前所有值:', allValues);
+        // 通知父组件表单值变化
+        if (onValuesChange) {
+          onValuesChange(changedValues, allValues);
+        }
       }}
     >
       {/* Agent信息配置 */}
@@ -463,16 +398,21 @@ const CollectorConfigForm = ({
                 { type: 'number', min: 1, max: 100, message: '采集间隔必须在1-100之间' }
               ]}
             >
-              <Tooltip title="数据采集的时间间隔">
-                <InputNumber
-                  placeholder="采集间隔"
-                  min={1}
-                  max={100}
-                  size="large"
-                  disabled={loading}
-                  style={{ ...styles.configNumber, width: '100%' }}
-                />
-              </Tooltip>
+              <InputNumber
+                placeholder="采集间隔"
+                min={1}
+                max={100}
+                size="large"
+                disabled={loading}
+                style={{ ...styles.configNumber, width: '100%' }}
+                onChange={(value) => {
+                  console.log('InputNumber onChange:', value);
+                  // 手动设置表单值
+                  if (form) {
+                    form.setFieldsValue({ interval: value });
+                  }
+                }}
+              />
             </Form.Item>
             <div style={styles.formHelpText}>
               数据采集的时间间隔
@@ -818,33 +758,40 @@ const CollectorConfigForm = ({
               启用探针
             </div>
           }
-          style={styles.formItem}
+          style={{
+            ...styles.formItem,
+            ...styles.probeSelectContainer
+          }}
           rules={[
-            { required: true, message: '请选择要启用的探针' }
+            {
+              validator: (_, value) => {
+                if (!value || value.length === 0) {
+                  return Promise.reject(new Error('请选择要启用的探针'));
+                }
+                return Promise.resolve();
+              }
+            }
           ]}
         >
-          <div style={styles.probeSelectContainer}>
-            <Select
-              mode="multiple"
-              placeholder="请选择要启用的探针"
-              size="large"
-              disabled={loading}
-              optionLabelProp="label"
-              maxTagCount="responsive"
-              allowClear
-              showSearch
-              filterOption={(input, option) =>
-                option.children.toLowerCase().indexOf(input.toLowerCase()) >= 0
-              }
-              style={styles.configSelect}
-            >
-              {probeOptions.map(probe => (
-                <Option key={probe.value} value={probe.value} label={probe.label}>
-                  {probe.label}
-                </Option>
-              ))}
-            </Select>
-          </div>
+          <Select
+            mode="multiple"
+            placeholder="请选择要启用的探针"
+            size="large"
+            disabled={loading}
+            maxTagCount="responsive"
+            allowClear
+            showSearch
+            filterOption={(input, option) =>
+              option.props.children.toLowerCase().indexOf(input.toLowerCase()) >= 0
+            }
+            style={styles.configSelect}
+          >
+            {probeOptions.map(probe => (
+              <Option key={probe.value} value={probe.value}>
+                {probe.label}
+              </Option>
+            ))}
+          </Select>
         </Form.Item>
         
         <Alert
