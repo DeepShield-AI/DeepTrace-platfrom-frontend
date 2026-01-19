@@ -731,7 +731,8 @@ const NetworkMetrics = () => {
   const SkeletonCard = () => (
     <Card
       style={{ 
-        height: '520px',
+        minHeight: '520px',
+        height: '100%',
         borderRadius: '8px',
         overflow: 'hidden'
       }}
@@ -1268,7 +1269,7 @@ const NetworkMetrics = () => {
               const businessInfo = businessData[container.business];
               
               return (
-                <Col xs={24} sm={12} md={8} lg={6} key={containerKey}>
+                <Col xs={24} sm={12} md={8} lg={6} key={containerKey} style={{ display: 'flex', flexDirection: 'column', alignItems: 'stretch' }}>
                   {isLoading ? (
                     <SkeletonCard />
                   ) : (
@@ -1305,7 +1306,8 @@ const NetworkMetrics = () => {
                             flex: 1,
                             display: 'flex',
                             flexDirection: 'column',
-                            overflow: 'hidden'
+                            overflow: 'hidden',
+                            minHeight: 0
                           }}
                           cover={
                             <div style={{ 
@@ -1392,7 +1394,8 @@ const NetworkMetrics = () => {
                                 display: 'flex',
                                 flexDirection: 'column',
                                 overflow: 'hidden',
-                                height: '100%'
+                                height: 'calc(100% - 64px)', /* reserve space for title/alerts */
+                                minHeight: 0
                               }}>
                                 {hasAnomalies && (
                                   <div style={{ 
@@ -1437,7 +1440,9 @@ const NetworkMetrics = () => {
                                     overflowY: 'auto',
                                     overflowX: 'hidden',
                                     paddingRight: '4px',
-                                    minHeight: 0
+                                    paddingBottom: '12px',
+                                    minHeight: 0,
+                                    maxHeight: '260px' /* 固定最大高度以确保出现滚动条 */
                                   }}
                                 >
                                   {businessInfo && (
@@ -1551,7 +1556,15 @@ const NetworkMetrics = () => {
                                   <div style={{ paddingBottom: '8px' }}>
                                     <Text strong>创建时间:</Text>
                                     <br />
-                                    <Text type="secondary" style={{ fontSize: '12px' }}>
+                                    <Text
+                                      type="secondary"
+                                      style={{
+                                        fontSize: '12px',
+                                        whiteSpace: 'normal',
+                                        wordBreak: 'break-all',
+                                        overflowWrap: 'break-word'
+                                      }}
+                                    >
                                       {container.createTime}
                                     </Text>
                                   </div>
