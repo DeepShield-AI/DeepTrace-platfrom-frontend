@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+// 在 src/pages/DataView/index.tsx 顶部 imports 区
+import useResizeObserver from '../../hooks/useResizeObserver';
 import { 
   Row, 
   Col, 
@@ -1273,308 +1275,268 @@ const NetworkMetrics = () => {
                   {isLoading ? (
                     <SkeletonCard />
                   ) : (
-                    <Popover
-                      content={getHoverContent(container)}
-                      title="容器信息概览"
-                      trigger="hover"
-                      open={hoveredCard === containerKey}
-                      onOpenChange={(visible) => setHoveredCard(visible ? containerKey : null)}
-                      overlayStyle={{ maxWidth: '300px' }}
-                    >
-                      <Badge.Ribbon 
-                        text={getStatusText(container.status)} 
-                        color={getStatusColor(container.status)}
+                    // 将 Card 包在一个 div 上并 attach ref
+                    <div style={{ display: 'flex', flexDirection: 'column', height: '520px' }}>
+                      <Popover
+                        content={getHoverContent(container)}
+                        title="容器信息概览"
+                        trigger="hover"
+                        open={hoveredCard === containerKey}
+                        onOpenChange={(visible) => setHoveredCard(visible ? containerKey : null)}
+                        overlayStyle={{ maxWidth: '300px' }}
                       >
-                        <Card
-                          hoverable
-                          onClick={() => handleCardClick(container.id, container.machineId)}
-                          onMouseEnter={() => setHoveredCard(containerKey)}
-                          onMouseLeave={() => setHoveredCard(null)}
-                          style={{ 
-                            height: '520px',
-                            cursor: 'pointer',
-                            transition: 'all 0.3s ease',
-                            borderRadius: '8px',
-                            overflow: 'hidden',
-                            border: hasAnomalies ? '1px solid #ffc53d' : '1px solid #e8e8e8',
-                            boxShadow: hasAnomalies ? '0 2px 8px rgba(255, 197, 61, 0.2)' : '0 2px 8px rgba(0,0,0,0.09)',
-                            display: 'flex',
-                            flexDirection: 'column'
-                          }}
-                          bodyStyle={{ 
-                            padding: '16px', 
-                            flex: 1,
-                            display: 'flex',
-                            flexDirection: 'column',
-                            overflow: 'hidden',
-                            minHeight: 0
-                          }}
-                          cover={
-                            <div style={{ 
-                              background: hasAnomalies 
-                                ? 'linear-gradient(135deg, #fff7e6 0%, #fff2e8 100%)' 
-                                : 'linear-gradient(135deg, #f0f8ff 0%, #e6f7ff 100%)', 
-                              padding: '20px', 
-                              textAlign: 'center',
-                              position: 'relative',
-                              flexShrink: 0,
-                              height: '100px'
-                            }}>
-                              {hasAnomalies && (
-                                <div style={{
-                                  position: 'absolute',
-                                  top: '8px',
-                                  right: '8px',
-                                  background: 'rgba(255, 255, 255, 0.9)',
-                                  borderRadius: '50%',
-                                  width: '24px',
-                                  height: '24px',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'center'
-                                }}>
-                                  <ExclamationCircleOutlined style={{ color: '#ffc53d', fontSize: '16px' }} />
-                                </div>
-                              )}
-                              {businessInfo && (
-                                <div style={{
-                                  position: 'absolute',
-                                  top: '8px',
-                                  left: '8px',
-                                  background: 'rgba(255, 255, 255, 0.9)',
-                                  borderRadius: '4px',
-                                  padding: '2px 6px',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'center'
-                                }}>
-                                  {React.cloneElement(businessInfo.icon, { 
-                                    style: { 
-                                      color: businessInfo.color, 
-                                      fontSize: '12px',
-                                      marginRight: '4px'
-                                    } 
-                                  })}
-                                  <Text style={{ fontSize: '10px', color: businessInfo.color }}>
-                                    {businessInfo.name}
-                                  </Text>
-                                </div>
-                              )}
-                              <CloudServerOutlined style={{ 
-                                fontSize: '48px', 
-                                color: hasAnomalies ? '#ffc53d' : '#69c0ff' 
-                              }} />
-                            </div>
-                          }
+                        <Badge.Ribbon 
+                          text={getStatusText(container.status)} 
+                          color={getStatusColor(container.status)}
                         >
-                          <Meta
-                            title={
-                              <Space direction="vertical" size="small" style={{ width: '100%' }}>
-                                <Space>
-                                  <CodeOutlined style={{ color: hasAnomalies ? '#ffc53d' : '#69c0ff' }} />
-                                  <Text strong style={{ fontSize: '16px' }}>{container.name}</Text>
-                                </Space>
-                                {hasAnomalies && (
-                                  <div>
-                                    <Tag 
-                                      color="#ffc53d" 
-                                      icon={<ExclamationCircleOutlined />}
-                                      style={{ fontSize: '12px' }}
-                                    >
-                                      {anomalies.length}个异常
-                                    </Tag>
-                                  </div>
-                                )}
-                              </Space>
-                            }
-                            description={
+                          <Card
+                            hoverable
+                            onClick={() => handleCardClick(container.id, container.machineId)}
+                            onMouseEnter={() => setHoveredCard(containerKey)}
+                            onMouseLeave={() => setHoveredCard(null)}
+                            style={{ 
+                              height: '100%', /* 使用外层 div height */
+                              cursor: 'pointer',
+                              transition: 'all 0.3s ease',
+                              borderRadius: '8px',
+                              overflow: 'hidden',
+                              border: hasAnomalies ? '1px solid #ffc53d' : '1px solid #e8e8e8',
+                              boxShadow: hasAnomalies ? '0 2px 8px rgba(255, 197, 61, 0.2)' : '0 2px 8px rgba(0,0,0,0.09)',
+                              display: 'flex',
+                              flexDirection: 'column'
+                            }}
+                            bodyStyle={{ 
+                              padding: '16px', 
+                              flex: 1,
+                              display: 'flex',
+                              flexDirection: 'column',
+                              overflow: 'hidden',
+                              minHeight: 0
+                            }}
+                            cover={
                               <div style={{ 
-                                marginTop: '12px', 
-                                flex: 1,
-                                display: 'flex',
-                                flexDirection: 'column',
-                                overflow: 'hidden',
-                                height: 'calc(100% - 64px)', /* reserve space for title/alerts */
-                                minHeight: 0
+                                background: hasAnomalies 
+                                  ? 'linear-gradient(135deg, #fff7e6 0%, #fff2e8 100%)' 
+                                  : 'linear-gradient(135deg, #f0f8ff 0%, #e6f7ff 100%)', 
+                                padding: '20px', 
+                                textAlign: 'center',
+                                position: 'relative',
+                                flexShrink: 0,
+                                height: '100px'
                               }}>
                                 {hasAnomalies && (
-                                  <div style={{ 
-                                    flexShrink: 0, 
-                                    marginBottom: '12px',
-                                    maxHeight: '80px',
-                                    overflow: 'hidden'
+                                  <div style={{
+                                    position: 'absolute',
+                                    top: '8px',
+                                    right: '8px',
+                                    background: 'rgba(255, 255, 255, 0.9)',
+                                    borderRadius: '50%',
+                                    width: '24px',
+                                    height: '24px',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center'
                                   }}>
-                                    {anomalies.slice(0, 1).map((anomaly, index) => (
-                                      <Alert
-                                        key={index}
-                                        message={anomaly.message}
-                                        type={anomaly.level === 'error' ? 'error' : 'warning'}
-                                        showIcon
-                                        icon={anomaly.level === 'error' ? <ExclamationCircleOutlined /> : <WarningOutlined />}
-                                        style={{ 
-                                          fontSize: '12px', 
-                                          padding: '4px 8px',
-                                          marginBottom: '4px',
-                                          borderRadius: '4px'
-                                        }}
-                                        size="small"
-                                      />
-                                    ))}
-                                    {anomalies.length > 1 && (
-                                      <div style={{ 
-                                        fontSize: '11px', 
-                                        color: '#ffc53d',
-                                        textAlign: 'center',
-                                        marginTop: '4px'
-                                      }}>
-                                        <InfoCircleOutlined /> 还有{anomalies.length - 1}个异常...
-                                      </div>
-                                    )}
+                                    <ExclamationCircleOutlined style={{ color: '#ffc53d', fontSize: '16px' }} />
                                   </div>
                                 )}
-                                
-                                <div 
-                                  className="container-card-scrollbar"
-                                  style={{ 
-                                    flex: 1,
-                                    overflowY: 'auto',
-                                    overflowX: 'hidden',
-                                    paddingRight: '4px',
-                                    paddingBottom: '12px',
-                                    minHeight: 0,
-                                    maxHeight: '260px' /* 固定最大高度以确保出现滚动条 */
-                                  }}
-                                >
-                                  {businessInfo && (
-                                    <div style={{ marginBottom: '8px' }}>
-                                      <Text strong>业务:</Text>
-                                      <br />
-                                      <Space>
-                                        {businessInfo.icon}
-                                        <Tag 
-                                          color={businessInfo.color} 
-                                          style={{ 
-                                            fontSize: '11px', 
-                                            padding: '2px 6px',
-                                            marginTop: '2px'
-                                          }}
-                                        >
-                                          {businessInfo.name}
-                                        </Tag>
-                                      </Space>
-                                    </div>
-                                  )}
-                                  
-                                  <div style={{ marginBottom: '8px' }}>
-                                    <Text strong>镜像:</Text>
-                                    <br />
-                                    <Text type="secondary" style={{ fontSize: '12px', wordBreak: 'break-word' }}>
-                                      {container.image}
+                                {businessInfo && (
+                                  <div style={{
+                                    position: 'absolute',
+                                    top: '8px',
+                                    left: '8px',
+                                    background: 'rgba(255, 255, 255, 0.9)',
+                                    borderRadius: '4px',
+                                    padding: '2px 6px',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center'
+                                  }}>
+                                    {React.cloneElement(businessInfo.icon, { 
+                                      style: { 
+                                        color: businessInfo.color, 
+                                        fontSize: '12px',
+                                        marginRight: '4px'
+                                      } 
+                                    })}
+                                    <Text style={{ fontSize: '10px', color: businessInfo.color }}>
+                                      {businessInfo.name}
                                     </Text>
                                   </div>
-                                  
-                                  <div style={{ marginBottom: '12px' }}>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                                      <Text strong>CPU使用率:</Text>
-                                      <Tooltip title={container.cpuUsage > 80 ? "CPU使用率过高" : "正常"}>
+                                )}
+                                <CloudServerOutlined style={{ 
+                                  fontSize: '48px', 
+                                  color: hasAnomalies ? '#ffc53d' : '#69c0ff' 
+                                }} />
+                              </div>
+                            }
+                          >
+                            <Meta
+                              title={
+                                <Space direction="vertical" size="small" style={{ width: '100%' }}>
+                                  <Space>
+                                    <CodeOutlined style={{ color: hasAnomalies ? '#ffc53d' : '#69c0ff' }} />
+                                    <Text strong style={{ fontSize: '16px' }}>{container.name}</Text>
+                                  </Space>
+                                  {hasAnomalies && (
+                                    <div>
+                                      <Tag 
+                                        color="#ffc53d" 
+                                        icon={<ExclamationCircleOutlined />}
+                                        style={{ fontSize: '12px' }}
+                                      >
+                                        {anomalies.length}个异常
+                                      </Tag>
+                                    </div>
+                                  )}
+                                </Space>
+                              }
+                              description={
+                                <div style={{ marginTop: '12px', flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0 }}>
+                                  {/* -------- 内部可滚动区：把 maxHeight 改为计算值 -------- */}
+                                  <div
+                                    className="container-card-scrollbar"
+                                    style={{
+                                      flex: 1,
+                                      overflowY: 'auto',
+                                      overflowX: 'hidden',
+                                      paddingRight: '4px',
+                                      paddingBottom: '12px',
+                                      minHeight: 0,
+                                      maxHeight: '260px' /* 固定最大高度以确保出现滚动条 */
+                                    }}
+                                  >
+                                    {businessInfo && (
+                                      <div style={{ marginBottom: '8px' }}>
+                                        <Text strong>业务:</Text>
+                                        <br />
+                                        <Space>
+                                          {businessInfo.icon}
+                                          <Tag 
+                                            color={businessInfo.color} 
+                                            style={{ 
+                                              fontSize: '11px', 
+                                              padding: '2px 6px',
+                                              marginTop: '2px'
+                                            }}
+                                          >
+                                            {businessInfo.name}
+                                          </Tag>
+                                        </Space>
+                                      </div>
+                                    )}
+                                    
+                                    <div style={{ marginBottom: '8px' }}>
+                                      <Text strong>镜像:</Text>
+                                      <br />
+                                      <Text type="secondary" style={{ fontSize: '12px', wordBreak: 'break-word' }}>
+                                        {container.image}
+                                      </Text>
+                                    </div>
+                                    
+                                    <div style={{ marginBottom: '12px' }}>
+                                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                                        <Text strong>CPU使用率:</Text>
+                                        <Tooltip title={container.cpuUsage > 80 ? "CPU使用率过高" : "正常"}>
+                                          <Space size={4}>
+                                            <Text style={{ 
+                                              fontSize: '12px', 
+                                              fontWeight: 'bold',
+                                              color: getProgressColor(container.cpuUsage)
+                                            }}>
+                                              {formatNumber(container.cpuUsage)}%
+                                            </Text>
+                                            {container.cpuUsage > 80 && (
+                                              <ExclamationCircleOutlined style={{ 
+                                                color: getProgressColor(container.cpuUsage),
+                                                fontSize: '12px'
+                                              }} />
+                                            )}
+                                          </Space>
+                                        </Tooltip>
+                                      </div>
+                                      <Progress 
+                                        percent={container.cpuUsage} 
+                                        size="small" 
+                                        strokeColor={getProgressColor(container.cpuUsage)}
+                                        style={{ marginTop: '4px' }}
+                                        showInfo={false}
+                                      />
+                                    </div>
+                                    
+                                    <div style={{ marginBottom: '12px' }}>
+                                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                                        <Text strong>内存使用率:</Text>
                                         <Space size={4}>
                                           <Text style={{ 
                                             fontSize: '12px', 
                                             fontWeight: 'bold',
-                                            color: getProgressColor(container.cpuUsage)
+                                            color: getProgressColor(container.memoryUsage)
                                           }}>
-                                            {formatNumber(container.cpuUsage)}%
+                                            {formatNumber(container.memoryUsage)}%
                                           </Text>
-                                          {container.cpuUsage > 80 && (
-                                            <ExclamationCircleOutlined style={{ 
-                                              color: getProgressColor(container.cpuUsage),
-                                              fontSize: '12px'
-                                            }} />
-                                          )}
                                         </Space>
-                                      </Tooltip>
+                                      </div>
+                                      <Progress 
+                                        percent={container.memoryUsage} 
+                                        size="small" 
+                                        strokeColor={getProgressColor(container.memoryUsage)}
+                                        style={{ marginTop: '4px' }}
+                                        showInfo={false}
+                                      />
                                     </div>
-                                    <Progress 
-                                      percent={container.cpuUsage} 
-                                      size="small" 
-                                      strokeColor={getProgressColor(container.cpuUsage)}
-                                      style={{ marginTop: '4px' }}
-                                      showInfo={false}
-                                    />
-                                  </div>
-                                  
-                                  <div style={{ marginBottom: '12px' }}>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                                      <Text strong>内存使用率:</Text>
-                                      <Space size={4}>
-                                        <Text style={{ 
-                                          fontSize: '12px', 
-                                          fontWeight: 'bold',
-                                          color: getProgressColor(container.memoryUsage)
-                                        }}>
-                                          {formatNumber(container.memoryUsage)}%
-                                        </Text>
+                                    
+                                    <div style={{ marginBottom: '8px' }}>
+                                      <Text strong>端口映射:</Text>
+                                      <br />
+                                      <Space size={[0, 4]} wrap style={{ marginTop: '4px' }}>
+                                        {container.ports.map((port, index) => (
+                                          <Tag 
+                                            key={index} 
+                                            color="blue" 
+                                            style={{ 
+                                              fontSize: '11px', 
+                                              padding: '2px 6px',
+                                              marginBottom: '4px'
+                                            }}
+                                          >
+                                            {port}
+                                          </Tag>
+                                        ))}
                                       </Space>
                                     </div>
-                                    <Progress 
-                                      percent={container.memoryUsage} 
-                                      size="small" 
-                                      strokeColor={getProgressColor(container.memoryUsage)}
-                                      style={{ marginTop: '4px' }}
-                                      showInfo={false}
-                                    />
-                                  </div>
-                                  
-                                  <div style={{ marginBottom: '8px' }}>
-                                    <Text strong>端口映射:</Text>
-                                    <br />
-                                    <Space size={[0, 4]} wrap style={{ marginTop: '4px' }}>
-                                      {container.ports.map((port, index) => (
-                                        <Tag 
-                                          key={index} 
-                                          color="blue" 
-                                          style={{ 
-                                            fontSize: '11px', 
-                                            padding: '2px 6px',
-                                            marginBottom: '4px'
-                                          }}
-                                        >
-                                          {port}
-                                        </Tag>
-                                      ))}
-                                    </Space>
-                                  </div>
-                                  
-                                  <div style={{ marginBottom: '8px' }}>
-                                    <Text strong>所属机器:</Text>
-                                    <br />
-                                    <Text type="secondary" style={{ fontSize: '12px' }}>
-                                      {container.hostname} ({container.machineIp})
-                                    </Text>
-                                  </div>
-                                  
-                                  <div style={{ paddingBottom: '8px' }}>
-                                    <Text strong>创建时间:</Text>
-                                    <br />
-                                    <Text
-                                      type="secondary"
-                                      style={{
-                                        fontSize: '12px',
-                                        whiteSpace: 'normal',
-                                        wordBreak: 'break-all',
-                                        overflowWrap: 'break-word'
-                                      }}
-                                    >
-                                      {container.createTime}
-                                    </Text>
+                                    
+                                    <div style={{ marginBottom: '8px' }}>
+                                      <Text strong>所属机器:</Text>
+                                      <br />
+                                      <Text type="secondary" style={{ fontSize: '12px' }}>
+                                        {container.hostname} ({container.machineIp})
+                                      </Text>
+                                    </div>
+                                    
+                                    <div style={{ paddingBottom: '8px' }}>
+                                      <Text strong>创建时间:</Text>
+                                      <br />
+                                      <Text
+                                        type="secondary"
+                                        style={{
+                                          fontSize: '12px',
+                                          whiteSpace: 'normal',
+                                          wordBreak: 'break-all',
+                                          overflowWrap: 'break-word'
+                                        }}
+                                      >
+                                        {container.createTime}
+                                      </Text>
+                                    </div>
                                   </div>
                                 </div>
-                              </div>
-                            }
-                          />
-                        </Card>
-                      </Badge.Ribbon>
-                    </Popover>
+                              }
+                            />
+                          </Card>
+                        </Badge.Ribbon>
+                      </Popover>
+                    </div>
                   )}
                 </Col>
               );
