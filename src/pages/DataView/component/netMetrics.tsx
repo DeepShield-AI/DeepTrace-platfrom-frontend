@@ -34,6 +34,14 @@ import {
   CloseOutlined
 } from '@ant-design/icons';
 import { ProCard, PageContainer } from '@ant-design/pro-components';
+import metrics from '@/services/metrics/metrics';
+
+// 查询 CPU 曲线
+const data = await metrics.getCpu({ startTime, endTime, agentName: 'agent1', cpu: 1 });
+
+// 查询 agent 列表
+const resp = await metrics.getAgentList({ page:1, size: 50 });
+console.log(resp.content);
 
 const { Title, Text } = Typography;
 const { Option } = Select;
