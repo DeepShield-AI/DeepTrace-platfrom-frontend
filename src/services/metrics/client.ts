@@ -1,3 +1,4 @@
+// axios client（baseURL、timeout、拦截器）
 import axios from 'axios';
 
 export const client = axios.create({

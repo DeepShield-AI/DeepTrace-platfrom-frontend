@@ -1,3 +1,4 @@
+// 低层 REST API 封装（直接对应每个 HTTP endpoint）
 import { client } from './client';
 
 // 是否使用本地 mock 数据（通过环境变量控制）
@@ -5,7 +6,7 @@ const USE_MOCK = process.env.REACT_APP_USE_MOCK === 'false';
 
 /**
  * 动态加载 mock 数据文件的辅助函数
- * 说明：mock 文件是 CommonJS 格式的 .js 文件，为了兼容导入，这里使用 require
+ * !! mock 文件是 CommonJS 格式的 .js 文件，为了兼容导入，这里使用 require
  * return：mock 模块导出的对象（包含各种测试数据）
  */
 async function loadMock() {

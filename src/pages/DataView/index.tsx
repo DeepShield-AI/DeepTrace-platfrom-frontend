@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-// 在 src/pages/DataView/index.tsx 顶部 imports 区
 import useResizeObserver from '../../hooks/useResizeObserver';
+import ContainerCard from '../../components/ContainerCard';
+// import type { Dayjs } from 'dayjs';
 import { 
   Row, 
   Col, 
@@ -54,7 +55,7 @@ const { Option } = Select;
 const { Search } = Input;
 
 // 业务数据定义
-const businessData = {
+const businessData: Record<string, any> = {
   'ecommerce': {
     id: 'ecommerce',
     name: '电商业务',
@@ -232,33 +233,33 @@ const mockMachines = [
 
 const NetworkMetrics = () => {
   const navigate = useNavigate();
-  const [machines, setMachines] = useState([]);
-  const [allContainers, setAllContainers] = useState([]);
-  const [filteredContainers, setFilteredContainers] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [dateRange, setDateRange] = useState([]);
-  const [statusFilter, setStatusFilter] = useState('all');
-  const [businessFilter, setBusinessFilter] = useState([]); // 多选业务筛选
-  const [searchText, setSearchText] = useState('');
-  const [hoveredCard, setHoveredCard] = useState(null);
-  const [autoRefresh, setAutoRefresh] = useState(false);
-  const [refreshInterval, setRefreshInterval] = useState(30);
-  const [lastRefreshTime, setLastRefreshTime] = useState(null);
-  const [nextRefreshTime, setNextRefreshTime] = useState(null);
-  const [cardLoading, setCardLoading] = useState({}); // 单个卡片加载状态
-  const [showBusinessPanel, setShowBusinessPanel] = useState(true); // 是否显示业务概览面板
-  const [selectedBusinessDetail, setSelectedBusinessDetail] = useState(null); // 选中的业务详情
+  const [machines, setMachines] = useState<any[]>([]);
+  const [allContainers, setAllContainers] = useState<any[]>([]);
+  const [filteredContainers, setFilteredContainers] = useState<any[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [dateRange, setDateRange] = useState<any[]>([]);
+  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [businessFilter, setBusinessFilter] = useState<string[]>([]); // 多选业务筛选
+  const [searchText, setSearchText] = useState<string>('');
+  const [hoveredCard, setHoveredCard] = useState<string | null>(null);
+  const [autoRefresh, setAutoRefresh] = useState<boolean>(false);
+  const [refreshInterval, setRefreshInterval] = useState<number>(30);
+  const [lastRefreshTime, setLastRefreshTime] = useState<Date | null>(null);
+  const [nextRefreshTime, setNextRefreshTime] = useState<Date | null>(null);
+  const [cardLoading, setCardLoading] = useState<Record<string, boolean>>({}); // 单个卡片加载状态
+  const [showBusinessPanel, setShowBusinessPanel] = useState<boolean>(true); // 是否显示业务概览面板
+  const [selectedBusinessDetail, setSelectedBusinessDetail] = useState<any | null>(null); // 选中的业务详情
 
   // 格式化数字为小数点后两位
-  const formatNumber = (num) => {
+  const formatNumber = (num: number | any): string => {
     if (typeof num !== 'number') return '0.00';
     return num.toFixed(2);
   };
 
   // 扁平化容器数据
-  const flattenContainers = (machinesData) => {
-    return machinesData.flatMap(machine => 
-      machine.containers.map(container => ({
+  const flattenContainers = (machinesData: any[]): any[] => {
+    return machinesData.flatMap((machine: any) => 
+      machine.containers.map((container: any) => ({
         ...container,
         machineId: machine.machineId,
         machineName: machine.machineName,
@@ -275,7 +276,7 @@ const NetworkMetrics = () => {
 
   // 获取业务统计信息
   const getBusinessStats = () => {
-    const stats = {};
+    const stats: Record<string, any> = {};
     
     // 初始化所有业务
     Object.keys(businessData).forEach(businessId => {
@@ -291,7 +292,7 @@ const NetworkMetrics = () => {
     });
     
     // 统计容器数据
-    allContainers.forEach(container => {
+    allContainers.forEach((container: any) => {
       const businessId = container.business || 'infrastructure';
       if (stats[businessId]) {
         stats[businessId].containerCount += 1;
@@ -336,10 +337,10 @@ const NetworkMetrics = () => {
     try {
       // 重置所有卡片的加载状态
       const loadingStates = {};
-      mockMachines.forEach(machine => {
-        machine.containers.forEach(container => {
+      mockMachines.forEach((machine: any) => {
+        machine.containers.forEach((container: any) => {
           const containerKey = `${machine.machineId}-${container.id}`;
-          loadingStates[containerKey] = true;
+          (loadingStates as Record<string, boolean>)[containerKey] = true;
         });
       });
       setCardLoading(loadingStates);
@@ -368,7 +369,7 @@ const NetworkMetrics = () => {
         setLastRefreshTime(new Date());
         
         // 模拟卡片逐个加载完成的效果
-        const containerKeys = containers.map(container => 
+        const containerKeys = containers.map((container: any) => 
           `${container.machineId}-${container.id}`
         );
         
@@ -424,7 +425,7 @@ const NetworkMetrics = () => {
   }, [autoRefresh, refreshInterval]);
 
   // 检查容器是否有异常
-  const checkContainerAnomalies = (container) => {
+  const checkContainerAnomalies = (container: any) => {
     const anomalies = [];
     
     if (container.cpuUsage > 80) {
@@ -455,7 +456,7 @@ const NetworkMetrics = () => {
   };
 
   // 获取进度条颜色
-  const getProgressColor = (usage, type) => {
+  const getProgressColor = (usage: number, type?: string) => {
     if (usage > 90) return '#ff7875';
     if (usage > 80) return '#ffc53d';
     if (usage > 60) return '#69c0ff';
@@ -463,18 +464,18 @@ const NetworkMetrics = () => {
   };
 
   // 获取业务颜色
-  const getBusinessColor = (businessId) => {
+  const getBusinessColor = (businessId: string) => {
     return businessData[businessId]?.color || '#d9d9d9';
   };
 
   // 获取业务名称
-  const getBusinessName = (businessId) => {
+  const getBusinessName = (businessId: string) => {
     return businessData[businessId]?.name || businessId;
   };
 
   // 获取业务优先级标签
-  const getPriorityTag = (priority) => {
-    const priorityConfig = {
+  const getPriorityTag = (priority: string) => {
+    const priorityConfig: Record<string, { color: string; text: string }> = {
       'critical': { color: '#f5222d', text: '关键' },
       'high': { color: '#fa8c16', text: '高' },
       'medium': { color: '#52c41a', text: '中' },
@@ -529,7 +530,7 @@ const NetworkMetrics = () => {
     applyFilters();
   }, [dateRange, statusFilter, businessFilter, searchText, allContainers]);
 
-  const handleCardClick = (containerId, machineId) => {
+  const handleCardClick = (containerId: string, machineId: string) => {
     const containerKey = `${machineId}-${containerId}`;
     
     // 设置当前卡片为加载状态
@@ -551,8 +552,8 @@ const NetworkMetrics = () => {
     setDateRange([]);
   };
 
-  const getStatusColor = (status) => {
-    const statusColors = {
+  const getStatusColor = (status: string) => {
+    const statusColors: Record<string, string> = {
       running: '#73d13d',
       stopped: '#ff7875',
       paused: '#ffc53d',
@@ -563,8 +564,8 @@ const NetworkMetrics = () => {
     return statusColors[status] || '#d9d9d9';
   };
 
-  const getStatusText = (status) => {
-    const statusTexts = {
+  const getStatusText = (status: string) => {
+    const statusTexts: Record<string, string> = {
       running: '运行中',
       stopped: '已停止',
       paused: '已暂停',
@@ -576,13 +577,13 @@ const NetworkMetrics = () => {
   };
 
   // 获取业务详情
-  const getBusinessDetail = (businessId) => {
+  const getBusinessDetail = (businessId: string) => {
     const stats = getBusinessStats();
     return stats[businessId];
   };
 
   // 处理业务卡片点击
-  const handleBusinessCardClick = (businessId) => {
+  const handleBusinessCardClick = (businessId: string) => {
     if (selectedBusinessDetail && selectedBusinessDetail.id === businessId) {
       setSelectedBusinessDetail(null);
       setBusinessFilter([]);
@@ -594,7 +595,7 @@ const NetworkMetrics = () => {
   };
 
   // 鼠标悬停时的缩略信息框内容
-  const getHoverContent = (container) => {
+  const getHoverContent = (container: any) => {
     const anomalies = checkContainerAnomalies(container);
     const hasAnomalies = anomalies.length > 0;
     const businessInfo = businessData[container.business];
@@ -713,9 +714,9 @@ const NetworkMetrics = () => {
   const businessStats = getBusinessStats();
 
   // 格式化时间显示
-  const formatTime = (date) => {
+  const formatTime = (date?: Date | null) => {
     if (!date) return '';
-    return date.toLocaleTimeString('zh-CN', { 
+    return date.toLocaleTimeString('zh-CN', {
       hour: '2-digit', 
       minute: '2-digit', 
       second: '2-digit' 
@@ -725,8 +726,9 @@ const NetworkMetrics = () => {
   // 计算距离下次刷新的时间
   const getTimeUntilNextRefresh = () => {
     if (!nextRefreshTime) return 0;
-    const now = new Date();
-    return Math.max(0, Math.ceil((nextRefreshTime - now) / 1000));
+    const now = new Date().getTime();
+    const next = nextRefreshTime.getTime();
+    return Math.max(0, Math.ceil((next - now) / 1000));
   };
 
   // 骨架屏卡片组件
@@ -754,7 +756,7 @@ const NetworkMetrics = () => {
   );
 
   // 业务统计卡片
-  const BusinessStatsCard = ({ businessId }) => {
+  const BusinessStatsCard = ({ businessId }: { businessId: string }) => {
     const stats = businessStats[businessId];
     if (!stats) return null;
     
@@ -899,6 +901,8 @@ const NetworkMetrics = () => {
     );
   };
 
+  // 使用共用组件 ContainerCard
+
   return (
     <div style={{ padding: '24px', background: '#fafafa', minHeight: '100vh' }}>
       <div style={{ maxWidth: '1400px', margin: '0 auto' }}>
@@ -1029,10 +1033,10 @@ const NetworkMetrics = () => {
               <div style={{ marginTop: '16px', padding: '12px', background: '#f6ffed', borderRadius: '6px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <Space>
-                    {selectedBusinessDetail.icon}
-                    <Text strong>{selectedBusinessDetail.name} - 业务详情</Text>
-                    {getPriorityTag(selectedBusinessDetail.priority)}
-                    <Tag color={selectedBusinessDetail.color}>
+                    {(selectedBusinessDetail as any).icon}
+                    <Text strong>{(selectedBusinessDetail as any).name} - 业务详情</Text>
+                    {getPriorityTag((selectedBusinessDetail as any).priority)}
+                    <Tag color={(selectedBusinessDetail as any).color}>
                       已选择 ({filteredContainers.length} 个容器)
                     </Tag>
                   </Space>
@@ -1099,8 +1103,8 @@ const NetworkMetrics = () => {
                 <RangePicker
                   style={{ marginTop: '8px', width: '100%' }}
                   placeholder={['开始日期', '结束日期']}
-                  value={dateRange}
-                  onChange={setDateRange}
+                  value={dateRange as any}
+                  onChange={(dates: any) => setDateRange(dates ? [dates[0], dates[1]] : [])}
                   suffixIcon={<CalendarOutlined />}
                   size="large"
                 />
@@ -1267,277 +1271,21 @@ const NetworkMetrics = () => {
               const anomalies = checkContainerAnomalies(container);
               const hasAnomalies = anomalies.length > 0;
               const containerKey = `${container.machineId}-${container.id}`;
-              const isLoading = cardLoading[containerKey];
-              const businessInfo = businessData[container.business];
-              
               return (
                 <Col xs={24} sm={12} md={8} lg={6} key={containerKey} style={{ display: 'flex', flexDirection: 'column', alignItems: 'stretch' }}>
-                  {isLoading ? (
-                    <SkeletonCard />
-                  ) : (
-                    // 将 Card 包在一个 div 上并 attach ref
-                    <div style={{ display: 'flex', flexDirection: 'column', height: '520px' }}>
-                      <Popover
-                        content={getHoverContent(container)}
-                        title="容器信息概览"
-                        trigger="hover"
-                        open={hoveredCard === containerKey}
-                        onOpenChange={(visible) => setHoveredCard(visible ? containerKey : null)}
-                        overlayStyle={{ maxWidth: '300px' }}
-                      >
-                        <Badge.Ribbon 
-                          text={getStatusText(container.status)} 
-                          color={getStatusColor(container.status)}
-                        >
-                          <Card
-                            hoverable
-                            onClick={() => handleCardClick(container.id, container.machineId)}
-                            onMouseEnter={() => setHoveredCard(containerKey)}
-                            onMouseLeave={() => setHoveredCard(null)}
-                            style={{ 
-                              height: '100%', /* 使用外层 div height */
-                              cursor: 'pointer',
-                              transition: 'all 0.3s ease',
-                              borderRadius: '8px',
-                              overflow: 'hidden',
-                              border: hasAnomalies ? '1px solid #ffc53d' : '1px solid #e8e8e8',
-                              boxShadow: hasAnomalies ? '0 2px 8px rgba(255, 197, 61, 0.2)' : '0 2px 8px rgba(0,0,0,0.09)',
-                              display: 'flex',
-                              flexDirection: 'column'
-                            }}
-                            bodyStyle={{ 
-                              padding: '16px', 
-                              flex: 1,
-                              display: 'flex',
-                              flexDirection: 'column',
-                              overflow: 'hidden',
-                              minHeight: 0
-                            }}
-                            cover={
-                              <div style={{ 
-                                background: hasAnomalies 
-                                  ? 'linear-gradient(135deg, #fff7e6 0%, #fff2e8 100%)' 
-                                  : 'linear-gradient(135deg, #f0f8ff 0%, #e6f7ff 100%)', 
-                                padding: '20px', 
-                                textAlign: 'center',
-                                position: 'relative',
-                                flexShrink: 0,
-                                height: '100px'
-                              }}>
-                                {hasAnomalies && (
-                                  <div style={{
-                                    position: 'absolute',
-                                    top: '8px',
-                                    right: '8px',
-                                    background: 'rgba(255, 255, 255, 0.9)',
-                                    borderRadius: '50%',
-                                    width: '24px',
-                                    height: '24px',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center'
-                                  }}>
-                                    <ExclamationCircleOutlined style={{ color: '#ffc53d', fontSize: '16px' }} />
-                                  </div>
-                                )}
-                                {businessInfo && (
-                                  <div style={{
-                                    position: 'absolute',
-                                    top: '8px',
-                                    left: '8px',
-                                    background: 'rgba(255, 255, 255, 0.9)',
-                                    borderRadius: '4px',
-                                    padding: '2px 6px',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center'
-                                  }}>
-                                    {React.cloneElement(businessInfo.icon, { 
-                                      style: { 
-                                        color: businessInfo.color, 
-                                        fontSize: '12px',
-                                        marginRight: '4px'
-                                      } 
-                                    })}
-                                    <Text style={{ fontSize: '10px', color: businessInfo.color }}>
-                                      {businessInfo.name}
-                                    </Text>
-                                  </div>
-                                )}
-                                <CloudServerOutlined style={{ 
-                                  fontSize: '48px', 
-                                  color: hasAnomalies ? '#ffc53d' : '#69c0ff' 
-                                }} />
-                              </div>
-                            }
-                          >
-                            <Meta
-                              title={
-                                <Space direction="vertical" size="small" style={{ width: '100%' }}>
-                                  <Space>
-                                    <CodeOutlined style={{ color: hasAnomalies ? '#ffc53d' : '#69c0ff' }} />
-                                    <Text strong style={{ fontSize: '16px' }}>{container.name}</Text>
-                                  </Space>
-                                  {hasAnomalies && (
-                                    <div>
-                                      <Tag 
-                                        color="#ffc53d" 
-                                        icon={<ExclamationCircleOutlined />}
-                                        style={{ fontSize: '12px' }}
-                                      >
-                                        {anomalies.length}个异常
-                                      </Tag>
-                                    </div>
-                                  )}
-                                </Space>
-                              }
-                              description={
-                                <div style={{ marginTop: '12px', flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0 }}>
-                                  {/* -------- 内部可滚动区：把 maxHeight 改为计算值 -------- */}
-                                  <div
-                                    className="container-card-scrollbar"
-                                    style={{
-                                      flex: 1,
-                                      overflowY: 'auto',
-                                      overflowX: 'hidden',
-                                      paddingRight: '4px',
-                                      paddingBottom: '12px',
-                                      minHeight: 0,
-                                      maxHeight: '260px' /* 固定最大高度以确保出现滚动条 */
-                                    }}
-                                  >
-                                    {businessInfo && (
-                                      <div style={{ marginBottom: '8px' }}>
-                                        <Text strong>业务:</Text>
-                                        <br />
-                                        <Space>
-                                          {businessInfo.icon}
-                                          <Tag 
-                                            color={businessInfo.color} 
-                                            style={{ 
-                                              fontSize: '11px', 
-                                              padding: '2px 6px',
-                                              marginTop: '2px'
-                                            }}
-                                          >
-                                            {businessInfo.name}
-                                          </Tag>
-                                        </Space>
-                                      </div>
-                                    )}
-                                    
-                                    <div style={{ marginBottom: '8px' }}>
-                                      <Text strong>镜像:</Text>
-                                      <br />
-                                      <Text type="secondary" style={{ fontSize: '12px', wordBreak: 'break-word' }}>
-                                        {container.image}
-                                      </Text>
-                                    </div>
-                                    
-                                    <div style={{ marginBottom: '12px' }}>
-                                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                                        <Text strong>CPU使用率:</Text>
-                                        <Tooltip title={container.cpuUsage > 80 ? "CPU使用率过高" : "正常"}>
-                                          <Space size={4}>
-                                            <Text style={{ 
-                                              fontSize: '12px', 
-                                              fontWeight: 'bold',
-                                              color: getProgressColor(container.cpuUsage)
-                                            }}>
-                                              {formatNumber(container.cpuUsage)}%
-                                            </Text>
-                                            {container.cpuUsage > 80 && (
-                                              <ExclamationCircleOutlined style={{ 
-                                                color: getProgressColor(container.cpuUsage),
-                                                fontSize: '12px'
-                                              }} />
-                                            )}
-                                          </Space>
-                                        </Tooltip>
-                                      </div>
-                                      <Progress 
-                                        percent={container.cpuUsage} 
-                                        size="small" 
-                                        strokeColor={getProgressColor(container.cpuUsage)}
-                                        style={{ marginTop: '4px' }}
-                                        showInfo={false}
-                                      />
-                                    </div>
-                                    
-                                    <div style={{ marginBottom: '12px' }}>
-                                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                                        <Text strong>内存使用率:</Text>
-                                        <Space size={4}>
-                                          <Text style={{ 
-                                            fontSize: '12px', 
-                                            fontWeight: 'bold',
-                                            color: getProgressColor(container.memoryUsage)
-                                          }}>
-                                            {formatNumber(container.memoryUsage)}%
-                                          </Text>
-                                        </Space>
-                                      </div>
-                                      <Progress 
-                                        percent={container.memoryUsage} 
-                                        size="small" 
-                                        strokeColor={getProgressColor(container.memoryUsage)}
-                                        style={{ marginTop: '4px' }}
-                                        showInfo={false}
-                                      />
-                                    </div>
-                                    
-                                    <div style={{ marginBottom: '8px' }}>
-                                      <Text strong>端口映射:</Text>
-                                      <br />
-                                      <Space size={[0, 4]} wrap style={{ marginTop: '4px' }}>
-                                        {container.ports.map((port, index) => (
-                                          <Tag 
-                                            key={index} 
-                                            color="blue" 
-                                            style={{ 
-                                              fontSize: '11px', 
-                                              padding: '2px 6px',
-                                              marginBottom: '4px'
-                                            }}
-                                          >
-                                            {port}
-                                          </Tag>
-                                        ))}
-                                      </Space>
-                                    </div>
-                                    
-                                    <div style={{ marginBottom: '8px' }}>
-                                      <Text strong>所属机器:</Text>
-                                      <br />
-                                      <Text type="secondary" style={{ fontSize: '12px' }}>
-                                        {container.hostname} ({container.machineIp})
-                                      </Text>
-                                    </div>
-                                    
-                                    <div style={{ paddingBottom: '8px' }}>
-                                      <Text strong>创建时间:</Text>
-                                      <br />
-                                      <Text
-                                        type="secondary"
-                                        style={{
-                                          fontSize: '12px',
-                                          whiteSpace: 'normal',
-                                          wordBreak: 'break-all',
-                                          overflowWrap: 'break-word'
-                                        }}
-                                      >
-                                        {container.createTime}
-                                      </Text>
-                                    </div>
-                                  </div>
-                                </div>
-                              }
-                            />
-                          </Card>
-                        </Badge.Ribbon>
-                      </Popover>
-                    </div>
-                  )}
+                  <ContainerCard
+                    container={container}
+                    cardLoading={cardLoading}
+                    hoveredCard={hoveredCard}
+                    setHoveredCard={setHoveredCard}
+                    handleCardClick={handleCardClick}
+                    getProgressColor={getProgressColor}
+                    formatNumber={formatNumber}
+                    checkContainerAnomalies={checkContainerAnomalies}
+                    getStatusText={getStatusText}
+                    getStatusColor={getStatusColor}
+                    businessData={businessData}
+                  />
                 </Col>
               );
             })
