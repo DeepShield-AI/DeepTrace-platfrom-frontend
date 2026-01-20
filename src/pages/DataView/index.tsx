@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import useResizeObserver from '../../hooks/useResizeObserver';
 import ContainerCard from '../../components/ContainerCard';
+import BusinessStatsCard from '../../components/BusinessStatsCard';
 // import type { Dayjs } from 'dayjs';
 import { 
   Row, 
@@ -646,152 +646,6 @@ const NetworkMetrics = () => {
     </Card>
   );
 
-  // 业务统计卡片
-  const BusinessStatsCard = ({ businessId }: { businessId: string }) => {
-    const stats = businessStats[businessId];
-    if (!stats) return null;
-    
-    const isSelected = selectedBusinessDetail?.id === businessId;
-    const containerCount = stats.containerCount || 0;
-    const warningCount = stats.warningCount || 0;
-    const errorCount = stats.errorCount || 0;
-    
-    return (
-      <Card
-        hoverable
-        onClick={() => handleBusinessCardClick(businessId)}
-        style={{
-          borderRadius: '8px',
-          border: isSelected ? `2px solid ${stats.color}` : '1px solid #e8e8e8',
-          backgroundColor: isSelected ? `${stats.color}10` : '#fff',
-          transition: 'all 0.3s',
-          cursor: 'pointer',
-          height: '100%'
-        }}
-        bodyStyle={{ padding: '12px' }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', marginBottom: '8px' }}>
-          <div style={{ 
-            width: '32px', 
-            height: '32px', 
-            borderRadius: '6px',
-            backgroundColor: `${stats.color}20`,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            marginRight: '8px'
-          }}>
-            {React.cloneElement(stats.icon, { style: { color: stats.color, fontSize: '16px' } })}
-          </div>
-          <div style={{ flex: 1 }}>
-            <Text strong style={{ fontSize: '14px' }}>{stats.name}</Text>
-            <div>
-              {getPriorityTag(stats.priority)}
-              {isSelected && (
-                <Tag color="blue" style={{ fontSize: '10px', padding: '0 4px', marginLeft: '4px' }}>
-                  已选择
-                </Tag>
-              )}
-            </div>
-          </div>
-        </div>
-        
-        <div style={{ marginBottom: '8px' }}>
-          <Text type="secondary" style={{ fontSize: '12px' }}>{stats.description}</Text>
-        </div>
-        
-        <Divider style={{ margin: '8px 0' }} />
-        
-        <Row gutter={8}>
-          <Col span={12}>
-            <Statistic
-              title="容器数量"
-              value={containerCount}
-              valueStyle={{ fontSize: '20px', fontWeight: 'bold' }}
-            />
-          </Col>
-          <Col span={12}>
-            <div style={{ textAlign: 'right' }}>
-              <div style={{ fontSize: '12px', color: '#8c8c8c', marginBottom: '4px' }}>运行中</div>
-              <div style={{ fontSize: '16px', fontWeight: 'bold', color: '#52c41a' }}>
-                {stats.runningCount || 0}
-              </div>
-            </div>
-          </Col>
-        </Row>
-        
-        {containerCount > 0 && (
-          <>
-            <div style={{ marginTop: '8px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                <Text type="secondary" style={{ fontSize: '12px' }}>平均CPU</Text>
-                <Text strong style={{ fontSize: '12px', color: getProgressColor(stats.avgCpuUsage) }}>
-                  {formatNumber(stats.avgCpuUsage)}%
-                </Text>
-              </div>
-              <Progress 
-                percent={stats.avgCpuUsage} 
-                size="small" 
-                strokeColor={getProgressColor(stats.avgCpuUsage)}
-                showInfo={false}
-              />
-            </div>
-            
-            <div style={{ marginTop: '8px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                <Text type="secondary" style={{ fontSize: '12px' }}>平均内存</Text>
-                <Text strong style={{ fontSize: '12px', color: getProgressColor(stats.avgMemoryUsage) }}>
-                  {formatNumber(stats.avgMemoryUsage)}%
-                </Text>
-              </div>
-              <Progress 
-                percent={stats.avgMemoryUsage} 
-                size="small" 
-                strokeColor={getProgressColor(stats.avgMemoryUsage)}
-                showInfo={false}
-              />
-            </div>
-          </>
-        )}
-        
-        {(warningCount > 0 || errorCount > 0) && (
-          <div style={{ 
-            marginTop: '8px', 
-            padding: '4px 8px', 
-            borderRadius: '4px',
-            backgroundColor: errorCount > 0 ? '#fff1f0' : '#fff7e6',
-            border: `1px solid ${errorCount > 0 ? '#ffccc7' : '#ffe58f'}`
-          }}>
-            <Space>
-              {errorCount > 0 && (
-                <Tag color="error" style={{ fontSize: '10px', margin: 0 }}>
-                  异常: {errorCount}
-                </Tag>
-              )}
-              {warningCount > 0 && (
-                <Tag color="warning" style={{ fontSize: '10px', margin: 0 }}>
-                  警告: {warningCount}
-                </Tag>
-              )}
-            </Space>
-          </div>
-        )}
-        
-        {containerCount === 0 && (
-          <div style={{ 
-            marginTop: '8px', 
-            padding: '8px',
-            textAlign: 'center',
-            backgroundColor: '#fafafa',
-            borderRadius: '4px'
-          }}>
-            <Text type="secondary" style={{ fontSize: '12px' }}>暂无容器</Text>
-          </div>
-        )}
-      </Card>
-    );
-  };
-
   return (
     <div style={{ padding: '24px', background: '#fafafa', minHeight: '100vh' }}>
       <div style={{ maxWidth: '1400px', margin: '0 auto' }}>
@@ -913,7 +767,15 @@ const NetworkMetrics = () => {
             <Row gutter={[16, 16]}>
               {Object.keys(businessStats).map(businessId => (
                 <Col xs={24} sm={12} md={8} lg={4.8} key={businessId}>
-                  <BusinessStatsCard businessId={businessId} />
+                  <BusinessStatsCard
+                    businessId={businessId}
+                    stats={businessStats[businessId]}
+                    isSelected={selectedBusinessDetail?.id === businessId}
+                    onClick={handleBusinessCardClick}
+                    formatNumber={formatNumber}
+                    getProgressColor={getProgressColor}
+                    getPriorityTag={getPriorityTag}
+                  />
                 </Col>
               ))}
             </Row>
