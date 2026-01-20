@@ -1,9 +1,10 @@
 import React from 'react';
-import { Card, Badge, Popover, Space, Tag, Tooltip, Progress } from 'antd';
+import { Card, Badge, Popover, Space, Tag, Tooltip, Progress, Typography } from 'antd';
 import { CloudServerOutlined, CodeOutlined, ExclamationCircleOutlined } from '@ant-design/icons';
 import useResizeObserver from '../../hooks/useResizeObserver';
 
 const { Meta } = Card as any;
+const { Text } = Typography as any;
 
 type Props = {
   container: any;
@@ -50,15 +51,117 @@ const ContainerCard: React.FC<Props> = ({
 
   if (isLoading) return <SkeletonPlaceholder />;
 
+  const hoverContent = (
+    <div style={{ width: 280, padding: '12px' }}>
+      <div style={{ marginBottom: '8px' }}>
+        <Text strong style={{ fontSize: '14px' }}>{container.name}</Text>
+        {hasAnomalies && (
+          <Tag 
+            color="#ffc53d" 
+            style={{ marginLeft: '8px', fontSize: '10px' }}
+            icon={<ExclamationCircleOutlined />}
+          >
+            {anomalies.length}个异常
+          </Tag>
+        )}
+      </div>
+
+      {businessInfo && (
+        <div style={{ marginBottom: '6px' }}>
+          <Space>
+            {businessInfo.icon}
+            <Text type="secondary" style={{ fontSize: '12px' }}>
+              业务: <Tag color={businessInfo.color} style={{ fontSize: '10px', marginLeft: '4px' }}>
+                {businessInfo.name}
+              </Tag>
+            </Text>
+          </Space>
+        </div>
+      )}
+
+      <div style={{ marginBottom: '6px' }}>
+        <Text type="secondary" style={{ fontSize: '12px' }}>镜像: {container.image}</Text>
+      </div>
+
+      <div style={{ marginBottom: '6px' }}>
+        <Text type="secondary" style={{ fontSize: '12px' }}>状态: 
+          <Tag 
+            color={getStatusColor(container.status)} 
+            style={{ marginLeft: '4px', fontSize: '10px' }}
+          >
+            {getStatusText(container.status)}
+          </Tag>
+        </Text>
+      </div>
+
+      <div style={{ marginBottom: '6px' }}>
+        <Text type="secondary" style={{ fontSize: '12px' }}>CPU: 
+          <Progress 
+            percent={container.cpuUsage} 
+            size="small" 
+            strokeColor={getProgressColor(container.cpuUsage)}
+            style={{ display: 'inline-block', width: '60px', marginLeft: '4px' }}
+            showInfo={false}
+          />
+          <Text style={{ 
+            fontSize: '11px', 
+            marginLeft: '4px',
+            color: getProgressColor(container.cpuUsage)
+          }}>
+            {formatNumber(container.cpuUsage)}%
+          </Text>
+        </Text>
+      </div>
+
+      <div style={{ marginBottom: '6px' }}>
+        <Text type="secondary" style={{ fontSize: '12px' }}>内存: 
+          <Progress 
+            percent={container.memoryUsage} 
+            size="small" 
+            strokeColor={getProgressColor(container.memoryUsage)}
+            style={{ display: 'inline-block', width: '60px', marginLeft: '4px' }}
+            showInfo={false}
+          />
+          <Text style={{ 
+            fontSize: '11px', 
+            marginLeft: '4px',
+            color: getProgressColor(container.memoryUsage)
+          }}>
+            {formatNumber(container.memoryUsage)}%
+          </Text>
+        </Text>
+      </div>
+
+      <div style={{ marginBottom: '6px' }}>
+        <Text type="secondary" style={{ fontSize: '12px' }}>机器: {container.machineName}</Text>
+      </div>
+
+      {hasAnomalies && (
+        <div style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px dashed #f0f0f0' }}>
+          <Text strong style={{ fontSize: '12px', color: '#ffc53d' }}>异常提醒:</Text>
+          {anomalies.slice(0, 2).map((anomaly, index) => (
+            <div key={index} style={{ fontSize: '11px', color: anomaly.level === 'error' ? '#ff7875' : '#ffc53d' }}>
+              • {anomaly.message}
+            </div>
+          ))}
+          {anomalies.length > 2 && (
+            <div style={{ fontSize: '11px', color: '#ffc53d' }}>
+              • 还有{anomalies.length - 2}个异常...
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+
   return (
     <div ref={rootRef} style={{ display: 'flex', flexDirection: 'column', height: '520px' }}>
       <Popover
-        content={null}
+        content={hoverContent}
         title="容器信息概览"
         trigger="hover"
         open={hoveredCard === containerKey}
         onOpenChange={(visible) => setHoveredCard(visible ? containerKey : null)}
-        overlayStyle={{ maxWidth: '300px' }}
       >
         <Badge.Ribbon text={getStatusText(container.status)} color={getStatusColor(container.status)}>
           <Card
@@ -77,7 +180,6 @@ const ContainerCard: React.FC<Props> = ({
               display: 'flex',
               flexDirection: 'column'
             }}
-            bodyStyle={{ padding: '16px', flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0 }}
             cover={
               <div style={{
                 background: hasAnomalies ? 'linear-gradient(135deg, #fff7e6 0%, #fff2e8 100%)' : 'linear-gradient(135deg, #f0f8ff 0%, #e6f7ff 100%)',

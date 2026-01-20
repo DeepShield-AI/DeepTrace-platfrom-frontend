@@ -594,115 +594,6 @@ const NetworkMetrics = () => {
     }
   };
 
-  // 鼠标悬停时的缩略信息框内容
-  const getHoverContent = (container: any) => {
-    const anomalies = checkContainerAnomalies(container);
-    const hasAnomalies = anomalies.length > 0;
-    const businessInfo = businessData[container.business];
-    
-    return (
-      <div style={{ width: 280, padding: '12px' }}>
-        <div style={{ marginBottom: '8px' }}>
-          <Text strong style={{ fontSize: '14px' }}>{container.name}</Text>
-          {hasAnomalies && (
-            <Tag 
-              color="#ffc53d" 
-              style={{ marginLeft: '8px', fontSize: '10px' }}
-              icon={<ExclamationCircleOutlined />}
-            >
-              {anomalies.length}个异常
-            </Tag>
-          )}
-        </div>
-        
-        {businessInfo && (
-          <div style={{ marginBottom: '6px' }}>
-            <Space>
-              {businessInfo.icon}
-              <Text type="secondary" style={{ fontSize: '12px' }}>
-                业务: <Tag color={businessInfo.color} style={{ fontSize: '10px', marginLeft: '4px' }}>
-                  {businessInfo.name}
-                </Tag>
-              </Text>
-            </Space>
-          </div>
-        )}
-        
-        <div style={{ marginBottom: '6px' }}>
-          <Text type="secondary" style={{ fontSize: '12px' }}>镜像: {container.image}</Text>
-        </div>
-        
-        <div style={{ marginBottom: '6px' }}>
-          <Text type="secondary" style={{ fontSize: '12px' }}>状态: 
-            <Tag 
-              color={getStatusColor(container.status)} 
-              style={{ marginLeft: '4px', fontSize: '10px' }}
-            >
-              {getStatusText(container.status)}
-            </Tag>
-          </Text>
-        </div>
-        
-        <div style={{ marginBottom: '6px' }}>
-          <Text type="secondary" style={{ fontSize: '12px' }}>CPU: 
-            <Progress 
-              percent={container.cpuUsage} 
-              size="small" 
-              strokeColor={getProgressColor(container.cpuUsage)}
-              style={{ display: 'inline-block', width: '60px', marginLeft: '4px' }}
-              showInfo={false}
-            />
-            <Text style={{ 
-              fontSize: '11px', 
-              marginLeft: '4px',
-              color: getProgressColor(container.cpuUsage)
-            }}>
-              {formatNumber(container.cpuUsage)}%
-            </Text>
-          </Text>
-        </div>
-        
-        <div style={{ marginBottom: '6px' }}>
-          <Text type="secondary" style={{ fontSize: '12px' }}>内存: 
-            <Progress 
-              percent={container.memoryUsage} 
-              size="small" 
-              strokeColor={getProgressColor(container.memoryUsage)}
-              style={{ display: 'inline-block', width: '60px', marginLeft: '4px' }}
-              showInfo={false}
-            />
-            <Text style={{ 
-              fontSize: '11px', 
-              marginLeft: '4px',
-              color: getProgressColor(container.memoryUsage)
-            }}>
-              {formatNumber(container.memoryUsage)}%
-            </Text>
-          </Text>
-        </div>
-        
-        <div style={{ marginBottom: '6px' }}>
-          <Text type="secondary" style={{ fontSize: '12px' }}>机器: {container.machineName}</Text>
-        </div>
-        
-        {hasAnomalies && (
-          <div style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px dashed #f0f0f0' }}>
-            <Text strong style={{ fontSize: '12px', color: '#ffc53d' }}>异常提醒:</Text>
-            {anomalies.slice(0, 2).map((anomaly, index) => (
-              <div key={index} style={{ fontSize: '11px', color: anomaly.level === 'error' ? '#ff7875' : '#ffc53d' }}>
-                • {anomaly.message}
-              </div>
-            ))}
-            {anomalies.length > 2 && (
-              <div style={{ fontSize: '11px', color: '#ffc53d' }}>
-                • 还有{anomalies.length - 2}个异常...
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-    );
-  };
 
   // 统计异常容器数量
   const anomalyContainers = allContainers.filter(container => {
@@ -900,8 +791,6 @@ const NetworkMetrics = () => {
       </Card>
     );
   };
-
-  // 使用共用组件 ContainerCard
 
   return (
     <div style={{ padding: '24px', background: '#fafafa', minHeight: '100vh' }}>
@@ -1273,6 +1162,7 @@ const NetworkMetrics = () => {
               const containerKey = `${container.machineId}-${container.id}`;
               return (
                 <Col xs={24} sm={12} md={8} lg={6} key={containerKey} style={{ display: 'flex', flexDirection: 'column', alignItems: 'stretch' }}>
+                  {/* 使用组件ContainerCard */}
                   <ContainerCard
                     container={container}
                     cardLoading={cardLoading}
