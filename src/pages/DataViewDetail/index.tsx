@@ -355,6 +355,111 @@ const MetricsDetail = () => {
     }
   };
 
+  // 单个图表卡片组件，包含下拉选择器
+  const ChartCard: React.FC<{ chart: any }> = ({ chart }) => {
+    const [selectedTag, setSelectedTag] = useState(chart.tag || 'all');
+    const trendConfig = getTrendConfig(chart.trend);
+    const ChartComponent = chart.type === 'column' ? Column : chart.type === 'area' ? Area : Line;
+    const exceedsThreshold = checkThresholdExceeded(chart);
+
+    return (
+      <Card 
+        size="small"
+        style={{ 
+          height: '100%',
+          borderRadius: '8px',
+          border: exceedsThreshold ? `2px solid ${chart.thresholdColor}` : '1px solid #f0f0f0',
+          boxShadow: exceedsThreshold ? `0 4px 12px ${chart.thresholdColor}40` : '0 2px 4px rgba(0,0,0,0.02)',
+          position: 'relative',
+          overflow: 'hidden',
+          transition: 'all 0.3s ease'
+        }}
+        bodyStyle={{ 
+          padding: '16px',
+          height: '100%',
+          display: 'flex',
+          flexDirection: 'column'
+        }}
+        loading={loading}
+        extra={(
+          <Space>
+            <Select
+              value={selectedTag}
+              onChange={(val) => setSelectedTag(val)}
+              size="small"
+              style={{ width: 120 }}
+            >
+              {chartTags.map(tag => (
+                <Option key={tag.key} value={tag.key}>{tag.label}</Option>
+              ))}
+            </Select>
+            <Tooltip title="查看详细日志">
+              <Button 
+                type="text" 
+                icon={<TableOutlined />} 
+                size="small"
+                onClick={() => handleViewLogs(chart)}
+                style={{ color: '#666' }}
+              />
+            </Tooltip>
+          </Space>
+        )}
+      >
+        {/* 阈值警告图标 */}
+        {exceedsThreshold && (
+          <div style={{ position: 'absolute', top: '8px', right: '40px', color: chart.thresholdColor, animation: 'pulse 2s infinite' }}>
+            <ExclamationCircleOutlined />
+          </div>
+        )}
+
+        {/* 图表头部 */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div style={{
+              width: '32px',
+              height: '32px',
+              borderRadius: '6px',
+              background: exceedsThreshold ? `${chart.thresholdColor}10` : `${chart.color}10`,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: exceedsThreshold ? chart.thresholdColor : chart.color
+            }}>
+              {chart.icon}
+            </div>
+            <div>
+              <Text strong style={{ fontSize: '14px', display: 'block', color: exceedsThreshold ? chart.thresholdColor : 'inherit' }}>
+                {chart.title}
+                {exceedsThreshold && (
+                  <Tooltip title={`当前值已超过阈值 ${chart.threshold}${chart.unit}`}>
+                    <ExclamationCircleOutlined style={{ marginLeft: 4, color: chart.thresholdColor, fontSize: 12 }} />
+                  </Tooltip>
+                )}
+              </Text>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <Text strong style={{ fontSize: '18px', color: exceedsThreshold ? chart.thresholdColor : chart.color, lineHeight: 1 }}>{chart.value}</Text>
+                <Text style={{ fontSize: '12px', color: trendConfig.color, lineHeight: 1 }}>{trendConfig.icon} {chart.change}</Text>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* 图表区域 */}
+        <div style={{ flex: 1, minHeight: '120px' }}>
+          <ChartComponent {...getChartConfig(chart)} />
+        </div>
+
+        {/* 底部状态 */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '8px', paddingTop: '8px', borderTop: '1px solid #f0f0f0' }}>
+          <Text type="secondary" style={{ fontSize: '12px', color: exceedsThreshold ? chart.thresholdColor : 'inherit' }}>最后更新: 刚刚{exceedsThreshold && ' • 超过阈值'}</Text>
+          <div style={{ padding: '2px 6px', background: exceedsThreshold ? `${chart.thresholdColor}10` : '#f0f0f0', borderRadius: '4px', fontSize: '10px', color: exceedsThreshold ? chart.thresholdColor : '#666', border: `1px solid ${exceedsThreshold ? chart.thresholdColor : 'transparent'}` }}>
+            {selectedTag.toUpperCase()}
+          </div>
+        </div>
+      </Card>
+    );
+  };
+
   // 处理标签选择
   const handleTagSelect = (tagKey) => {
     if (tagKey === 'all') {
@@ -571,159 +676,11 @@ const MetricsDetail = () => {
 
         {/* 图表网格 */}
         <Row gutter={[16, 16]}>
-          {filteredCharts.map(chart => {
-            const trendConfig = getTrendConfig(chart.trend);
-            const ChartComponent = chart.type === 'column' ? Column : 
-                                 chart.type === 'area' ? Area : Line;
-            const exceedsThreshold = checkThresholdExceeded(chart);
-            
-            return (
-              <Col key={chart.id} xs={24} sm={12} md={12} lg={6}>
-                <Card 
-                  size="small"
-                  style={{ 
-                    height: '100%',
-                    borderRadius: '8px',
-                    border: exceedsThreshold ? `2px solid ${chart.thresholdColor}` : '1px solid #f0f0f0',
-                    boxShadow: exceedsThreshold 
-                      ? `0 4px 12px ${chart.thresholdColor}40` 
-                      : '0 2px 4px rgba(0,0,0,0.02)',
-                    position: 'relative',
-                    overflow: 'hidden',
-                    transition: 'all 0.3s ease'
-                  }}
-                  bodyStyle={{ 
-                    padding: '16px',
-                    height: '100%',
-                    display: 'flex',
-                    flexDirection: 'column'
-                  }}
-                  loading={loading}
-                  extra={
-                    <Tooltip title="查看详细日志">
-                      <Button 
-                        type="text" 
-                        icon={<TableOutlined />} 
-                        size="small"
-                        onClick={() => handleViewLogs(chart)}
-                        style={{ color: '#666' }}
-                      />
-                    </Tooltip>
-                  }
-                >
-                  {/* 阈值警告图标 */}
-                  {exceedsThreshold && (
-                    <div style={{
-                      position: 'absolute',
-                      top: '8px',
-                      right: '40px',
-                      color: chart.thresholdColor,
-                      animation: 'pulse 2s infinite'
-                    }}>
-                      <ExclamationCircleOutlined />
-                    </div>
-                  )}
-
-                  {/* 图表头部 */}
-                  <div style={{ 
-                    display: 'flex', 
-                    justifyContent: 'space-between', 
-                    alignItems: 'flex-start',
-                    marginBottom: '12px'
-                  }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <div style={{
-                        width: '32px',
-                        height: '32px',
-                        borderRadius: '6px',
-                        background: exceedsThreshold 
-                          ? `${chart.thresholdColor}10` 
-                          : `${chart.color}10`,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        color: exceedsThreshold ? chart.thresholdColor : chart.color
-                      }}>
-                        {chart.icon}
-                      </div>
-                      <div>
-                        <Text strong style={{ 
-                          fontSize: '14px', 
-                          display: 'block',
-                          color: exceedsThreshold ? chart.thresholdColor : 'inherit'
-                        }}>
-                          {chart.title}
-                          {exceedsThreshold && (
-                            <Tooltip title={`当前值已超过阈值 ${chart.threshold}${chart.unit}`}>
-                              <ExclamationCircleOutlined 
-                                style={{ 
-                                  marginLeft: 4, 
-                                  color: chart.thresholdColor,
-                                  fontSize: 12 
-                                }} 
-                              />
-                            </Tooltip>
-                          )}
-                        </Text>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                          <Text strong style={{ 
-                            fontSize: '18px', 
-                            color: exceedsThreshold ? chart.thresholdColor : chart.color,
-                            lineHeight: 1
-                          }}>
-                            {chart.value}
-                          </Text>
-                          <Text style={{ 
-                            fontSize: '12px', 
-                            color: trendConfig.color,
-                            lineHeight: 1
-                          }}>
-                            {trendConfig.icon} {chart.change}
-                          </Text>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* 图表区域 */}
-                  <div style={{ flex: 1, minHeight: '120px' }}>
-                    <ChartComponent {...getChartConfig(chart)} />
-                  </div>
-
-                  {/* 底部状态 */}
-                  <div style={{ 
-                    display: 'flex', 
-                    justifyContent: 'space-between', 
-                    alignItems: 'center',
-                    marginTop: '8px',
-                    paddingTop: '8px',
-                    borderTop: '1px solid #f0f0f0'
-                  }}>
-                    <Text 
-                      type="secondary" 
-                      style={{ 
-                        fontSize: '12px',
-                        color: exceedsThreshold ? chart.thresholdColor : 'inherit'
-                      }}
-                    >
-                      最后更新: 刚刚
-                      {exceedsThreshold && ' • 超过阈值'}
-                    </Text>
-                    <div style={{
-                      padding: '2px 6px',
-                      background: exceedsThreshold ? `${chart.thresholdColor}10` : '#f0f0f0',
-                      borderRadius: '4px',
-                      fontSize: '10px',
-                      color: exceedsThreshold ? chart.thresholdColor : '#666',
-                      border: `1px solid ${exceedsThreshold ? chart.thresholdColor : 'transparent'}`
-                    }}>
-                      {chart.tag.toUpperCase()}
-                    </div>
-                  </div>
-                </Card>
-              </Col>
-            );
-          })}
+          {filteredCharts.map(chart => (
+            <Col key={chart.id} xs={24} sm={12} md={12} lg={6}>
+              <ChartCard chart={chart} />
+            </Col>
+          ))}
         </Row>
 
         {/* 空状态提示 */}
