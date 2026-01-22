@@ -2,14 +2,19 @@
 import axios from 'axios';
 
 export const client = axios.create({
-  baseURL: process.env.REACT_APP_API_BASE || '',
+  baseURL: 'http://localhost:8081',
   timeout: 10000,
 });
 
-client.interceptors.response.use(
-  res => res,
-  err => {
-    // 可统一处理错误、埋点、或把 error 转为业务型 Error
-    return Promise.reject(err);
-  }
+client.interceptors.request.use(
+  config => {
+    // token存在localStorage
+    const token = localStorage.getItem('auth_token');
+    console.log('Request Interceptor - Token:', token);
+    if (token) {
+      config.headers['Authorization'] = `Bearer ${token}`;
+    }
+    return config;
+  },
+  error => Promise.reject(error)
 );

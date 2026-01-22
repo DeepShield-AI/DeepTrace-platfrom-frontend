@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import ContainerCard from '../../components/ContainerCard';
 import BusinessStatsCard from '../../components/BusinessStatsCard';
+import{ getAgentList } from '../../services/metrics/api';
 // import type { Dayjs } from 'dayjs';
 import { 
   Row, 
@@ -362,6 +363,7 @@ const NetworkMetrics = () => {
 
       setTimeout(() => {
         setMachines(updatedMachines);
+        getAgentList()
         const containers = flattenContainers(updatedMachines);
         setAllContainers(containers);
         setFilteredContainers(containers);
