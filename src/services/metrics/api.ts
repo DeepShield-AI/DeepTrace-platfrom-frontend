@@ -23,15 +23,8 @@ async function loadMock() {
  * return：Promise<any>（当前直接返回后端原始 data）
  */
 export async function getAgentList(params?: Record<string, any>): Promise<any> {
-  // if (USE_MOCK) {
-  //   const mock = await loadMock();
-  //   // mock 里可能没有完全一致的字段，这里做最小的兼容处理，返回一个 { content: [...] } 结构
-  //   return { content: mock.accessGetAllMockData || [] };
-  // }
-
   const res = await client.get('/api/metric/agentList', { params });
   // debugger
-  console.log('API getAgentList response:', res);
   return res.data;
 }
 

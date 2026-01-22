@@ -333,68 +333,116 @@ const NetworkMetrics = () => {
   };
 
   // 模拟API调用获取机器数据
+  // const fetchMachines = async () => {
+  //   setLoading(true);
+  //   try {
+  //     // 重置所有卡片的加载状态
+  //     const loadingStates = {};
+  //     mockMachines.forEach((machine: any) => {
+  //       machine.containers.forEach((container: any) => {
+  //         const containerKey = `${machine.machineId}-${container.id}`;
+  //         (loadingStates as Record<string, boolean>)[containerKey] = true;
+  //       });
+  //     });
+  //     setCardLoading(loadingStates);
+
+  //     // 模拟API调用，随机更新一些数据以模拟实时变化
+  //     const updatedMachines = mockMachines.map(machine => ({
+  //       ...machine,
+  //       containers: machine.containers.map(container => ({
+  //         ...container,
+  //         // 随机更新CPU和内存使用率，模拟实时数据变化
+  //         cpuUsage: Math.max(0, Math.min(100, container.cpuUsage + (Math.random() * 10 - 5))),
+  //         memoryUsage: Math.max(0, Math.min(100, container.memoryUsage + (Math.random() * 10 - 5))),
+  //         // 随机改变一些容器的状态
+  //         status: Math.random() > 0.95 ? 
+  //           (container.status === 'running' ? 'stopped' : 'running') : 
+  //           container.status
+  //       }))
+  //     }));
+
+  //     setTimeout(() => {
+  //       setMachines(updatedMachines);
+  //       getAgentList()
+  //       const containers = flattenContainers(updatedMachines);
+  //       setAllContainers(containers);
+  //       setFilteredContainers(containers);
+  //       setLoading(false);
+  //       setLastRefreshTime(new Date());
+        
+  //       // 模拟卡片逐个加载完成的效果
+  //       const containerKeys = containers.map((container: any) => 
+  //         `${container.machineId}-${container.id}`
+  //       );
+        
+  //       containerKeys.forEach((key, index) => {
+  //         setTimeout(() => {
+  //           setCardLoading(prev => ({
+  //             ...prev,
+  //             [key]: false
+  //           }));
+  //         }, index * 200); // 每个卡片间隔200ms加载
+  //       });
+        
+  //       // 计算下一次刷新时间
+  //       if (autoRefresh) {
+  //         const nextTime = new Date();
+  //         nextTime.setSeconds(nextTime.getSeconds() + refreshInterval);
+  //         setNextRefreshTime(nextTime);
+  //       }
+  //     }, 800);
+  //   } catch (error) {
+  //     console.error('Failed to fetch machines:', error);
+  //     setLoading(false);
+  //     // 出错时重置所有卡片加载状态
+  //     setCardLoading({});
+  //   }
+  // };
   const fetchMachines = async () => {
     setLoading(true);
     try {
-      // 重置所有卡片的加载状态
-      const loadingStates = {};
-      mockMachines.forEach((machine: any) => {
-        machine.containers.forEach((container: any) => {
-          const containerKey = `${machine.machineId}-${container.id}`;
-          (loadingStates as Record<string, boolean>)[containerKey] = true;
-        });
+      // 获取API数据
+      const apiRes = await getAgentList();
+      const containers = (apiRes?.content || []).map((item: any) => ({
+        ...item,
+        id: item.lcuuid,
+        name: item.name,
+        os: item.os,
+        memorySize: item.memorySize,
+        cpuNum: item.cpuNum,
+        arch: item.arch,
+        ip: item.curAnalyzerIp || item.ip || item.controllerIp || '-',
+        time: item.createTime,
+        state: item.state,
+      }));
+      // 初始化卡片加载状态
+      const loadingStates: Record<string, boolean> = {};
+      containers.forEach((container: any) => {
+        loadingStates[container.id] = true;
       });
       setCardLoading(loadingStates);
-
-      // 模拟API调用，随机更新一些数据以模拟实时变化
-      const updatedMachines = mockMachines.map(machine => ({
-        ...machine,
-        containers: machine.containers.map(container => ({
-          ...container,
-          // 随机更新CPU和内存使用率，模拟实时数据变化
-          cpuUsage: Math.max(0, Math.min(100, container.cpuUsage + (Math.random() * 10 - 5))),
-          memoryUsage: Math.max(0, Math.min(100, container.memoryUsage + (Math.random() * 10 - 5))),
-          // 随机改变一些容器的状态
-          status: Math.random() > 0.95 ? 
-            (container.status === 'running' ? 'stopped' : 'running') : 
-            container.status
-        }))
-      }));
-
-      setTimeout(() => {
-        setMachines(updatedMachines);
-        getAgentList()
-        const containers = flattenContainers(updatedMachines);
-        setAllContainers(containers);
-        setFilteredContainers(containers);
-        setLoading(false);
-        setLastRefreshTime(new Date());
-        
-        // 模拟卡片逐个加载完成的效果
-        const containerKeys = containers.map((container: any) => 
-          `${container.machineId}-${container.id}`
-        );
-        
-        containerKeys.forEach((key, index) => {
-          setTimeout(() => {
-            setCardLoading(prev => ({
-              ...prev,
-              [key]: false
-            }));
-          }, index * 200); // 每个卡片间隔200ms加载
-        });
-        
-        // 计算下一次刷新时间
-        if (autoRefresh) {
-          const nextTime = new Date();
-          nextTime.setSeconds(nextTime.getSeconds() + refreshInterval);
-          setNextRefreshTime(nextTime);
-        }
-      }, 800);
+      setAllContainers(containers);
+      setFilteredContainers(containers);
+      setLoading(false);
+      setLastRefreshTime(new Date());
+      // 卡片逐个加载完成效果
+      containers.forEach((container: any, index: number) => {
+        setTimeout(() => {
+          setCardLoading((prev) => ({
+            ...prev,
+            [container.id]: false,
+          }));
+        }, index * 200);
+      });
+      // 计算下一次刷新时间
+      if (autoRefresh) {
+        const nextTime = new Date();
+        nextTime.setSeconds(nextTime.getSeconds() + refreshInterval);
+        setNextRefreshTime(nextTime);
+      }
     } catch (error) {
       console.error('Failed to fetch machines:', error);
       setLoading(false);
-      // 出错时重置所有卡片加载状态
       setCardLoading({});
     }
   };
