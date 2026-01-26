@@ -34,10 +34,10 @@ export async function getAgentList(params?: Record<string, any>): Promise<any> {
  * return：标签数组或配置对象
  */
 export async function getMetricTags(): Promise<any> {
-  if (USE_MOCK) {
-    const mock = await loadMock();
-    return mock.tags || [];
-  }
+  // if (USE_MOCK) {
+  //   const mock = await loadMock();
+  //   return mock.tags || [];
+  // }
   const res = await client.get('/api/metric/tags');
   return res.data;
 }
