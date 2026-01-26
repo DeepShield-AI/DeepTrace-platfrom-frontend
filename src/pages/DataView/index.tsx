@@ -122,24 +122,6 @@ const NetworkMetrics = () => {
     return num.toFixed(2);
   };
 
-  // 扁平化容器数据
-  const flattenContainers = (machinesData: any[]): any[] => {
-    return machinesData.flatMap((machine: any) =>
-      machine.containers.map((container: any) => ({
-        ...container,
-        machineId: machine.machineId,
-        machineName: machine.machineName,
-        hostname: machine.hostname,
-        machineIp: machine.ip,
-        machineStatus: machine.status,
-        machineCpuCores: machine.cpuCores,
-        machineMemory: machine.memory,
-        // 如果容器没有指定业务，则使用机器的业务
-        business: container.business || machine.business || 'infrastructure',
-      })),
-    );
-  };
-
   // 获取业务统计信息
   const getBusinessStats = () => {
     const stats: Record<string, any> = {};

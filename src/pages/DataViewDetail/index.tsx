@@ -34,6 +34,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { getMetricTags } from '../../services/metrics/api';
 
 const { Text } = Typography;
+const { Option } = Select; // 新增：确保 Select.Option 可用
 
 const MetricsDetail = () => {
   const [timeRange, setTimeRange] = useState('15分钟');
@@ -385,7 +386,8 @@ const MetricsDetail = () => {
   const ChartCard: React.FC<{ chart: any }> = ({ chart }) => {
     // 使用useRef保存selectedTag，避免组件重新渲染时重置
     // 统一使用chartTags数组的第一个元素作为默认值展示
-    const selectedTagRef = useRef(chartTags[0].key);
+    const defaultTag = chartTags && chartTags.length > 0 ? chartTags[0].key : 'all'; // 安全默认值
+    const selectedTagRef = useRef<string>(defaultTag);
 
     const trendConfig = getTrendConfig(chart.trend);
     const ChartComponent = chart.type === 'column' ? Column : chart.type === 'area' ? Area : Line;
