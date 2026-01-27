@@ -21,7 +21,6 @@ import {
   Card,
   Col,
   Drawer,
-  Radio,
   Row,
   Select,
   Space,
@@ -30,34 +29,49 @@ import {
   Tooltip,
   Typography,
 } from 'antd';
-import React, { useEffect, useRef, useState } from 'react';
-import { getMetricTags } from '../../services/metrics/api';
+import React, { useEffect, useState } from 'react';
+import { getChart, getMetricTags } from '../../services/metrics/api';
 
-const { Text } = Typography;
-const { Option } = Select; // 新增：确保 Select.Option 可用
+const { Title, Text } = Typography;
+const { Option } = Select;
 
 const MetricsDetail = () => {
   const [timeRange, setTimeRange] = useState('15分钟');
   const [autoRefresh, setAutoRefresh] = useState(true);
-  const [selectedTags, setSelectedTags] = useState(['all']);
-  const [metricsData, setMetricsData] = useState([]);
+  const [selectedTags, setSelectedTags] = useState<string[]>(['all']);
+  const [metricsData, setMetricsData] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [metricTagKeys, setMetricTagKeys] = useState<string[]>([]);
+  const [metricTagsObj, setMetricTagsObj] = useState<Record<string, any> | null>(null);
   const [drawerVisible, setDrawerVisible] = useState(false);
-  const [currentChart, setCurrentChart] = useState(null);
-  const [logData, setLogData] = useState([]);
-  const [metricTags, setMetricTags] = useState({}); // 存储API返回的数据
-  const [isDropdownOpen, setIsDropdownOpen] = useState(false); // 追踪下拉框是否展开
+  const [currentChart, setCurrentChart] = useState<any | null>(null);
+  const [logData, setLogData] = useState<any[]>([]);
 
-  // 图表标签配置 - 从API数据动态生成
-  const chartTags =
-    metricTags && Object.keys(metricTags).length > 0
-      ? Object.keys(metricTags).map((key) => ({
-          key: key,
-          label: key.charAt(0).toUpperCase() + key.slice(1), // 首字母大写
-          color: 'blue', // 默认颜色
-          icon: <DashboardOutlined />, // 默认图标
-        }))
-      : [];
+  // 图表标签配置
+  const chartTags = [
+    { key: 'all', label: '全部', color: 'blue', icon: <DashboardOutlined /> },
+    { key: 'cpu', label: 'CPU', color: 'red', icon: <MonitorOutlined /> },
+    { key: 'memory', label: '内存', color: 'green', icon: <DatabaseOutlined /> },
+    { key: 'network', label: '网络', color: 'orange', icon: <WifiOutlined /> },
+    { key: 'disk', label: '磁盘', color: 'purple', icon: <HddOutlined /> },
+    { key: 'system', label: '系统', color: 'cyan', icon: <CloudServerOutlined /> },
+  ];
+
+  // 只展示这三类命名空间作为筛选：cpu, network, disk
+  const allowedNamespaces = ['cpu', 'network', 'disk'];
+  const displayTags = allowedNamespaces
+    .filter((k) => metricTagKeys.length === 0 || metricTagKeys.includes(k))
+    .map((k) => {
+      const found = chartTags.find((t) => t.key === k);
+      return (
+        found || {
+          key: k,
+          label: k,
+          color: '#d9d9d9',
+          icon: <DashboardOutlined />,
+        }
+      );
+    });
 
   // 图表数据配置 - 增加threshold字段
   const chartConfigs = [
@@ -215,7 +229,7 @@ const MetricsDetail = () => {
   };
 
   // 生成模拟日志数据
-  const generateLogData = (chart) => {
+  const generateLogData = (chart: any) => {
     const statuses = ['正常', '警告', '错误'];
     const levels = ['info', 'warning', 'error'];
     const operations = ['读取', '写入', '处理', '响应', '连接', '断开'];
@@ -223,7 +237,6 @@ const MetricsDetail = () => {
     return Array.from({ length: 50 }, (_, index) => {
       const timestamp = new Date(Date.now() - (50 - index) * 60000).toLocaleTimeString();
       const randomStatus = Math.floor(Math.random() * 3);
-      const randomOperation = Math.floor(Math.random() * operations.length);
       const value = Math.random() * 100;
 
       return {
@@ -241,15 +254,15 @@ const MetricsDetail = () => {
             : `${value.toFixed(1)}%`,
         status: statuses[randomStatus],
         level: levels[randomStatus],
-        operation: operations[randomOperation],
-        message: `${chart.title} ${operations[randomOperation]}操作`,
+        operation: operations[Math.floor(Math.random() * operations.length)],
+        message: `${chart.title} ${operations[Math.floor(Math.random() * operations.length)]}操作`,
         source: `server-${Math.floor(Math.random() * 5) + 1}`,
       };
     });
   };
 
   // 打开抽屉查看日志表格
-  const handleViewLogs = (chart) => {
+  const handleViewLogs = (chart: any) => {
     setCurrentChart(chart);
     setLogData(generateLogData(chart));
     setDrawerVisible(true);
@@ -262,11 +275,13 @@ const MetricsDetail = () => {
     setLogData([]);
   };
 
-  // 检查是否超过阈值
-  const checkThresholdExceeded = (chart) => {
+  // 检查是否超过阈值（可传入自定义数据源）
+  const checkThresholdExceeded = (chart: any, dataSource?: any) => {
+    const source = dataSource || metricsData;
     if (!chart.threshold) return false;
+    if (!source || !source.length) return false;
 
-    return metricsData.some((data) => {
+    return source.some((data: any) => {
       const value = data[chart.dataKey];
       if (chart.reverseThreshold) {
         return value < chart.threshold; // 反向阈值：低于阈值才警告
@@ -276,10 +291,17 @@ const MetricsDetail = () => {
   };
 
   // 获取图表配置
-  const getChartConfig = (chart) => {
-    const exceedsThreshold = checkThresholdExceeded(chart);
+  const getChartConfig = (chart: any, overrideData?: any) => {
+    const dataSource = overrideData || metricsData;
+    // normalize dataSource to array - AntV plots expect an array
+    const finalData = Array.isArray(dataSource)
+      ? dataSource
+      : dataSource && Array.isArray((dataSource as any).data)
+      ? (dataSource as any).data
+      : [];
+    const exceedsThreshold = checkThresholdExceeded(chart, finalData);
     const baseConfig = {
-      data: metricsData,
+      data: finalData,
       xField: 'time',
       yField: chart.dataKey,
       height: 120,
@@ -304,7 +326,7 @@ const MetricsDetail = () => {
       },
       tooltip: {
         showMarkers: false,
-        formatter: (datum) => {
+        formatter: (datum: any) => {
           return {
             name: chart.title,
             value:
@@ -320,8 +342,8 @@ const MetricsDetail = () => {
           };
         },
       },
-      // 添加阈值线
-      annotations: chart.threshold
+      // 添加阈值线（类型断言为 any 避免类型不兼容）
+      annotations: (chart.threshold
         ? [
             {
               type: 'line',
@@ -338,13 +360,13 @@ const MetricsDetail = () => {
                 style: {
                   fill: chart.thresholdColor,
                   fontSize: 10,
-                  fontWeight: 'bold',
-                  textAlign: 'end',
+                  fontWeight: 'bold' as 'bold',
+                  textAlign: 'end' as 'end',
                 },
               },
             },
           ]
-        : [],
+        : []) as any,
     };
 
     // 根据是否超过阈值调整颜色强度
@@ -384,14 +406,87 @@ const MetricsDetail = () => {
 
   // 单个图表卡片组件，包含下拉选择器
   const ChartCard: React.FC<{ chart: any }> = ({ chart }) => {
-    // 使用useRef保存selectedTag，避免组件重新渲染时重置
-    // 统一使用chartTags数组的第一个元素作为默认值展示
-    const defaultTag = chartTags && chartTags.length > 0 ? chartTags[0].key : 'all'; // 安全默认值
-    const selectedTagRef = useRef<string>(defaultTag);
-
+    // 每张卡片选中的具体维度值（例如 cpu 的 core 值，network 的 interface，disk 的 device）
+    const [selectedValue, setSelectedValue] = useState<string | number>('');
+    const [chartPoints, setChartPoints] = useState<any[]>([]);
+    const [chartLoading, setChartLoading] = useState(false);
+    // 当 metricTagsObj 返回且当前未选择具体维度时，默认选中第一个维度值
+    useEffect(() => {
+      if (!metricTagsObj) return;
+      const ns = chart.tag;
+      const obj = metricTagsObj[ns];
+      if (!obj) return;
+      const keys = Object.keys(obj || {});
+      if (keys.length === 0) return;
+      const list = obj[keys[0]];
+      if (Array.isArray(list) && list.length > 0 && (selectedValue === '' || selectedValue === null)) {
+        setSelectedValue(list[0]);
+      }
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [metricTagsObj]);
     const trendConfig = getTrendConfig(chart.trend);
     const ChartComponent = chart.type === 'column' ? Column : chart.type === 'area' ? Area : Line;
-    const exceedsThreshold = checkThresholdExceeded(chart);
+    const exceedsThreshold = checkThresholdExceeded(chart, chartPoints);
+
+    // 根据 timeRange 计算 time window
+    const computeTimeRange = () => {
+      const end = Date.now();
+      let offset = 15 * 60 * 1000;
+      if (timeRange === '30分钟') offset = 30 * 60 * 1000;
+      if (timeRange === '1小时') offset = 60 * 60 * 1000;
+      return { startTime: end - offset, endTime: end };
+    };
+
+    // 构建查询参数并请求后端 chart 数据（使用 selectedValue 作为额外维度）
+    useEffect(() => {
+      let mounted = true;
+      const fetchChart = async () => {
+        // 需要命名空间与具体维度值
+        const ns = chart.tag;
+        if (!ns) return;
+        if (selectedValue === '' || selectedValue === null) return;
+        setChartLoading(true);
+        try {
+          const { startTime, endTime } = computeTimeRange();
+          const params: Record<string, any> = {
+            namespace: ns,
+            startTime,
+            endTime,
+            name: chart.dataKey,
+          };
+
+          // 从 metricTagsObj 中取出维度名并使用 selectedValue 作为参数值
+          if (metricTagsObj && metricTagsObj[ns]) {
+            const inner = metricTagsObj[ns];
+            const innerKeys = Object.keys(inner || {});
+            if (innerKeys.length > 0) {
+              const dimKey = innerKeys[0];
+              // 后端对 cpu 期望的参数名是 `cpu` 而非 `core`
+              const paramName = ns === 'cpu' ? 'cpu' : dimKey;
+              params[paramName] = selectedValue;
+            }
+          }
+
+          const res = await getChart(params);
+          if (!mounted) return;
+          // 后端直接返回时序数组
+          setChartPoints(res || []);
+        } catch (err) {
+          // eslint-disable-next-line no-console
+          console.error('getChart error:', err);
+          if (mounted) setChartPoints([]);
+        } finally {
+          if (mounted) setChartLoading(false);
+        }
+      };
+
+      fetchChart();
+      return () => {
+        mounted = false;
+      };
+      // 依赖：选中标签、时间范围、是否自动刷新、metricTagsObj
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [selectedValue, timeRange, autoRefresh, metricTagsObj]);
 
     return (
       <Card
@@ -417,37 +512,29 @@ const MetricsDetail = () => {
         extra={
           <Space>
             <Select
-              value={selectedTagRef.current}
-              onChange={(val) => {
-                // 使用ref保存选择值，避免组件重新渲染时丢失
-                selectedTagRef.current = val;
-                // 当下拉框选择改变时，暂时禁用自动刷新
-                setAutoRefresh(false);
-                // 重新启用自动刷新，延时避免立即刷新
-                setTimeout(() => {
-                  setAutoRefresh(true);
-                }, 300);
-              }}
+              value={selectedValue}
+              onChange={(val) => setSelectedValue(val)}
               size="small"
-              style={{ width: 120 }}
-              onDropdownVisibleChange={(open) => {
-                setIsDropdownOpen(open);
-                // 当下拉框打开时，暂停自动刷新
-                if (open) {
-                  setAutoRefresh(false);
-                } else {
-                  // 当下拉框关闭后，恢复自动刷新
-                  setTimeout(() => {
-                    setAutoRefresh(true);
-                  }, 300);
-                }
-              }}
+              style={{ width: 160 }}
             >
-              {chartTags.map((tag) => (
-                <Option key={tag.key} value={tag.key}>
-                  {tag.label}
-                </Option>
-              ))}
+              {
+                // 渲染对应命名空间的维度值列表（例如 cpu.core、network.interface、disk.device）
+                (() => {
+                  const ns = chart.tag;
+                  if (!metricTagsObj || !metricTagsObj[ns]) {
+                    return [<Option key="-" value="">-</Option>];
+                  }
+                  const inner = metricTagsObj[ns];
+                  const innerKeys = Object.keys(inner || {});
+                  if (innerKeys.length === 0) return [<Option key="-" value="">-</Option>];
+                  const list = inner[innerKeys[0]] || [];
+                  return (list || []).map((v: any) => (
+                    <Option key={String(v)} value={v}>
+                      {String(v)}
+                    </Option>
+                  ));
+                })()
+              }
             </Select>
             <Tooltip title="查看详细日志">
               <Button
@@ -539,7 +626,10 @@ const MetricsDetail = () => {
 
         {/* 图表区域 */}
         <div style={{ flex: 1, minHeight: '120px' }}>
-          <ChartComponent {...getChartConfig(chart)} />
+          <ChartComponent
+            {...getChartConfig(chart, chartPoints)}
+            loading={chartLoading || loading}
+          />
         </div>
 
         {/* 底部状态 */}
@@ -569,7 +659,7 @@ const MetricsDetail = () => {
               border: `1px solid ${exceedsThreshold ? chart.thresholdColor : 'transparent'}`,
             }}
           >
-            {selectedTagRef.current.toUpperCase()}
+            {String(selectedValue).toUpperCase()}
           </div>
         </div>
       </Card>
@@ -577,39 +667,50 @@ const MetricsDetail = () => {
   };
 
   // 处理标签选择
-  const handleTagSelect = (tagKey) => {
+  const handleTagSelect = (tagKey: string) => {
     if (tagKey === 'all') {
       setSelectedTags(['all']);
-      return;
+    } else {
+      const newTags = selectedTags.includes('all') ? [] : [...selectedTags];
+
+      if (newTags.includes(tagKey)) {
+        // 如果已经选中，则移除
+        const filtered = newTags.filter((tag) => tag !== tagKey);
+        setSelectedTags(filtered.length === 0 ? ['all'] : filtered);
+      } else {
+        // 如果未选中，则添加
+        newTags.push(tagKey);
+        setSelectedTags(newTags);
+      }
     }
-
-    const newTags = selectedTags.includes('all')
-      ? [tagKey]
-      : selectedTags.includes(tagKey)
-      ? selectedTags.filter((tag) => tag !== tagKey).filter(Boolean)
-      : [...selectedTags, tagKey];
-
-    setSelectedTags(newTags.length === 0 ? ['all'] : newTags);
   };
 
   // 获取趋势图标和颜色
-  const getTrendConfig = (trend) => {
-    const trendMap = {
-      up: { color: '#ff4d4f', icon: '↗' },
-      down: { color: '#52c41a', icon: '↘' },
-      stable: { color: '#faad14', icon: '→' },
-    };
-    return trendMap[trend] || { color: '#d9d9d9', icon: '→' };
+  const getTrendConfig = (trend: string) => {
+    switch (trend) {
+      case 'up':
+        return { color: '#ff4d4f', icon: '↗' };
+      case 'down':
+        return { color: '#52c41a', icon: '↘' };
+      case 'stable':
+        return { color: '#faad14', icon: '→' };
+      default:
+        return { color: '#d9d9d9', icon: '→' };
+    }
   };
 
   // 获取状态徽章颜色
-  const getStatusColor = (status) => {
-    const statusMap = {
-      正常: 'green',
-      警告: 'orange',
-      错误: 'red',
-    };
-    return statusMap[status] || 'default';
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case '正常':
+        return 'green';
+      case '警告':
+        return 'orange';
+      case '错误':
+        return 'red';
+      default:
+        return 'default';
+    }
   };
 
   // 日志表格列配置
@@ -619,45 +720,56 @@ const MetricsDetail = () => {
       dataIndex: 'timestamp',
       key: 'timestamp',
       width: 100,
-      sorter: (a, b) => a.timestamp.localeCompare(b.timestamp),
+      sorter: (a: any, b: any) => a.timestamp.localeCompare(b.timestamp),
     },
     {
       title: '数值',
       dataIndex: 'value',
       key: 'value',
       width: 100,
-      render: (value) => <Text strong>{value}</Text>,
+      render: (value: any) => <Text strong>{value}</Text>,
     },
     {
       title: '状态',
       dataIndex: 'status',
       key: 'status',
       width: 80,
-      render: (status) => <Badge color={getStatusColor(status)} text={status} />,
-      filters: ['正常', '警告', '错误'].map((status) => ({ text: status, value: status })),
-      onFilter: (value, record) => record.status === value,
+      render: (status: any) => <Badge color={getStatusColor(status)} text={status} />,
+      filters: [
+        { text: '正常', value: '正常' },
+        { text: '警告', value: '警告' },
+        { text: '错误', value: '错误' },
+      ],
+      onFilter: (value: any, record: any) => record.status === value,
     },
     {
       title: '操作类型',
       dataIndex: 'operation',
       key: 'operation',
       width: 80,
-      filters: ['读取', '写入', '处理', '响应', '连接', '断开'].map((op) => ({
-        text: op,
-        value: op,
-      })),
-      onFilter: (value, record) => record.operation === value,
+      filters: [
+        { text: '读取', value: '读取' },
+        { text: '写入', value: '写入' },
+        { text: '处理', value: '处理' },
+        { text: '响应', value: '响应' },
+        { text: '连接', value: '连接' },
+        { text: '断开', value: '断开' },
+      ],
+      onFilter: (value: any, record: any) => record.operation === value,
     },
     {
       title: '来源',
       dataIndex: 'source',
       key: 'source',
       width: 100,
-      filters: Array.from({ length: 5 }, (_, i) => ({
-        text: `server-${i + 1}`,
-        value: `server-${i + 1}`,
-      })),
-      onFilter: (value, record) => record.source === value,
+      filters: [
+        { text: 'server-1', value: 'server-1' },
+        { text: 'server-2', value: 'server-2' },
+        { text: 'server-3', value: 'server-3' },
+        { text: 'server-4', value: 'server-4' },
+        { text: 'server-5', value: 'server-5' },
+      ],
+      onFilter: (value: any, record: any) => record.source === value,
     },
     {
       title: '消息',
@@ -668,8 +780,20 @@ const MetricsDetail = () => {
   ];
 
   // 过滤显示的图表
+  // 判断某个 chart 是否有可供选择的维度选项
+  const chartHasOptions = (chart: any) => {
+    if (!metricTagsObj) return true; // 未拉取到 metric tags 时，保留原有行为
+    const ns = chart.tag;
+    const inner = metricTagsObj[ns];
+    if (!inner) return false;
+    const innerKeys = Object.keys(inner || {});
+    if (innerKeys.length === 0) return false;
+    const list = inner[innerKeys[0]] || [];
+    return Array.isArray(list) ? list.length > 0 : false;
+  };
+
   const filteredCharts = chartConfigs.filter(
-    (chart) => selectedTags.includes('all') || selectedTags.includes(chart.tag),
+    (chart) => (selectedTags.includes('all') || selectedTags.includes(chart.tag)) && chartHasOptions(chart),
   );
 
   useEffect(() => {
@@ -680,36 +804,49 @@ const MetricsDetail = () => {
       setLoading(false);
     }, 500);
 
-    // 获取指标标签数据
-    const fetchMetricTags = async () => {
-      try {
-        const tags = await getMetricTags();
-        setMetricTags(tags); // 设置API返回的数据
-      } catch (error) {
-        console.error('获取指标标签失败:', error);
-      }
-    };
-    fetchMetricTags();
-
-    // 只有当自动刷新开启且下拉框未展开时才设置定时器
-    const interval =
-      autoRefresh && !isDropdownOpen
-        ? setInterval(() => {
-            const newData = generateMetricsData().map((item) => ({
-              ...item,
-              usage: Math.max(10, Math.min(95, item.usage + Math.random() * 4 - 2)),
-              memory: Math.max(20, Math.min(95, item.memory + Math.random() * 3 - 1.5)),
-              network: Math.max(0.5, Math.min(3.0, item.network + Math.random() * 0.2 - 0.1)),
-            }));
-            setMetricsData(newData);
-          }, 3000)
-        : null;
+    let interval: any;
+    if (autoRefresh) {
+      interval = setInterval(() => {
+        const newData = generateMetricsData().map((item) => ({
+          ...item,
+          usage: Math.max(10, Math.min(95, item.usage + Math.random() * 4 - 2)),
+          memory: Math.max(20, Math.min(95, item.memory + Math.random() * 3 - 1.5)),
+          network: Math.max(0.5, Math.min(3.0, item.network + Math.random() * 0.2 - 0.1)),
+        }));
+        setMetricsData(newData);
+      }, 3000);
+    }
 
     return () => {
       clearTimeout(timer);
-      clearInterval(interval);
+      if (interval) clearInterval(interval);
     };
-  }, [autoRefresh, isDropdownOpen]); // 添加isDropdownOpen到依赖数组
+  }, [autoRefresh]);
+
+  // 从后端获取可用的 metric tags（ { cpu: {...}, network: {...} }）
+  useEffect(() => {
+    let mounted = true;
+    const fetchTags = async () => {
+      try {
+        console.log('fetchTags: calling getMetricTags()');
+        const res = await getMetricTags();
+        console.log('Fetched metric tags:', res);
+        if (!mounted) return;
+        const keys = res && typeof res === 'object' && !Array.isArray(res) ? Object.keys(res) : [];
+        setMetricTagKeys(keys);
+        setMetricTagsObj(res || null);
+      } catch (err) {
+        // 失败时保留默认行为（不阻塞页面）
+        // eslint-disable-next-line no-console
+        console.error('getMetricTags error:', err);
+      }
+    };
+
+    fetchTags();
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   return (
     <PageContainer
@@ -734,7 +871,7 @@ const MetricsDetail = () => {
             <Space size="middle">
               <Text strong>筛选指标:</Text>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                {chartTags.map((tag) => (
+                {displayTags.map((tag) => (
                   <Tag.CheckableTag
                     key={tag.key}
                     checked={selectedTags.includes(tag.key)}
@@ -748,7 +885,7 @@ const MetricsDetail = () => {
                       color: selectedTags.includes(tag.key) ? tag.color : '#666',
                     }}
                   >
-                    {tag.icon && <span style={{ marginRight: 4 }}>{tag.icon}</span>}
+                    <span style={{ marginRight: 4 }}>{tag.icon}</span>
                     {tag.label}
                   </Tag.CheckableTag>
                 ))}
@@ -756,23 +893,19 @@ const MetricsDetail = () => {
             </Space>
 
             <Space>
-              <Radio.Group
-                value={timeRange}
-                onChange={(e) => setTimeRange(e.target.value)}
-                size="small"
-              >
-                <Radio.Button value="5分钟">5分钟</Radio.Button>
-                <Radio.Button value="15分钟">15分钟</Radio.Button>
-                <Radio.Button value="30分钟">30分钟</Radio.Button>
-                <Radio.Button value="1小时">1小时</Radio.Button>
-              </Radio.Group>
+              <Select value={timeRange} onChange={setTimeRange} style={{ width: 120 }} size="small">
+                <Option value="15分钟">最近15分钟</Option>
+                <Option value="30分钟">最近30分钟</Option>
+                <Option value="1小时">最近1小时</Option>
+              </Select>
 
               <Button
+                icon={<ReloadOutlined />}
                 type={autoRefresh ? 'primary' : 'default'}
-                icon={<ReloadOutlined spin={loading} />}
+                size="small"
                 onClick={() => setAutoRefresh(!autoRefresh)}
               >
-                {autoRefresh ? '自动刷新开启' : '自动刷新关闭'}
+                自动刷新
               </Button>
             </Space>
           </div>
@@ -781,38 +914,164 @@ const MetricsDetail = () => {
         {/* 图表网格 */}
         <Row gutter={[16, 16]}>
           {filteredCharts.map((chart) => (
-            <Col xs={24} sm={12} md={8} lg={6} key={chart.id}>
+            <Col key={chart.id} xs={24} sm={12} md={12} lg={6}>
               <ChartCard chart={chart} />
             </Col>
           ))}
         </Row>
 
-        {/* 抽屉 - 日志详情 */}
+        {/* 空状态提示 */}
+        {filteredCharts.length === 0 && (
+          <ProCard
+            style={{
+              height: '200px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              marginTop: '16px',
+            }}
+          >
+            <div style={{ textAlign: 'center' }}>
+              <DashboardOutlined
+                style={{ fontSize: '48px', color: '#d9d9d9', marginBottom: '16px' }}
+              />
+              <Text type="secondary">没有找到匹配的指标图表，请调整筛选条件</Text>
+            </div>
+          </ProCard>
+        )}
+
+        {/* 统计信息 */}
+        <ProCard style={{ marginTop: '16px' }} bodyStyle={{ padding: '12px 16px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div>
+              <Text type="secondary">
+                共显示 {filteredCharts.length} 个指标图表
+                {!selectedTags.includes('all') && ` (${selectedTags.join(', ')})`}
+              </Text>
+              {filteredCharts.some((chart) => checkThresholdExceeded(chart)) && (
+                <Text type="danger" style={{ marginLeft: 16 }}>
+                  <ExclamationCircleOutlined />有{' '}
+                  {filteredCharts.filter((chart) => checkThresholdExceeded(chart)).length}{' '}
+                  个指标超过阈值
+                </Text>
+              )}
+            </div>
+            <Text type="secondary" style={{ fontSize: '12px' }}>
+              数据更新时间: {new Date().toLocaleTimeString()}
+            </Text>
+          </div>
+        </ProCard>
+
+        {/* 日志表格抽屉 */}
         <Drawer
           title={
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span>{currentChart?.title} - 详细日志</span>
-              <Button icon={<CloseOutlined />} type="text" onClick={handleCloseDrawer} />
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                {currentChart?.icon}
+                <span>{currentChart?.title} - 详细日志</span>
+              </div>
+              <Button
+                type="text"
+                icon={<CloseOutlined />}
+                onClick={handleCloseDrawer}
+                size="small"
+              />
             </div>
           }
           placement="right"
           onClose={handleCloseDrawer}
           open={drawerVisible}
-          width={800}
+          width="80%"
+          style={{ maxWidth: '1200px' }}
         >
-          <Table
-            columns={logColumns}
-            dataSource={logData}
-            pagination={{ pageSize: 10 }}
-            scroll={{ y: 600 }}
-            rowClassName={(record) => {
-              if (record.level === 'error') return 'error-row';
-              if (record.level === 'warning') return 'warning-row';
-              return '';
-            }}
-          />
+          {currentChart && (
+            <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+              {/* 统计信息 */}
+              <ProCard style={{ marginBottom: 16 }} bodyStyle={{ padding: '12px 16px' }}>
+                <div
+                  style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+                >
+                  <div>
+                    <Text strong>日志统计:</Text>
+                    <span style={{ marginLeft: 16 }}>
+                      <Badge color="green" text="正常" />
+                      <span style={{ margin: '0 8px' }}>
+                        {logData.filter((item) => item.status === '正常').length}
+                      </span>
+                    </span>
+                    <span style={{ marginLeft: 16 }}>
+                      <Badge color="orange" text="警告" />
+                      <span style={{ margin: '0 8px' }}>
+                        {logData.filter((item) => item.status === '警告').length}
+                      </span>
+                    </span>
+                    <span style={{ marginLeft: 16 }}>
+                      <Badge color="red" text="错误" />
+                      <span style={{ margin: '0 8px' }}>
+                        {logData.filter((item) => item.status === '错误').length}
+                      </span>
+                    </span>
+                  </div>
+                  <Text type="secondary">共 {logData.length} 条日志记录</Text>
+                </div>
+              </ProCard>
+
+              {/* 日志表格 */}
+              <div style={{ flex: 1 }}>
+                <Table
+                  columns={logColumns}
+                  dataSource={logData}
+                  pagination={{
+                    pageSize: 20,
+                    showSizeChanger: true,
+                    showQuickJumper: true,
+                    showTotal: (total, range) =>
+                      `第 ${range[0]}-${range[1]} 条，共 ${total} 条记录`,
+                  }}
+                  scroll={{ y: 'calc(100vh - 250px)' }}
+                  size="small"
+                />
+              </div>
+            </div>
+          )}
         </Drawer>
       </div>
+
+      <style>{`
+        .network-metrics {
+          padding: 0;
+        }
+
+        .control-section {
+          background: #fff;
+          border-radius: 8px;
+        }
+
+        .chart-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+          gap: 16px;
+          margin-top: 16px;
+        }
+
+        @keyframes pulse {
+          0% {
+            opacity: 1;
+          }
+          50% {
+            opacity: 0.5;
+          }
+          100% {
+            opacity: 1;
+          }
+        }
+
+        @media (max-width: 768px) {
+          .chart-grid {
+            grid-template-columns: 1fr;
+          }
+        }
+      `}</style>
     </PageContainer>
   );
 };
