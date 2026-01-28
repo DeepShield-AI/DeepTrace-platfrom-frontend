@@ -362,7 +362,7 @@ const NetworkMetrics = () => {
     applyFilters();
   }, [dateRange, statusFilter, businessFilter, searchText, allContainers]);
 
-  const handleCardClick = (containerId: string, machineId: string) => {
+  const handleCardClick = (containerId: string, machineId: string, item?: any) => {
     const containerKey = `${machineId}-${containerId}`;
 
     // 设置当前卡片为加载状态
@@ -373,7 +373,9 @@ const NetworkMetrics = () => {
 
     // 模拟导航延迟
     setTimeout(() => {
-      navigate(`/Data/metricDetail?containerId=${containerId}&machineId=${machineId}`);
+      navigate(`/Data/metricDetail?containerId=${containerId}&machineId=${machineId}`, {
+        state: { agent_name: item?.name || item?.agent_name || undefined },
+      });
     }, 500);
   };
 

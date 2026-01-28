@@ -134,7 +134,7 @@ const ContainerCard = <T,>({
 		},
 		// 默认可配置字段（可被外部覆盖）
 		fields: [
-			{ key: 'ip', label: '田博源' },
+			{ key: 'ip', label: '田' },
 			{ key: 'arch', label: '架构' },
 			{ key: 'memorySize', label: '内存' },
 			{ key: 'cpuNum', label: 'CPU核数' },

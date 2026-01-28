@@ -30,6 +30,7 @@ import {
   Typography,
 } from 'antd';
 import React, { useEffect, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { getChart, getMetricTags } from '../../services/metrics/api';
 
 const { Title, Text } = Typography;
@@ -46,19 +47,14 @@ const MetricsDetail = () => {
   const [drawerVisible, setDrawerVisible] = useState(false);
   const [currentChart, setCurrentChart] = useState<any | null>(null);
   const [logData, setLogData] = useState<any[]>([]);
+  const [agentName, setAgentName] = useState<string | null>(null);
+  const location = useLocation();
 
   // 图表标签配置
-  const chartTags = [
-    { key: 'all', label: '全部', color: 'blue', icon: <DashboardOutlined /> },
-    { key: 'cpu', label: 'CPU', color: 'red', icon: <MonitorOutlined /> },
-    { key: 'memory', label: '内存', color: 'green', icon: <DatabaseOutlined /> },
-    { key: 'network', label: '网络', color: 'orange', icon: <WifiOutlined /> },
-    { key: 'disk', label: '磁盘', color: 'purple', icon: <HddOutlined /> },
-    { key: 'system', label: '系统', color: 'cyan', icon: <CloudServerOutlined /> },
-  ];
+  const chartTags: any[] = [];
 
-  // 只展示这三类命名空间作为筛选：cpu, network, disk
-  const allowedNamespaces = ['cpu', 'network', 'disk'];
+  // 展示api获取的所有键作为类命名空间作为筛选
+  const allowedNamespaces = metricTagKeys.filter((k) => k !== 'all');
   const displayTags = allowedNamespaces
     .filter((k) => metricTagKeys.length === 0 || metricTagKeys.includes(k))
     .map((k) => {
@@ -72,6 +68,23 @@ const MetricsDetail = () => {
         }
       );
     });
+
+    // 从路由 state 读取 agent_name（优先），回退到 URL 查询参数
+    useEffect(() => {
+      try {
+        const stateAgent = (location && (location as any).state && (location as any).state.agent_name) || (location && (location as any).state && (location as any).state.agent);
+        if (stateAgent) {
+          setAgentName(stateAgent);
+          return;
+        }
+        const qs = new URLSearchParams(window.location.search);
+        const a = qs.get('agent_name') || qs.get('agent');
+        if (a) setAgentName(a);
+      } catch (e) {
+        // ignore
+      }
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [location]);
 
   // 图表数据配置 - 增加threshold字段
   const chartConfigs = [
@@ -452,7 +465,29 @@ const MetricsDetail = () => {
             namespace: ns,
             startTime,
             endTime,
-            name: chart.dataKey,
+            // 将 name 参数映射为后端期望的固定指标名（按命名空间和当前 chart.dataKey）
+            name: (() => {
+              const nameMap: Record<string, Record<string, string>> = {
+                cpu: {
+                  usage: 'user_usage',
+                  system: 'system_usage',
+                  nice: 'nice_usage',
+                  default: 'user_usage',
+                },
+                network: {
+                  network: 'tx_bytes',
+                  connections: 'rx_packets',
+                  default: 'tx_bytes',
+                },
+                disk: {
+                  iops: 'ios_in_progress',
+                  default: 'read_merged',
+                },
+              };
+              const map = nameMap[ns];
+              if (!map) return chart.dataKey;
+              return map[chart.dataKey] || map.default || chart.dataKey;
+            })(),
           };
 
           // 从 metricTagsObj 中取出维度名并使用 selectedValue 作为参数值
@@ -465,6 +500,11 @@ const MetricsDetail = () => {
               const paramName = ns === 'cpu' ? 'cpu' : dimKey;
               params[paramName] = selectedValue;
             }
+          }
+
+          // 附带当前选中的 agent 名称（如果有）
+          if (agentName) {
+            params.agent_name = agentName;
           }
 
           const res = await getChart(params);
