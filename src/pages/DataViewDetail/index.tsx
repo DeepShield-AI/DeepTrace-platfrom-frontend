@@ -32,6 +32,7 @@ import {
 import React, { useEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { getChart, getMetricTags } from '../../services/metrics/api';
+import dayjs from 'dayjs';
 
 const { Title, Text } = Typography;
 const { Option } = Select;
@@ -427,16 +428,88 @@ const MetricsDetail = () => {
       ? (dataSource as any).data
       : [];
     const exceedsThreshold = checkThresholdExceeded(chart, finalData);
-    const baseConfig = {
+    // 如果 metricTagsObj 中存在当前命名空间的维度，则把该维度作为 seriesField（多序列展示）
+    const seriesField = (() => {
+      try {
+        if (!metricTagsObj) return undefined;
+        const inner = metricTagsObj[chart.tag];
+        if (!inner) return undefined;
+        const innerKeys = Object.keys(inner || {});
+        if (innerKeys.length === 0) return undefined;
+        // 对 cpu 命名空间使用 'cpu' 参数名兼容后端
+        return chart.tag === 'cpu' ? 'cpu' : innerKeys[0];
+      } catch (e) {
+        return undefined;
+      }
+    })();
+
+    // 如果 metricTagsObj 中存在当前命名空间的维度，则把该维度作为 seriesField（多序列展示）
+    const resolvedSeriesField = (() => {
+      try {
+        if (!metricTagsObj) return undefined;
+        const inner = metricTagsObj[chart.tag];
+        if (!inner) return undefined;
+        const innerKeys = Object.keys(inner || {});
+        if (innerKeys.length === 0) return undefined;
+        return chart.tag === 'cpu' ? 'cpu' : innerKeys[0];
+      } catch (e) {
+        return undefined;
+      }
+    })();
+
+    // 优先检测后端原始 timestamp/value 字段
+    const usesTimestampValue = Array.isArray(finalData) && finalData.length > 0 && 'timestamp' in finalData[0] && 'value' in finalData[0];
+
+    const baseConfig: any = {
       data: finalData,
-      xField: 'time',
-      yField: chart.dataKey,
+      // 当后端返回原始 timestamp/value 时，使用数字毫秒字段 `timestamp` 作为 x 轴，
+      // 能避免库内对日期字符串/Date 对象的二次转换导致的时区/格式问题。
+      xField: usesTimestampValue ? 'timestamp' : 'time',
+      yField: usesTimestampValue ? 'value' : chart.dataKey,
+      ...(resolvedSeriesField && !usesTimestampValue ? { seriesField: resolvedSeriesField } : {}),
       height: 120,
       autoFit: true,
-      smooth: true,
+      // 当使用后端原始 timestamp/value 时通常是稀疏点：禁用平滑并放大点
+      smooth: usesTimestampValue ? false : true,
       loading: loading,
       xAxis: {
+        type: 'time',
+        // 减少刻度数量并自动隐藏重叠标签，避免挤在一起
+        tickCount: 3,
+        mask: 'HH:mm:ss',
         label: {
+          autoHide: true,
+          autoRotate: false,
+          formatter: (v: any) => {
+            // Debug: 打印传入 formatter 的值与类型，帮助定位为何显示 08:00:00
+            // eslint-disable-next-line no-console
+            console.debug('xAxis.label.formatter called with:', v, typeof v);
+            if (!v && v !== 0) return '';
+            const xAxisCfg = (baseConfig && (baseConfig.xAxis as any)) || {};
+            const baseMinMs = xAxisCfg._minMs;
+            // 尝试将传入值解析为数字毫秒
+            const rawNum = Number(v);
+            if (!Number.isNaN(rawNum)) {
+              let absMs = rawNum;
+              if (usesTimestampValue) {
+                // 如果是相对于 min 的偏移值（通常小于 1e11），并且记录了 baseMinMs，则回补为绝对毫秒
+                if (rawNum > 0 && rawNum < 1e11 && typeof baseMinMs === 'number') {
+                  absMs = baseMinMs + rawNum;
+                } else if (rawNum > 1e9 && rawNum < 1e12) {
+                  // 10 位或 11 位数字视为秒级时间戳，转换为毫秒
+                  absMs = Math.floor(rawNum * 1000);
+                } else if (rawNum >= 1e12) {
+                  // 已经是毫秒级
+                  absMs = rawNum;
+                }
+                return dayjs(absMs).format('HH:mm:ss');
+              }
+              return dayjs(rawNum).format('YYYY-MM-DD HH:mm:ss');
+            }
+            const parsed = Date.parse(String(v));
+            if (!Number.isNaN(parsed)) return usesTimestampValue ? dayjs(parsed).format('HH:mm:ss') : dayjs(parsed).format('YYYY-MM-DD HH:mm:ss');
+            return String(v);
+          },
           style: {
             fill: '#666',
             fontSize: 10,
@@ -454,21 +527,25 @@ const MetricsDetail = () => {
       tooltip: {
         showMarkers: false,
         formatter: (datum: any) => {
-          return {
-            name: chart.title,
-            value:
-              chart.dataKey === 'network'
-                ? `${datum[chart.dataKey].toFixed(1)} Gbps`
-                : chart.dataKey === 'iops'
-                ? `${datum[chart.dataKey].toFixed(0)}K`
-                : chart.dataKey === 'connections'
-                ? `${Math.round(datum[chart.dataKey])}`
-                : chart.dataKey === 'temperature'
-                ? `${datum[chart.dataKey].toFixed(0)}°C`
-                : `${datum[chart.dataKey].toFixed(1)}%`,
-          };
+          // 支持两种数据结构：{value, timestamp} 或 { [chart.dataKey]: ... }
+          const v = datum ? (usesTimestampValue ? datum.value : datum[chart.dataKey]) : undefined;
+          const num = typeof v === 'number' ? v : Number(v || 0);
+          const formatted = usesTimestampValue
+            ? (chart.unit === 'Gbps' ? `${num.toFixed(1)} Gbps` : chart.unit === '°C' ? `${num.toFixed(0)}°C` : `${num}`)
+            : chart.dataKey === 'network'
+            ? `${num.toFixed(1)} Gbps`
+            : chart.dataKey === 'iops'
+            ? `${num.toFixed(0)}K`
+            : chart.dataKey === 'connections'
+            ? `${Math.round(num)}`
+            : chart.dataKey === 'temperature'
+            ? `${num.toFixed(0)}°C`
+            : `${num.toFixed(1)}%`;
+          return { name: chart.title, value: formatted };
         },
       },
+      // 在使用 timestamp/value 时放大点，便于单点可见
+      point: usesTimestampValue ? { size: 6 } : { size: 2 },
       // 添加阈值线（类型断言为 any 避免类型不兼容）
       annotations: (chart.threshold
         ? [
@@ -498,6 +575,71 @@ const MetricsDetail = () => {
 
     // 根据是否超过阈值调整颜色强度
     const chartColor = exceedsThreshold ? chart.thresholdColor : chart.color;
+
+    // 如果使用后端 timestamp/value，需要计算 x 轴域并保证单点可见（添加左右 padding）
+    if (Array.isArray(finalData) && finalData.length > 0 && 'timestamp' in finalData[0]) {
+      try {
+        const tsList = finalData.map((d: any) => Number(d.timestamp || d.time || 0)).filter(Boolean);
+        if (tsList.length > 0) {
+          const minTs = Math.min(...tsList);
+          const maxTs = Math.max(...tsList);
+          // 当只有单个时间点时，扩展 60 秒的左右边距；否则扩展 5% 的范围
+          const pad = minTs === maxTs ? 60000 : Math.max(60000, Math.round((maxTs - minTs) * 0.05));
+          const axisMinMs = minTs - pad;
+          const axisMaxMs = maxTs + pad;
+          // 将 min/max 设置到 xAxis，针对 usesTimestampValue 使用数字毫秒，避免 Date 对象导致的刻度单位变化
+          if (!baseConfig.xAxis) baseConfig.xAxis = {};
+          if (usesTimestampValue) {
+            baseConfig.xAxis.min = axisMinMs;
+            baseConfig.xAxis.max = axisMaxMs;
+            // 记录原始的 min ms 供 formatter 回补使用
+            (baseConfig.xAxis as any)._minMs = axisMinMs;
+          } else {
+            baseConfig.xAxis.min = new Date(axisMinMs);
+            baseConfig.xAxis.max = new Date(axisMaxMs);
+            (baseConfig.xAxis as any)._minMs = axisMinMs;
+          }
+          // Debug 输出：打印时间戳列表与设置的轴范围，便于排查标签问题
+          // eslint-disable-next-line no-console
+          console.log('Chart timestamps sample:', tsList.slice(0, 10));
+          // eslint-disable-next-line no-console
+          console.log('xAxis min/max (ms):', axisMinMs, axisMaxMs);
+        }
+      } catch (e) {
+        // ignore
+      }
+
+      // 确保单点可见：设置点样式（填充与边框）
+      baseConfig.point = baseConfig.point || {};
+      baseConfig.point.style = baseConfig.point.style || {};
+      baseConfig.point.size = baseConfig.point.size || 6;
+      baseConfig.point.style.fill = chartColor;
+      baseConfig.point.style.stroke = '#fff';
+      try {
+        const vals = finalData.map((d: any) => Number(d.value ?? d[chart.dataKey])).filter((v: any) => Number.isFinite(v));
+        if (vals.length > 0) {
+          const vMin = Math.min(...vals);
+          const vMax = Math.max(...vals);
+          const vRange = vMax - vMin;
+          const yPad = vRange === 0 ? Math.max(1, Math.abs(vMin) * 0.05 || 1) : vRange * 0.2;
+          const yMin = vMin - yPad;
+          const yMax = vMax + yPad;
+          baseConfig.yAxis = baseConfig.yAxis || {};
+          baseConfig.yAxis.min = yMin;
+          baseConfig.yAxis.max = yMax;
+          baseConfig.yAxis.tickCount = 5;
+        }
+      } catch (e) {
+        // ignore
+      }
+
+      // 强化线条与填充，使微小波动更明显
+      baseConfig.line = baseConfig.line || {};
+      baseConfig.line.size = Math.max(2, baseConfig.line.size || 3);
+      baseConfig.areaStyle = baseConfig.areaStyle || { fill: `l(270) 0:${chartColor}22 1:${chartColor}44` };
+      baseConfig.point.size = Math.max(4, baseConfig.point.size || 6);
+      baseConfig.point.style = { ...baseConfig.point.style, fill: chartColor, stroke: '#fff' };
+    }
 
     switch (chart.type) {
       case 'area':
@@ -576,8 +718,8 @@ const MetricsDetail = () => {
         try {
           // const { startTime, endTime } = computeTimeRange();
           // 临时写死时间参数为固定值（用于调试）
-          const startTime = 1764214446644;
-          const endTime = 1764214446644;
+          const startTime = 1768286994766;
+          const endTime = 1768287007766;
           const params: Record<string, any> = {
             namespace: ns,
             startTime,
@@ -629,10 +771,96 @@ const MetricsDetail = () => {
             params.agent_name = agentName;
           }
 
+          // Debug: 打印即将发送的查询参数
+          // eslint-disable-next-line no-console
+          console.debug('getChart params:', params);
+
           const res = await getChart(params);
           if (!mounted) return;
-          // 后端直接返回时序数组
-          setChartPoints(res || []);
+          // 后端返回格式可能为 { total, data: [...] } 或直接为数组
+          let rawPoints: any[] = [];
+          if (res) {
+            if (Array.isArray(res)) rawPoints = res;
+            else if (Array.isArray((res as any).data)) rawPoints = (res as any).data;
+          }
+
+            // Debug: 打印后端原始点的时间戳样本，帮助定位后端返回是否为期望的不同时间戳
+            // eslint-disable-next-line no-console
+            console.log('rawPoints timestamps:', (rawPoints || []).slice(0, 20).map((r: any) => r && (r.timestamp ?? r.time ?? r.t)));
+            // Debug: 打印后端原始点对象样本，检查字段和值是否被服务端重复或有异常
+            // eslint-disable-next-line no-console
+            console.debug('rawPoints sample:', (rawPoints || []).slice(0, 20));
+
+          // 转换为图表需要的格式：{ time: Date, [dataKey]: value, ...tags }
+          const mapped = (rawPoints || [])
+            .map((d: any) => {
+              const ts = d.timestamp ?? d.time ?? d.t ?? null;
+              let timestamp = ts !== null && ts !== undefined ? Number(ts) : undefined;
+              // 后端可能返回秒级时间戳（10位），统一转换为毫秒（13位）以供绘图库使用
+              if (typeof timestamp === 'number' && Number.isFinite(timestamp)) {
+                // 小于 1e12 视为秒级或异常短的时间戳，转换为毫秒
+                if (timestamp > 0 && timestamp < 1e12) {
+                  timestamp = Math.floor(timestamp * 1000);
+                }
+              }
+              const time = typeof timestamp === 'number' && Number.isFinite(timestamp) ? new Date(timestamp) : undefined;
+              const value = d.value !== undefined ? Number(d.value) : Number(d[chart.dataKey] || 0);
+              const tags = d.tags || {};
+              return {
+                // 保留后端原始 timestamp（毫秒或秒）并尽量转换为数字
+                timestamp,
+                // 兼容旧逻辑：同时保留 Date 对象（如果 timestamp 可用）
+                time,
+                // 统一使用 value 字段作为 y 值，便于直接映射后端返回
+                value,
+                // 兼容旧逻辑：仍然提供按 chart.dataKey 命名的字段
+                [chart.dataKey]: value,
+                // 透传 tags 以便按 tag 分系列（如 cpu core）
+                ...tags,
+              };
+            })
+            // 过滤掉无效时间戳或不可数值的点（保留只包含 timestamp/value 的原始点）
+            .filter((p: any) => (typeof p.timestamp === 'number' && Number.isFinite(p.timestamp)) || (typeof p.value === 'number' && Number.isFinite(p.value)));
+
+          // Debug: 打印 mapped 的时间戳样本
+          // eslint-disable-next-line no-console
+          console.debug('mapped timestamps:', mapped.map((m: any) => m.timestamp));
+
+          // 按时间升序排序，保证点在 x 轴正确位置
+          const sorted = mapped.sort((a: any, b: any) => (a.timestamp || a.time.getTime()) - (b.timestamp || b.time.getTime()));
+
+          // Debug: 打印排序后的时间戳样本
+          // eslint-disable-next-line no-console
+          console.debug('sorted timestamps:', sorted.map((m: any) => m.timestamp).slice(0, 20));
+
+          // 回退处理：如果后端返回的所有 timestamp 相同（会导致所有点重叠），
+          // 则基于查询的 startTime/endTime 对点进行均匀分布时间戳分配，保证横轴有跨度。
+          if (sorted.length > 1) {
+            const tsList = sorted.map((p: any) => Number(p.timestamp || (p.time && p.time.getTime()))).filter(Boolean);
+            const allEqual = tsList.length > 0 && tsList.every((t: number) => t === tsList[0]);
+            if (allEqual) {
+              try {
+                let s = Number(startTime) || tsList[0];
+                let e = Number(endTime) || tsList[0] + (sorted.length - 1) * 60000;
+                if (e <= s) e = s + (sorted.length - 1) * 60000;
+                const n = sorted.length;
+                const interval = n > 1 ? Math.floor((e - s) / (n - 1)) : 60000;
+                const redistributed = sorted.map((p: any, idx: number) => {
+                  const newTs = s + idx * interval;
+                  return { ...p, timestamp: newTs, time: new Date(newTs) };
+                });
+                // eslint-disable-next-line no-console
+                console.warn('All timestamps identical; redistributed timestamps between', new Date(s), new Date(e));
+                setChartPoints(redistributed);
+              } catch (e) {
+                setChartPoints(sorted);
+              }
+            } else {
+              setChartPoints(sorted);
+            }
+          } else {
+            setChartPoints(sorted);
+          }
         } catch (err) {
           // eslint-disable-next-line no-console
           console.error('getChart error:', err);
