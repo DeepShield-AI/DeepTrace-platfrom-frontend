@@ -200,10 +200,11 @@ const NetworkMetrics = () => {
         state: item.state,
       }));
       console.log('Fetched containers:', containers);
-      // 初始化卡片加载状态
+      // 初始化卡片加载状态（使用与 ContainerCard 一致的 key: `${machineId}-${id}`）
       const loadingStates: Record<string, boolean> = {};
       containers.forEach((container: any) => {
-        loadingStates[container.id] = true;
+        const key = `${container.machineId}-${container.id}`;
+        loadingStates[key] = true;
       });
       setCardLoading(loadingStates);
       setAllContainers(containers);
@@ -212,10 +213,11 @@ const NetworkMetrics = () => {
       setLastRefreshTime(new Date());
       // 卡片逐个加载完成效果
       containers.forEach((container: any, index: number) => {
+        const key = `${container.machineId}-${container.id}`;
         setTimeout(() => {
           setCardLoading((prev) => ({
             ...prev,
-            [container.id]: false,
+            [key]: false,
           }));
         }, index * 200);
       });

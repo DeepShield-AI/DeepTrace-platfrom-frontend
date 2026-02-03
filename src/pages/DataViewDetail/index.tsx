@@ -37,6 +37,29 @@ import dayjs from 'dayjs';
 const { Title, Text } = Typography;
 const { Option } = Select;
 
+// 格式化 x 轴标签（支持绝对毫秒、秒级、以及相对于基准 min 的偏移）
+const formatXAxisValue = (v: any, baseMinMs?: number, usesTimestampValue?: boolean) => {
+  if (v === null || v === undefined || v === '') return '';
+  const rawNum = Number(v);
+  if (!Number.isNaN(rawNum)) {
+    let absMs = rawNum;
+    if (usesTimestampValue) {
+      if (rawNum > 0 && rawNum < 1e11 && typeof baseMinMs === 'number') {
+        absMs = baseMinMs + rawNum;
+      } else if (rawNum > 1e9 && rawNum < 1e12) {
+        absMs = Math.floor(rawNum * 1000);
+      } else if (rawNum >= 1e12) {
+        absMs = rawNum;
+      }
+      return dayjs(absMs).format('HH:mm:ss');
+    }
+    return dayjs(rawNum).format('YYYY-MM-DD HH:mm:ss');
+  }
+  const parsed = Date.parse(String(v));
+  if (!Number.isNaN(parsed)) return usesTimestampValue ? dayjs(parsed).format('HH:mm:ss') : dayjs(parsed).format('YYYY-MM-DD HH:mm:ss');
+  return String(v);
+};
+
 const MetricsDetail = () => {
   const [timeRange, setTimeRange] = useState('15分钟');
   const [autoRefresh, setAutoRefresh] = useState(true);
@@ -326,73 +349,13 @@ const MetricsDetail = () => {
     },
   ];
 
-  // 生成模拟数据
-  const generateMetricsData = () => {
-    const baseTime = [
-      '15:02',
-      '15:03',
-      '15:04',
-      '15:05',
-      '15:06',
-      '15:07',
-      '15:08',
-      '15:09',
-      '15:10',
-      '15:11',
-      '15:12',
-      '15:13',
-    ];
-
-    return baseTime.map((time, index) => ({
-      time,
-      usage: 40 + Math.sin(index * 0.5) * 20 + Math.random() * 10, // CPU使用率
-      memory: 60 + Math.cos(index * 0.3) * 15 + Math.random() * 8, // 内存使用率
-      network: 1.5 + Math.sin(index * 0.4) * 0.8 + Math.random() * 0.3, // 网络吞吐量
-      iops: 8 + Math.sin(index * 0.6) * 4 + Math.random() * 2, // 磁盘IOPS
-      load: 1.5 + Math.sin(index * 0.4) * 0.8 + Math.random() * 0.3, // 系统负载
-      temperature: 60 + Math.sin(index * 0.3) * 8 + Math.random() * 3, // 温度
-      connections: 800 + Math.sin(index * 0.5) * 300 + Math.random() * 100, // 连接数
-      cache: 90 + Math.cos(index * 0.4) * 8 + Math.random() * 4, // 缓存命中率
-    }));
-  };
-
-  // 生成模拟日志数据
-  const generateLogData = (chart: any) => {
-    const statuses = ['正常', '警告', '错误'];
-    const levels = ['info', 'warning', 'error'];
-    const operations = ['读取', '写入', '处理', '响应', '连接', '断开'];
-
-    return Array.from({ length: 50 }, (_, index) => {
-      const timestamp = new Date(Date.now() - (50 - index) * 60000).toLocaleTimeString();
-      const randomStatus = Math.floor(Math.random() * 3);
-      const value = Math.random() * 100;
-
-      return {
-        key: index,
-        timestamp,
-        value:
-          chart.dataKey === 'network'
-            ? `${(value / 4).toFixed(2)} Gbps`
-            : chart.dataKey === 'iops'
-            ? `${Math.round(value * 200)}`
-            : chart.dataKey === 'connections'
-            ? `${Math.round(value * 20)}`
-            : chart.dataKey === 'temperature'
-            ? `${Math.round(value + 20)}°C`
-            : `${value.toFixed(1)}%`,
-        status: statuses[randomStatus],
-        level: levels[randomStatus],
-        operation: operations[Math.floor(Math.random() * operations.length)],
-        message: `${chart.title} ${operations[Math.floor(Math.random() * operations.length)]}操作`,
-        source: `server-${Math.floor(Math.random() * 5) + 1}`,
-      };
-    });
-  };
+  // 已移除模拟数据生成函数；数据应由后端接口提供并设置到 `metricsData` / `logData`
 
   // 打开抽屉查看日志表格
   const handleViewLogs = (chart: any) => {
     setCurrentChart(chart);
-    setLogData(generateLogData(chart));
+    // 暂不生成 mock 日志，保留空数据或由后端拉取真实日志
+    setLogData([]);
     setDrawerVisible(true);
   };
 
@@ -406,7 +369,7 @@ const MetricsDetail = () => {
   // 检查是否超过阈值（可传入自定义数据源）
   const checkThresholdExceeded = (chart: any, dataSource?: any) => {
     const source = dataSource || metricsData;
-    if (!chart.threshold) return false;
+    if (!chart.threshold && chart.threshold !== 0) return false;
     if (!source || !source.length) return false;
 
     return source.some((data: any) => {
@@ -469,46 +432,20 @@ const MetricsDetail = () => {
       ...(resolvedSeriesField && !usesTimestampValue ? { seriesField: resolvedSeriesField } : {}),
       height: 120,
       autoFit: true,
-      // 当使用后端原始 timestamp/value 时通常是稀疏点：禁用平滑并放大点
+      // 平滑曲线（非 timestamp/raw 数据）以获得更柔和视觉
       smooth: usesTimestampValue ? false : true,
       loading: loading,
       xAxis: {
         type: 'time',
-        // 减少刻度数量并自动隐藏重叠标签，避免挤在一起
         tickCount: 3,
-        mask: 'HH:mm:ss',
+        mask: usesTimestampValue ? 'HH:mm:ss' : 'HH:mm',
         label: {
           autoHide: true,
           autoRotate: false,
           formatter: (v: any) => {
-            // Debug: 打印传入 formatter 的值与类型，帮助定位为何显示 08:00:00
-            // eslint-disable-next-line no-console
-            console.debug('xAxis.label.formatter called with:', v, typeof v);
-            if (!v && v !== 0) return '';
             const xAxisCfg = (baseConfig && (baseConfig.xAxis as any)) || {};
             const baseMinMs = xAxisCfg._minMs;
-            // 尝试将传入值解析为数字毫秒
-            const rawNum = Number(v);
-            if (!Number.isNaN(rawNum)) {
-              let absMs = rawNum;
-              if (usesTimestampValue) {
-                // 如果是相对于 min 的偏移值（通常小于 1e11），并且记录了 baseMinMs，则回补为绝对毫秒
-                if (rawNum > 0 && rawNum < 1e11 && typeof baseMinMs === 'number') {
-                  absMs = baseMinMs + rawNum;
-                } else if (rawNum > 1e9 && rawNum < 1e12) {
-                  // 10 位或 11 位数字视为秒级时间戳，转换为毫秒
-                  absMs = Math.floor(rawNum * 1000);
-                } else if (rawNum >= 1e12) {
-                  // 已经是毫秒级
-                  absMs = rawNum;
-                }
-                return dayjs(absMs).format('HH:mm:ss');
-              }
-              return dayjs(rawNum).format('YYYY-MM-DD HH:mm:ss');
-            }
-            const parsed = Date.parse(String(v));
-            if (!Number.isNaN(parsed)) return usesTimestampValue ? dayjs(parsed).format('HH:mm:ss') : dayjs(parsed).format('YYYY-MM-DD HH:mm:ss');
-            return String(v);
+            return formatXAxisValue(v, baseMinMs, usesTimestampValue);
           },
           style: {
             fill: '#666',
@@ -525,9 +462,8 @@ const MetricsDetail = () => {
         },
       },
       tooltip: {
-        showMarkers: false,
+        showMarkers: true,
         formatter: (datum: any) => {
-          // 支持两种数据结构：{value, timestamp} 或 { [chart.dataKey]: ... }
           const v = datum ? (usesTimestampValue ? datum.value : datum[chart.dataKey]) : undefined;
           const num = typeof v === 'number' ? v : Number(v || 0);
           const formatted = usesTimestampValue
@@ -544,8 +480,8 @@ const MetricsDetail = () => {
           return { name: chart.title, value: formatted };
         },
       },
-      // 在使用 timestamp/value 时放大点，便于单点可见
-      point: usesTimestampValue ? { size: 6 } : { size: 2 },
+      // 点的默认大小（非侵入式），在 timestamp/raw 场景略大一些以便可见
+      point: { size: usesTimestampValue ? 4 : 3 },
       // 添加阈值线（类型断言为 any 避免类型不兼容）
       annotations: (chart.threshold
         ? [
@@ -599,11 +535,7 @@ const MetricsDetail = () => {
             baseConfig.xAxis.max = new Date(axisMaxMs);
             (baseConfig.xAxis as any)._minMs = axisMinMs;
           }
-          // Debug 输出：打印时间戳列表与设置的轴范围，便于排查标签问题
-          // eslint-disable-next-line no-console
-          console.log('Chart timestamps sample:', tsList.slice(0, 10));
-          // eslint-disable-next-line no-console
-          console.log('xAxis min/max (ms):', axisMinMs, axisMaxMs);
+          // 已计算轴范围：axisMinMs / axisMaxMs
         }
       } catch (e) {
         // ignore
@@ -633,11 +565,11 @@ const MetricsDetail = () => {
         // ignore
       }
 
-      // 强化线条与填充，使微小波动更明显
+      // 视觉优化：适度强化线条与填充，使波动可视但不过分粗糙
       baseConfig.line = baseConfig.line || {};
-      baseConfig.line.size = Math.max(2, baseConfig.line.size || 3);
-      baseConfig.areaStyle = baseConfig.areaStyle || { fill: `l(270) 0:${chartColor}22 1:${chartColor}44` };
-      baseConfig.point.size = Math.max(4, baseConfig.point.size || 6);
+      baseConfig.line.size = baseConfig.line.size || (exceedsThreshold ? 3 : 2);
+      baseConfig.areaStyle = baseConfig.areaStyle || { fill: `l(90) 0:${chartColor}20 1:${chartColor}44` };
+      baseConfig.point.size = baseConfig.point.size || (usesTimestampValue ? 4 : 3);
       baseConfig.point.style = { ...baseConfig.point.style, fill: chartColor, stroke: '#fff' };
     }
 
@@ -771,9 +703,7 @@ const MetricsDetail = () => {
             params.agent_name = agentName;
           }
 
-          // Debug: 打印即将发送的查询参数
-          // eslint-disable-next-line no-console
-          console.debug('getChart params:', params);
+          // 已准备好查询参数
 
           const res = await getChart(params);
           if (!mounted) return;
@@ -784,12 +714,7 @@ const MetricsDetail = () => {
             else if (Array.isArray((res as any).data)) rawPoints = (res as any).data;
           }
 
-            // Debug: 打印后端原始点的时间戳样本，帮助定位后端返回是否为期望的不同时间戳
-            // eslint-disable-next-line no-console
-            console.log('rawPoints timestamps:', (rawPoints || []).slice(0, 20).map((r: any) => r && (r.timestamp ?? r.time ?? r.t)));
-            // Debug: 打印后端原始点对象样本，检查字段和值是否被服务端重复或有异常
-            // eslint-disable-next-line no-console
-            console.debug('rawPoints sample:', (rawPoints || []).slice(0, 20));
+              // 已接收后端原始点
 
           // 转换为图表需要的格式：{ time: Date, [dataKey]: value, ...tags }
           const mapped = (rawPoints || [])
@@ -822,16 +747,12 @@ const MetricsDetail = () => {
             // 过滤掉无效时间戳或不可数值的点（保留只包含 timestamp/value 的原始点）
             .filter((p: any) => (typeof p.timestamp === 'number' && Number.isFinite(p.timestamp)) || (typeof p.value === 'number' && Number.isFinite(p.value)));
 
-          // Debug: 打印 mapped 的时间戳样本
-          // eslint-disable-next-line no-console
-          console.debug('mapped timestamps:', mapped.map((m: any) => m.timestamp));
+          // mapped 数据已生成
 
           // 按时间升序排序，保证点在 x 轴正确位置
           const sorted = mapped.sort((a: any, b: any) => (a.timestamp || a.time.getTime()) - (b.timestamp || b.time.getTime()));
 
-          // Debug: 打印排序后的时间戳样本
-          // eslint-disable-next-line no-console
-          console.debug('sorted timestamps:', sorted.map((m: any) => m.timestamp).slice(0, 20));
+          // 排序完成
 
           // 回退处理：如果后端返回的所有 timestamp 相同（会导致所有点重叠），
           // 则基于查询的 startTime/endTime 对点进行均匀分布时间戳分配，保证横轴有跨度。
@@ -849,8 +770,7 @@ const MetricsDetail = () => {
                   const newTs = s + idx * interval;
                   return { ...p, timestamp: newTs, time: new Date(newTs) };
                 });
-                // eslint-disable-next-line no-console
-                console.warn('All timestamps identical; redistributed timestamps between', new Date(s), new Date(e));
+                // 对相同时间戳的条目进行了均匀分布处理
                 setChartPoints(redistributed);
               } catch (e) {
                 setChartPoints(sorted);
@@ -862,8 +782,6 @@ const MetricsDetail = () => {
             setChartPoints(sorted);
           }
         } catch (err) {
-          // eslint-disable-next-line no-console
-          console.error('getChart error:', err);
           if (mounted) setChartPoints([]);
         } finally {
           if (mounted) setChartLoading(false);
@@ -1190,22 +1108,13 @@ const MetricsDetail = () => {
     setLoading(true);
 
     const timer = setTimeout(() => {
-      setMetricsData(generateMetricsData());
+      // 数据由后端初始化填充（已移除本地 mock）
       setLoading(false);
     }, 500);
 
+    // 自动刷新逻辑：当启用时，应调用后端拉取最新数据并更新 `metricsData`。
+    // 目前移除了基于本地 mock 的刷新实现。
     let interval: any;
-    if (autoRefresh) {
-      interval = setInterval(() => {
-        const newData = generateMetricsData().map((item) => ({
-          ...item,
-          usage: Math.max(10, Math.min(95, item.usage + Math.random() * 4 - 2)),
-          memory: Math.max(20, Math.min(95, item.memory + Math.random() * 3 - 1.5)),
-          network: Math.max(0.5, Math.min(3.0, item.network + Math.random() * 0.2 - 0.1)),
-        }));
-        setMetricsData(newData);
-      }, 3000);
-    }
 
     return () => {
       clearTimeout(timer);
@@ -1218,17 +1127,14 @@ const MetricsDetail = () => {
     let mounted = true;
     const fetchTags = async () => {
       try {
-        console.log('fetchTags: calling getMetricTags()');
-        const res = await getMetricTags();
-        console.log('Fetched metric tags:', res);
-        if (!mounted) return;
+      // fetching metric tags
+      const res = await getMetricTags();
+      if (!mounted) return;
         const keys = res && typeof res === 'object' && !Array.isArray(res) ? Object.keys(res) : [];
         setMetricTagKeys(keys);
         setMetricTagsObj(res || null);
       } catch (err) {
         // 失败时保留默认行为（不阻塞页面）
-        // eslint-disable-next-line no-console
-        console.error('getMetricTags error:', err);
       }
     };
 

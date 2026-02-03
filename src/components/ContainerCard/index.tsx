@@ -1,5 +1,5 @@
 import { CloudServerOutlined, CodeOutlined, ExclamationCircleOutlined } from '@ant-design/icons';
-import { Badge, Card, Divider, Popover, Progress, Space, Tag, Tooltip, Typography } from 'antd';
+import { Badge, Card, Divider, Popover, Progress, Space, Tag, Tooltip, Typography, Skeleton } from 'antd';
 import React from 'react';
 import useResizeObserver from '../../hooks/useResizeObserver';
 
@@ -186,7 +186,7 @@ const ContainerCard = <T,>({
 	const businessInfo = businessId ? businessData[businessId] : null;
 	const isHovered = hoveredCard === containerKey;
 
-	if (isLoading) return <SkeletonPlaceholder />;
+	
 
 	// 渲染可配置字段的值，优先级：render -> field.accessor -> cardConfig.accessors[key] -> '-'
 	const renderFieldValue = (f: FieldConfig) => {
@@ -372,7 +372,8 @@ const ContainerCard = <T,>({
 	const containerStyle: React.CSSProperties = {
 		display: 'flex',
 		flexDirection: 'column',
-		height: typeof height === 'number' ? `${height}px` : height,
+		minHeight: typeof height === 'number' ? `${height}px` : height,
+		height: '100%',
 	};
 
 	const cardElement = (
