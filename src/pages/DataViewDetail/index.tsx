@@ -496,8 +496,9 @@ const MetricsDetail = () => {
                 };
                 const tickInterval = chooseNice(minDiff);
                 (baseConfig.xAxis as any).tickInterval = tickInterval; // milliseconds
-                // 显示毫秒部分
-                (baseConfig.xAxis as any).mask = 'HH:mm:ss.SSS';
+                // 显示毫秒部分？
+                // 不显示毫秒部分，统一使用秒级显示
+                (baseConfig.xAxis as any).mask = 'HH:mm:ss';
               }
             } catch (e) {
               // ignore
@@ -1073,14 +1074,17 @@ const MetricsDetail = () => {
   // 过滤显示的图表
   // 判断某个 chart 是否有可供选择的维度选项
   const chartHasOptions = (chart: any) => {
-    if (!metricTagsObj) return true; // 未拉取到 metric tags 时，保留原有行为
+    // 如果还未拉取到 metric tags，保持显示；
+    // 即便 metricTagsObj 中存在命名空间但维度列表为空，也仍然显示图表，后端可返回全局数据。
+    if (!metricTagsObj) return true;
     const ns = chart.tag;
     const inner = metricTagsObj[ns];
-    if (!inner) return false;
+    if (!inner) return true;
     const innerKeys = Object.keys(inner || {});
-    if (innerKeys.length === 0) return false;
+    if (innerKeys.length === 0) return true;
     const list = inner[innerKeys[0]] || [];
-    return Array.isArray(list) ? list.length > 0 : false;
+    // 即便 list 为空，也不要隐藏图表，允许 ChartCard 在没有具体维度时发起请求
+    return true;
   };
 
   const filteredCharts = chartConfigs.filter(
@@ -1152,24 +1156,34 @@ const MetricsDetail = () => {
             <Space size="middle">
               <Text strong>筛选指标:</Text>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                {displayTags.map((tag) => (
-                  <Tag.CheckableTag
-                    key={tag.key}
-                    checked={selectedTags.includes(tag.key)}
-                    onChange={() => handleTagSelect(tag.key)}
-                    style={{
-                      padding: '4px 12px',
-                      border: `1px solid ${selectedTags.includes(tag.key) ? tag.color : '#d9d9d9'}`,
-                      borderRadius: '16px',
-                      cursor: 'pointer',
-                      background: selectedTags.includes(tag.key) ? `${tag.color}10` : '#fff',
-                      color: selectedTags.includes(tag.key) ? tag.color : '#666',
-                    }}
-                  >
-                    <span style={{ marginRight: 4 }}>{tag.icon}</span>
-                    {tag.label}
-                  </Tag.CheckableTag>
-                ))}
+                {displayTags.map((tag) => {
+                  const isSelected = selectedTags.includes(tag.key);
+                  return (
+                    <Tag.CheckableTag
+                      key={tag.key}
+                      checked={isSelected}
+                      onChange={() => handleTagSelect(tag.key)}
+                      style={{
+                        padding: '6px 14px',
+                        border: isSelected ? `1px solid ${tag.color}` : '1px solid #d9d9d9',
+                        borderRadius: '16px',
+                        cursor: 'pointer',
+                        background: isSelected ? tag.color : '#fff',
+                        color: isSelected ? '#fff' : '#666',
+                        fontWeight: isSelected ? 600 : 500,
+                        boxShadow: isSelected ? `0 6px 18px ${tag.color}33` : 'none',
+                        transform: isSelected ? 'translateY(-2px)' : 'none',
+                        transition: 'all 0.12s ease',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 6,
+                      }}
+                    >
+                      <span style={{ marginRight: 4 }}>{tag.icon}</span>
+                      {tag.label}
+                    </Tag.CheckableTag>
+                  );
+                })}
               </div>
             </Space>
 
