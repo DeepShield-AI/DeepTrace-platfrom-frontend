@@ -776,8 +776,11 @@ const MetricsDetail = () => {
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [selectedValue, timeRange, autoRefresh, metricTagsObj]);
 
+    const cardTitleText = chart.tag === 'cpu' ? '请选择CPU核心数：' : chart.tag === 'network' ? '请选择网口：' : chart.tag === 'disk' ? '请选择磁盘：' : '';
+
     return (
       <Card
+        title={cardTitleText ? <div style={{ fontSize: 14, fontWeight: 600 }}>{cardTitleText}</div> : undefined}
         size="small"
         style={{
           height: '100%',
