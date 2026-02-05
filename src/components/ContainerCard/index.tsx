@@ -186,8 +186,6 @@ const ContainerCard = <T,>({
 	const businessInfo = businessId ? businessData[businessId] : null;
 	const isHovered = hoveredCard === containerKey;
 
-	
-
 	// 渲染可配置字段的值，优先级：render -> field.accessor -> cardConfig.accessors[key] -> '-'
 	const renderFieldValue = (f: FieldConfig) => {
 		if (f.render) return f.render(container);

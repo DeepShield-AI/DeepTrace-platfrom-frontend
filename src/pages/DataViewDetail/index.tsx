@@ -159,24 +159,7 @@ const MetricsDetail = () => {
       unit: '%',
     },
 
-    // 内存
-    {
-      id: 4,
-      title: '内存使用率',
-      value: '68.7%',
-      trend: 'down',
-      change: '-1.3%',
-      tag: 'memory',
-      type: 'area',
-      dataKey: 'memory',
-      color: '#52c41a',
-      icon: <DatabaseOutlined />,
-      threshold: 85,
-      thresholdColor: '#ff7875',
-      unit: '%',
-    },
-
-    // Network: 每个指标独立
+    // Network 四个独立指标
     {
       id: 5,
       title: 'Network - tx_bytes',
@@ -253,7 +236,7 @@ const MetricsDetail = () => {
       unit: '',
     },
 
-    // Disk: 每个指标独立
+    // Disk 四个独立指标
     {
       id: 10,
       title: 'Disk - read_merged',
@@ -299,57 +282,7 @@ const MetricsDetail = () => {
       thresholdColor: '#ff7875',
       unit: '',
     },
-
-    // 其他系统指标
-    {
-      id: 13,
-      title: '系统负载',
-      value: '2.1',
-      trend: 'up',
-      change: '+0.2',
-      tag: 'system',
-      type: 'line',
-      dataKey: 'load',
-      color: '#fa8c16',
-      icon: <CloudServerOutlined />,
-      threshold: 3.0,
-      thresholdColor: '#ff7875',
-      unit: '',
-    },
-    {
-      id: 14,
-      title: '温度监控',
-      value: '65°C',
-      trend: 'stable',
-      change: '0°',
-      tag: 'system',
-      type: 'area',
-      dataKey: 'temperature',
-      color: '#fa541c',
-      icon: <FireOutlined />,
-      threshold: 75,
-      thresholdColor: '#ff7875',
-      unit: '°C',
-    },
-    {
-      id: 15,
-      title: '缓存命中率',
-      value: '92.3%',
-      trend: 'down',
-      change: '-1.2%',
-      tag: 'memory',
-      type: 'line',
-      dataKey: 'cache',
-      color: '#eb2f96',
-      icon: <RocketOutlined />,
-      threshold: 90,
-      thresholdColor: '#52c41a',
-      unit: '%',
-      reverseThreshold: true,
-    },
   ];
-
-  // 已移除模拟数据生成函数；数据应由后端接口提供并设置到 `metricsData` / `logData`
 
   // 打开抽屉查看日志表格
   const handleViewLogs = (chart: any) => {
@@ -463,8 +396,21 @@ const MetricsDetail = () => {
       },
       tooltip: {
         showMarkers: true,
+        shared: true,
+        showCrosshairs: true,
         formatter: (datum: any) => {
-          const v = datum ? (usesTimestampValue ? datum.value : datum[chart.dataKey]) : undefined;
+          // 支持聚合点（含 min/max/count）和普通点
+          if (!datum) return { name: chart.title, value: '-' };
+          const hasRange = typeof datum.min === 'number' && typeof datum.max === 'number' && datum.count;
+          if (hasRange) {
+            const avg = Number(datum.value || 0);
+            const min = Number(datum.min);
+            const max = Number(datum.max);
+            const cnt = Number(datum.count || 0);
+            const unitFmt = (n: number) => (chart.unit === 'Gbps' ? `${n.toFixed(1)} Gbps` : chart.unit === '°C' ? `${n.toFixed(0)}°C` : `${n}`);
+            return { name: chart.title, value: `${unitFmt(avg)} (min ${unitFmt(min)}, max ${unitFmt(max)}, n=${cnt})` };
+          }
+          const v = usesTimestampValue ? datum.value : datum[chart.dataKey];
           const num = typeof v === 'number' ? v : Number(v || 0);
           const formatted = usesTimestampValue
             ? (chart.unit === 'Gbps' ? `${num.toFixed(1)} Gbps` : chart.unit === '°C' ? `${num.toFixed(0)}°C` : `${num}`)
@@ -519,10 +465,10 @@ const MetricsDetail = () => {
         if (tsList.length > 0) {
           const minTs = Math.min(...tsList);
           const maxTs = Math.max(...tsList);
-          // 当只有单个时间点时，扩展 60 秒的左右边距；否则扩展 5% 的范围
-          const pad = minTs === maxTs ? 60000 : Math.max(60000, Math.round((maxTs - minTs) * 0.05));
-          const axisMinMs = minTs - pad;
-          const axisMaxMs = maxTs + pad;
+          // 使用数据的精确起止时间作为 x 轴范围，保持从开始时间到结束时间可见。
+          // 对于单点情况，提供 1 秒的最小可视范围以避免折线图完全塌缩。
+          const axisMinMs = minTs === maxTs ? minTs - 1000 : minTs;
+          const axisMaxMs = minTs === maxTs ? maxTs + 1000 : maxTs;
           // 将 min/max 设置到 xAxis，针对 usesTimestampValue 使用数字毫秒，避免 Date 对象导致的刻度单位变化
           if (!baseConfig.xAxis) baseConfig.xAxis = {};
           if (usesTimestampValue) {
@@ -530,6 +476,32 @@ const MetricsDetail = () => {
             baseConfig.xAxis.max = axisMaxMs;
             // 记录原始的 min ms 供 formatter 回补使用
             (baseConfig.xAxis as any)._minMs = axisMinMs;
+            // 计算最小相邻时间差，以决定是否需要子秒级刻度
+            try {
+              const sortedTs = tsList.slice().sort((a: number, b: number) => a - b);
+              let minDiff = Number.MAX_SAFE_INTEGER;
+              for (let i = 1; i < sortedTs.length; i++) {
+                const d = sortedTs[i] - sortedTs[i - 1];
+                if (d > 0 && d < minDiff) minDiff = d;
+              }
+              if (minDiff !== Number.MAX_SAFE_INTEGER && minDiff < 1000) {
+                // 选择友好的 tick interval（毫秒）: 10,50,100,200,500
+                const chooseNice = (ms: number) => {
+                  if (ms <= 10) return 10;
+                  if (ms <= 50) return 50;
+                  if (ms <= 100) return 100;
+                  if (ms <= 200) return 200;
+                  if (ms <= 500) return 500;
+                  return 1000;
+                };
+                const tickInterval = chooseNice(minDiff);
+                (baseConfig.xAxis as any).tickInterval = tickInterval; // milliseconds
+                // 显示毫秒部分
+                (baseConfig.xAxis as any).mask = 'HH:mm:ss.SSS';
+              }
+            } catch (e) {
+              // ignore
+            }
           } else {
             baseConfig.xAxis.min = new Date(axisMinMs);
             baseConfig.xAxis.max = new Date(axisMaxMs);
@@ -572,6 +544,14 @@ const MetricsDetail = () => {
       baseConfig.point.size = baseConfig.point.size || (usesTimestampValue ? 4 : 3);
       baseConfig.point.style = { ...baseConfig.point.style, fill: chartColor, stroke: '#fff' };
     }
+
+    // 所有图表纵坐标保留两位小数显示
+    baseConfig.yAxis = baseConfig.yAxis || {};
+    baseConfig.yAxis.label = baseConfig.yAxis.label || {};
+    baseConfig.yAxis.label.formatter = (v: any) => {
+      const n = Number(v);
+      return Number.isFinite(n) ? n.toFixed(2) : String(v);
+    };
 
     switch (chart.type) {
       case 'area':
