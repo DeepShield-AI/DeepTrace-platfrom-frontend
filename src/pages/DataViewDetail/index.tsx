@@ -62,7 +62,7 @@ const formatXAxisValue = (v: any, baseMinMs?: number, usesTimestampValue?: boole
 
 const MetricsDetail = () => {
   const [timeRange, setTimeRange] = useState('15分钟');
-  const [autoRefresh, setAutoRefresh] = useState(true);
+  const [autoRefresh, setAutoRefresh] = useState(false);
   const [selectedTags, setSelectedTags] = useState<string[]>(['all']);
   const [metricsData, setMetricsData] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
@@ -590,7 +590,7 @@ const MetricsDetail = () => {
     // 每张卡片选中的具体维度值（例如 cpu 的 core 值，network 的 interface，disk 的 device）
     const [selectedValue, setSelectedValue] = useState<string | number>('');
     const [chartPoints, setChartPoints] = useState<any[]>([]);
-    const [chartLoading, setChartLoading] = useState(false);
+    const [chartLoading, setChartLoading] = useState(true);
     // 当 metricTagsObj 返回且当前未选择具体维度时，默认选中第一个维度值
     useEffect(() => {
       if (!metricTagsObj) return;
@@ -800,7 +800,7 @@ const MetricsDetail = () => {
           flexDirection: 'column',
         }}
         loading={loading}
-        extra={
+        extra={!(chartLoading || loading) ? (
           <Space>
             <Select
               value={selectedValue}
@@ -837,7 +837,7 @@ const MetricsDetail = () => {
               />
             </Tooltip>
           </Space>
-        }
+        ) : null}
       >
         {/* 阈值警告图标 */}
         {exceedsThreshold && (
@@ -1088,6 +1088,9 @@ const MetricsDetail = () => {
   );
 
   useEffect(() => {
+    // 仅当启用自动刷新时，才展示全局 loading/轮询逻辑；默认进入页面不触发第一个骨架屏
+    if (!autoRefresh) return;
+
     setLoading(true);
 
     const timer = setTimeout(() => {
@@ -1096,7 +1099,6 @@ const MetricsDetail = () => {
     }, 500);
 
     // 自动刷新逻辑：当启用时，应调用后端拉取最新数据并更新 `metricsData`。
-    // 目前移除了基于本地 mock 的刷新实现。
     let interval: any;
 
     return () => {
