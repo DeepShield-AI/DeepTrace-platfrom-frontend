@@ -362,7 +362,7 @@ const MetricsDetail = () => {
       // 能避免库内对日期字符串/Date 对象的二次转换导致的时区/格式问题。
       xField: usesTimestampValue ? 'timestamp' : 'time',
       yField: usesTimestampValue ? 'value' : chart.dataKey,
-      ...(resolvedSeriesField && !usesTimestampValue ? { seriesField: resolvedSeriesField } : {}),
+      // 不使用 seriesField，强制单序列渲染以保持所有图表样式一致
       height: 120,
       autoFit: true,
       // 平滑曲线（非 timestamp/raw 数据）以获得更柔和视觉
@@ -685,6 +685,8 @@ const MetricsDetail = () => {
           }
 
           // 已准备好查询参数
+          // 限制每次请求的数据点数量为 10
+          params.dataSize = 10;
 
           const res = await getChart(params);
           if (!mounted) return;
