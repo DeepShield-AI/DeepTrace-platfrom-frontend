@@ -607,7 +607,8 @@ const MetricsDetail = () => {
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [metricTagsObj]);
     const trendConfig = getTrendConfig(chart.trend);
-    const ChartComponent = chart.type === 'column' ? Column : chart.type === 'area' ? Area : Line;
+    // 统一使用折线图（Line）样式展示，和 CPU 风格保持一致
+    const ChartComponent = Line;
     const exceedsThreshold = checkThresholdExceeded(chart, chartPoints);
 
     // 根据 timeRange 计算 time window
@@ -918,12 +919,17 @@ const MetricsDetail = () => {
           </div>
         </div>
 
-        {/* 图表区域 */}
+        {/* 图表区域：加载中展示图表骨架/加载，加载完成但无数据则展示“无数据”占位，否则绘制折线图 */}
         <div style={{ flex: 1, minHeight: '120px' }}>
-          <ChartComponent
-            {...getChartConfig(chart, chartPoints)}
-            loading={chartLoading || loading}
-          />
+          {chartLoading || loading ? (
+            <ChartComponent {...getChartConfig({ ...chart, type: 'line' }, chartPoints)} loading={chartLoading || loading} />
+          ) : chartPoints.length === 0 ? (
+            <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#999', fontSize: 12 }}>
+              无数据
+            </div>
+          ) : (
+            <ChartComponent {...getChartConfig({ ...chart, type: 'line' }, chartPoints)} loading={false} />
+          )}
         </div>
 
         {/* 底部状态 */}
