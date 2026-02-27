@@ -3,6 +3,13 @@ import { useNavigate } from 'react-router-dom';
 import BusinessStatsCard from '../../components/BusinessStatsCard';
 import ContainerCard from '../../components/ContainerCard';
 import { getAgentList } from '../../services/metrics/api';
+import type {
+  BusinessLike,
+  BusinessStatsLike,
+  ContainerLike,
+  DateRangeLike,
+  GenericRecord,
+} from '../../types/sharedTypes';
 // import type { Dayjs } from 'dayjs';
 import {
   ApartmentOutlined,
@@ -38,13 +45,35 @@ import {
 } from 'antd';
 
 const { Title, Text } = Typography;
-const { Meta } = Card;
 const { RangePicker } = DatePicker;
 const { Option } = Select;
 const { Search } = Input;
 
-// 业务数据mock
-const businessData: Record<string, any> = {
+// ==================== 基础配置 ====================
+const PAGE_STYLE = { padding: '24px', background: '#fafafa', minHeight: '100vh' };
+const CONTENT_STYLE = { maxWidth: '1400px', margin: '0 auto' };
+const HEADER_ROW_STYLE = {
+  display: 'flex',
+  justifyContent: 'space-between',
+  alignItems: 'center',
+  marginBottom: '8px',
+};
+const HEADER_ACTIONS_STYLE = { display: 'flex', alignItems: 'center', gap: '16px' };
+const HEADER_SWITCH_STYLE = { display: 'flex', alignItems: 'center', gap: '8px' };
+const REFRESH_INFO_STYLE = {
+  display: 'flex',
+  justifyContent: 'space-between',
+  alignItems: 'center',
+  marginBottom: '16px',
+  padding: '8px 12px',
+  background: '#f0f8ff',
+  borderRadius: '4px',
+  fontSize: '12px',
+  color: '#1890ff',
+};
+
+// 业务数据 mock（用于页面展示和业务统计）
+const businessData: Record<string, BusinessLike> = {
   ecommerce: {
     id: 'ecommerce',
     name: '电商业务',
@@ -99,11 +128,12 @@ const businessData: Record<string, any> = {
 
 const NetworkMetrics = () => {
   const navigate = useNavigate();
-  const [machines, setMachines] = useState<any[]>([]);
-  const [allContainers, setAllContainers] = useState<any[]>([]);
-  const [filteredContainers, setFilteredContainers] = useState<any[]>([]);
+
+  // ==================== 页面状态 ====================
+  const [allContainers, setAllContainers] = useState<ContainerLike[]>([]);
+  const [filteredContainers, setFilteredContainers] = useState<ContainerLike[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
-  const [dateRange, setDateRange] = useState<any[]>([]);
+  const [dateRange, setDateRange] = useState<DateRangeLike>([]);
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [businessFilter, setBusinessFilter] = useState<string[]>([]); // 多选业务筛选
   const [searchText, setSearchText] = useState<string>('');
@@ -114,17 +144,20 @@ const NetworkMetrics = () => {
   const [nextRefreshTime, setNextRefreshTime] = useState<Date | null>(null);
   const [cardLoading, setCardLoading] = useState<Record<string, boolean>>({}); // 单个卡片加载状态
   const [showBusinessPanel, setShowBusinessPanel] = useState<boolean>(true); // 是否显示业务概览面板
-  const [selectedBusinessDetail, setSelectedBusinessDetail] = useState<any | null>(null); // 选中的业务详情
+  const [selectedBusinessDetail, setSelectedBusinessDetail] =
+    useState<BusinessStatsLike | null>(null); // 选中的业务详情
 
-  // 格式化数字为小数点后两位
-  const formatNumber = (num: number | any): string => {
+  // ==================== 通用展示函数 ====================
+  // 格式化数字，避免 UI 出现 NaN / undefined
+  const formatNumber = (num: number | unknown): string => {
     if (typeof num !== 'number') return '0.00';
     return num.toFixed(2);
   };
 
-  // 获取业务统计信息
+  // ==================== 聚合计算逻辑 ====================
+  // 业务统计聚合：容器数、运行数、异常数、CPU/内存均值
   const getBusinessStats = () => {
-    const stats: Record<string, any> = {};
+    const stats: Record<string, BusinessStatsLike> = {};
 
     // 初始化所有业务
     Object.keys(businessData).forEach((businessId) => {
@@ -136,11 +169,13 @@ const NetworkMetrics = () => {
         errorCount: 0,
         totalCpuUsage: 0,
         totalMemoryUsage: 0,
+        avgCpuUsage: 0,
+        avgMemoryUsage: 0,
       };
     });
 
     // 统计容器数据
-    allContainers.forEach((container: any) => {
+    allContainers.forEach((container: ContainerLike) => {
       const businessId = container.business || 'infrastructure';
       if (stats[businessId]) {
         stats[businessId].containerCount += 1;
@@ -152,7 +187,7 @@ const NetworkMetrics = () => {
         // 检查异常
         const anomalies = checkContainerAnomalies(container);
         if (anomalies.length > 0) {
-          const hasError = anomalies.some((a) => a.level === 'error');
+          const hasError = anomalies.some((anomaly: GenericRecord) => anomaly.level === 'error');
           if (hasError) {
             stats[businessId].errorCount += 1;
           } else {
@@ -181,13 +216,14 @@ const NetworkMetrics = () => {
     return stats;
   };
 
-  // 容器数据
+  // ==================== 数据拉取逻辑 ====================
+  // 拉取容器数据并同步更新列表与卡片加载状态
   const fetchMachines = async () => {
     setLoading(true);
     try {
       // 获取API数据
       const apiRes = await getAgentList();
-      const containers = (apiRes?.content || []).map((item: any) => ({
+      const containers = (apiRes?.content || []).map((item: GenericRecord) => ({
         ...item,
         id: item.lcuuid,
         name: item.name,
@@ -200,9 +236,9 @@ const NetworkMetrics = () => {
         state: item.state,
       }));
       console.log('Fetched containers:', containers);
-      // 初始化卡片加载状态（使用与 ContainerCard 一致的 key: `${machineId}-${id}`）
+      // 初始化卡片加载状态（与 ContainerCard key 保持一致）
       const loadingStates: Record<string, boolean> = {};
-      containers.forEach((container: any) => {
+      containers.forEach((container: ContainerLike) => {
         const key = `${container.machineId}-${container.id}`;
         loadingStates[key] = true;
       });
@@ -212,7 +248,7 @@ const NetworkMetrics = () => {
       setLoading(false);
       setLastRefreshTime(new Date());
       // 卡片逐个加载完成效果
-      containers.forEach((container: any, index: number) => {
+      containers.forEach((container: ContainerLike, index: number) => {
         const key = `${container.machineId}-${container.id}`;
         setTimeout(() => {
           setCardLoading((prev) => ({
@@ -234,17 +270,17 @@ const NetworkMetrics = () => {
     }
   };
 
-  // 手动刷新数据
+  // 手动刷新入口
   const handleManualRefresh = () => {
     fetchMachines();
   };
 
+  // 首次进入页面时拉取数据
   useEffect(() => {
-    // 初始加载数据
     fetchMachines();
   }, []);
 
-  // 自动刷新效果
+  // 自动刷新轮询
   useEffect(() => {
     let refreshTimer = null;
 
@@ -261,9 +297,10 @@ const NetworkMetrics = () => {
     };
   }, [autoRefresh, refreshInterval]);
 
-  // 检查容器是否有异常
-  const checkContainerAnomalies = (container: any) => {
-    const anomalies = [];
+  // ==================== 异常与状态显示 ====================
+  // 检查容器是否存在资源/状态异常
+  const checkContainerAnomalies = (container: ContainerLike) => {
+    const anomalies: GenericRecord[] = [];
 
     if (container.cpuUsage > 80) {
       anomalies.push({
@@ -327,7 +364,8 @@ const NetworkMetrics = () => {
     );
   };
 
-  // 容器过滤函数
+  // ==================== 筛选逻辑 ====================
+  // 按搜索词、状态、时间范围执行列表过滤
   const applyFilters = () => {
     let filtered = [...allContainers];
 
@@ -364,7 +402,8 @@ const NetworkMetrics = () => {
     applyFilters();
   }, [dateRange, statusFilter, businessFilter, searchText, allContainers]);
 
-  const handleCardClick = (containerId: string, machineId: string, item?: any) => {
+  // ==================== 交互处理 ====================
+  const handleCardClick = (containerId: string, machineId: string, item?: ContainerLike) => {
     const containerKey = `${machineId}-${containerId}`;
 
     // 设置当前卡片为加载状态
@@ -412,7 +451,7 @@ const NetworkMetrics = () => {
     return statusTexts[status] || status;
   };
 
-  // 获取业务详情
+  // 读取当前业务详情（来源于业务统计结果）
   const getBusinessDetail = (businessId: string) => {
     const stats = getBusinessStats();
     return stats[businessId];
@@ -430,13 +469,14 @@ const NetworkMetrics = () => {
     }
   };
 
-  // 统计异常容器数量
+  // ==================== 派生数据 ====================
+  // 统计异常容器数量（用于顶部告警提示）
   const anomalyContainers = allContainers.filter((container) => {
     const anomalies = checkContainerAnomalies(container);
     return anomalies.length > 0;
   }).length;
 
-  // 获取业务统计
+  // 业务统计（用于业务概览卡片）
   const businessStats = getBusinessStats();
 
   // 格式化时间显示
@@ -484,16 +524,9 @@ const NetworkMetrics = () => {
   );
 
   return (
-    <div style={{ padding: '24px', background: '#fafafa', minHeight: '100vh' }}>
-      <div style={{ maxWidth: '1400px', margin: '0 auto' }}>
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            marginBottom: '8px',
-          }}
-        >
+    <div style={PAGE_STYLE}>
+      <div style={CONTENT_STYLE}>
+        <div style={HEADER_ROW_STYLE}>
           <div>
             <Title level={2} style={{ color: '#262626', marginBottom: 0 }}>
               <DesktopOutlined style={{ marginRight: 12, color: '#1890ff' }} />
@@ -504,8 +537,8 @@ const NetworkMetrics = () => {
             </Text>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <div style={HEADER_ACTIONS_STYLE}>
+            <div style={HEADER_SWITCH_STYLE}>
               <Switch
                 checkedChildren="业务视图"
                 unCheckedChildren="列表视图"
@@ -541,19 +574,7 @@ const NetworkMetrics = () => {
           </div>
         </div>
 
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            marginBottom: '16px',
-            padding: '8px 12px',
-            background: '#f0f8ff',
-            borderRadius: '4px',
-            fontSize: '12px',
-            color: '#1890ff',
-          }}
-        >
+        <div style={REFRESH_INFO_STYLE}>
           <div>{lastRefreshTime && <Text>最后更新: {formatTime(lastRefreshTime)}</Text>}</div>
           <div>
             {autoRefresh && nextRefreshTime && (
@@ -629,10 +650,10 @@ const NetworkMetrics = () => {
                   style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
                 >
                   <Space>
-                    {(selectedBusinessDetail as any).icon}
-                    <Text strong>{(selectedBusinessDetail as any).name} - 业务详情</Text>
-                    {getPriorityTag((selectedBusinessDetail as any).priority)}
-                    <Tag color={(selectedBusinessDetail as any).color}>
+                    {selectedBusinessDetail.icon}
+                    <Text strong>{selectedBusinessDetail.name} - 业务详情</Text>
+                    {getPriorityTag(selectedBusinessDetail.priority)}
+                    <Tag color={selectedBusinessDetail.color}>
                       已选择 ({filteredContainers.length} 个容器)
                     </Tag>
                   </Space>
@@ -878,8 +899,6 @@ const NetworkMetrics = () => {
                 </Col>
               ))
             : filteredContainers.map((container) => {
-                const anomalies = checkContainerAnomalies(container);
-                const hasAnomalies = anomalies.length > 0;
                 const containerKey = `${container.machineId}-${container.id}`;
                 return (
                   <Col

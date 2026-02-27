@@ -32,11 +32,28 @@ import {
 import React, { useEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { getChart, getMetricTags } from '../../services/metrics/api';
+import type {
+  ChartConfigLike,
+  GenericRecord,
+  MetricPoint,
+  MetricTagsMap,
+  RouteStateLike,
+} from '../../types/sharedTypes';
 import dayjs from 'dayjs';
 
 const { Title, Text } = Typography;
 const { Option } = Select;
 
+const PAGE_TITLE_ROW_STYLE = { display: 'flex', alignItems: 'center', marginBottom: 8 } as const;
+const CONTROL_ROW_STYLE = {
+  display: 'flex',
+  justifyContent: 'space-between',
+  alignItems: 'center',
+} as const;
+const FILTER_TAGS_WRAP_STYLE = { display: 'flex', gap: 8, flexWrap: 'wrap' } as const;
+const CONTROL_CARD_BODY_STYLE = { padding: '16px 24px' } as const;
+
+// ==================== 工具函数 ====================
 // 格式化 x 轴标签（支持绝对毫秒、秒级、以及相对于基准 min 的偏移）
 const formatXAxisValue = (v: any, baseMinMs?: number, usesTimestampValue?: boolean) => {
   if (v === null || v === undefined || v === '') return '';
@@ -56,28 +73,35 @@ const formatXAxisValue = (v: any, baseMinMs?: number, usesTimestampValue?: boole
     return dayjs(rawNum).format('YYYY-MM-DD HH:mm:ss');
   }
   const parsed = Date.parse(String(v));
-  if (!Number.isNaN(parsed)) return usesTimestampValue ? dayjs(parsed).format('HH:mm:ss') : dayjs(parsed).format('YYYY-MM-DD HH:mm:ss');
+  if (!Number.isNaN(parsed)) {
+    return usesTimestampValue
+      ? dayjs(parsed).format('HH:mm:ss')
+      : dayjs(parsed).format('YYYY-MM-DD HH:mm:ss');
+  }
   return String(v);
 };
 
 const MetricsDetail = () => {
+  // ==================== 页面状态 ====================
   const [timeRange, setTimeRange] = useState('15分钟');
   const [autoRefresh, setAutoRefresh] = useState(false);
   const [selectedTags, setSelectedTags] = useState<string[]>(['all']);
-  const [metricsData, setMetricsData] = useState<any[]>([]);
+  const [metricsData, setMetricsData] = useState<MetricPoint[]>([]);
   const [loading, setLoading] = useState(false);
   const [metricTagKeys, setMetricTagKeys] = useState<string[]>([]);
-  const [metricTagsObj, setMetricTagsObj] = useState<Record<string, any> | null>(null);
+  const [metricTagsObj, setMetricTagsObj] = useState<MetricTagsMap | null>(null);
   const [drawerVisible, setDrawerVisible] = useState(false);
-  const [currentChart, setCurrentChart] = useState<any | null>(null);
-  const [logData, setLogData] = useState<any[]>([]);
+  const [currentChart, setCurrentChart] = useState<ChartConfigLike | null>(null);
+  const [logData, setLogData] = useState<GenericRecord[]>([]);
   const [agentName, setAgentName] = useState<string | null>(null);
   const location = useLocation();
 
-  // 图表标签配置
-  const chartTags: any[] = [];
+  // ==================== 标签与筛选展示 ====================
+  // 图表标签配置（当前由后端命名空间驱动）
+  const chartTags: Array<{ key: string; label: string; color: string; icon: React.ReactNode }> =
+    [];
 
-  // 展示api获取的所有键作为类命名空间作为筛选
+  // 将 API 返回的命名空间作为筛选标签来源
   const allowedNamespaces = metricTagKeys.filter((k) => k !== 'all');
   const displayTags = allowedNamespaces
     .filter((k) => metricTagKeys.length === 0 || metricTagKeys.includes(k))
@@ -93,24 +117,26 @@ const MetricsDetail = () => {
       );
     });
 
-    // 从路由 state 读取 agent_name（优先），回退到 URL 查询参数
-    useEffect(() => {
-      try {
-        const stateAgent = (location && (location as any).state && (location as any).state.agent_name) || (location && (location as any).state && (location as any).state.agent);
-        if (stateAgent) {
-          setAgentName(stateAgent);
-          return;
-        }
-        const qs = new URLSearchParams(window.location.search);
-        const a = qs.get('agent_name') || qs.get('agent');
-        if (a) setAgentName(a);
-      } catch (e) {
-        // ignore
+  // 从路由 state 读取 agent_name（优先），回退到 URL 查询参数
+  useEffect(() => {
+    try {
+      const routeState = (location?.state || {}) as RouteStateLike;
+      const stateAgent = routeState.agent_name || routeState.agent;
+      if (stateAgent) {
+        setAgentName(stateAgent);
+        return;
       }
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [location]);
+      const qs = new URLSearchParams(window.location.search);
+      const queryAgentName = qs.get('agent_name') || qs.get('agent');
+      if (queryAgentName) setAgentName(queryAgentName);
+    } catch (e) {
+      // 容错：解析路由参数失败时不影响页面渲染
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location]);
 
-  // 图表数据配置 - 增加threshold字段
+  // ==================== 图表元数据配置 ====================
+  // 图表数据配置（含阈值、单位、展示图标）
   const chartConfigs = [
     // CPU 三个独立指标
     {
@@ -284,8 +310,9 @@ const MetricsDetail = () => {
     },
   ];
 
+  // ==================== 交互处理函数 ====================
   // 打开抽屉查看日志表格
-  const handleViewLogs = (chart: any) => {
+  const handleViewLogs = (chart: ChartConfigLike) => {
     setCurrentChart(chart);
     // 暂不生成 mock 日志，保留空数据或由后端拉取真实日志
     setLogData([]);
@@ -300,12 +327,12 @@ const MetricsDetail = () => {
   };
 
   // 检查是否超过阈值（可传入自定义数据源）
-  const checkThresholdExceeded = (chart: any, dataSource?: any) => {
+  const checkThresholdExceeded = (chart: ChartConfigLike, dataSource?: MetricPoint[]) => {
     const source = dataSource || metricsData;
     if (!chart.threshold && chart.threshold !== 0) return false;
     if (!source || !source.length) return false;
 
-    return source.some((data: any) => {
+    return source.some((data: MetricPoint) => {
       const value = data[chart.dataKey];
       if (chart.reverseThreshold) {
         return value < chart.threshold; // 反向阈值：低于阈值才警告
@@ -314,49 +341,42 @@ const MetricsDetail = () => {
     });
   };
 
-  // 获取图表配置
-  const getChartConfig = (chart: any, overrideData?: any) => {
+  // ==================== 图表配置构建 ====================
+  // 获取图表配置（按图表类型、阈值状态、时间轴格式动态拼装）
+  const getChartConfig = (chart: ChartConfigLike, overrideData?: MetricPoint[]) => {
     const dataSource = overrideData || metricsData;
     // normalize dataSource to array - AntV plots expect an array
     const finalData = Array.isArray(dataSource)
       ? dataSource
-      : dataSource && Array.isArray((dataSource as any).data)
-      ? (dataSource as any).data
+      : dataSource && Array.isArray((dataSource as GenericRecord).data)
+      ? (dataSource as GenericRecord).data
       : [];
     const exceedsThreshold = checkThresholdExceeded(chart, finalData);
-    // 如果 metricTagsObj 中存在当前命名空间的维度，则把该维度作为 seriesField（多序列展示）
+    // 预留：如需切换多序列，可从 metricTagsObj 解析 seriesField
     const seriesField = (() => {
       try {
         if (!metricTagsObj) return undefined;
-        const inner = metricTagsObj[chart.tag];
-        if (!inner) return undefined;
-        const innerKeys = Object.keys(inner || {});
-        if (innerKeys.length === 0) return undefined;
+        const namespaceTagMap = metricTagsObj[chart.tag];
+        if (!namespaceTagMap) return undefined;
+        const namespaceTagKeys = Object.keys(namespaceTagMap || {});
+        if (namespaceTagKeys.length === 0) return undefined;
         // 对 cpu 命名空间使用 'cpu' 参数名兼容后端
-        return chart.tag === 'cpu' ? 'cpu' : innerKeys[0];
+        return chart.tag === 'cpu' ? 'cpu' : namespaceTagKeys[0];
       } catch (e) {
         return undefined;
       }
     })();
-
-    // 如果 metricTagsObj 中存在当前命名空间的维度，则把该维度作为 seriesField（多序列展示）
-    const resolvedSeriesField = (() => {
-      try {
-        if (!metricTagsObj) return undefined;
-        const inner = metricTagsObj[chart.tag];
-        if (!inner) return undefined;
-        const innerKeys = Object.keys(inner || {});
-        if (innerKeys.length === 0) return undefined;
-        return chart.tag === 'cpu' ? 'cpu' : innerKeys[0];
-      } catch (e) {
-        return undefined;
-      }
-    })();
+    // 当前保持单序列渲染，暂不启用 seriesField
+    void seriesField;
 
     // 优先检测后端原始 timestamp/value 字段
-    const usesTimestampValue = Array.isArray(finalData) && finalData.length > 0 && 'timestamp' in finalData[0] && 'value' in finalData[0];
+    const usesTimestampValue =
+      Array.isArray(finalData) &&
+      finalData.length > 0 &&
+      'timestamp' in finalData[0] &&
+      'value' in finalData[0];
 
-    const baseConfig: any = {
+    const baseConfig: GenericRecord = {
       data: finalData,
       // 当后端返回原始 timestamp/value 时，使用数字毫秒字段 `timestamp` 作为 x 轴，
       // 能避免库内对日期字符串/Date 对象的二次转换导致的时区/格式问题。
@@ -376,7 +396,7 @@ const MetricsDetail = () => {
           autoHide: true,
           autoRotate: false,
           formatter: (v: any) => {
-            const xAxisCfg = (baseConfig && (baseConfig.xAxis as any)) || {};
+            const xAxisCfg = (baseConfig && (baseConfig.xAxis as GenericRecord)) || {};
             const baseMinMs = xAxisCfg._minMs;
             return formatXAxisValue(v, baseMinMs, usesTimestampValue);
           },
@@ -407,13 +427,22 @@ const MetricsDetail = () => {
             const min = Number(datum.min);
             const max = Number(datum.max);
             const cnt = Number(datum.count || 0);
-            const unitFmt = (n: number) => (chart.unit === 'Gbps' ? `${n.toFixed(1)} Gbps` : chart.unit === '°C' ? `${n.toFixed(0)}°C` : `${n}`);
+            const unitFmt = (n: number) =>
+              chart.unit === 'Gbps'
+                ? `${n.toFixed(1)} Gbps`
+                : chart.unit === '°C'
+                ? `${n.toFixed(0)}°C`
+                : `${n}`;
             return { name: chart.title, value: `${unitFmt(avg)} (min ${unitFmt(min)}, max ${unitFmt(max)}, n=${cnt})` };
           }
-          const v = usesTimestampValue ? datum.value : datum[chart.dataKey];
-          const num = typeof v === 'number' ? v : Number(v || 0);
+          const rawValue = usesTimestampValue ? datum.value : datum[chart.dataKey];
+          const num = typeof rawValue === 'number' ? rawValue : Number(rawValue || 0);
           const formatted = usesTimestampValue
-            ? (chart.unit === 'Gbps' ? `${num.toFixed(1)} Gbps` : chart.unit === '°C' ? `${num.toFixed(0)}°C` : `${num}`)
+            ? chart.unit === 'Gbps'
+              ? `${num.toFixed(1)} Gbps`
+              : chart.unit === '°C'
+              ? `${num.toFixed(0)}°C`
+              : `${num}`
             : chart.dataKey === 'network'
             ? `${num.toFixed(1)} Gbps`
             : chart.dataKey === 'iops'
@@ -452,7 +481,7 @@ const MetricsDetail = () => {
               },
             },
           ]
-        : []) as any,
+        : []) as GenericRecord,
     };
 
     // 根据是否超过阈值调整颜色强度
@@ -461,7 +490,7 @@ const MetricsDetail = () => {
     // 如果使用后端 timestamp/value，需要计算 x 轴域并保证单点可见（添加左右 padding）
     if (Array.isArray(finalData) && finalData.length > 0 && 'timestamp' in finalData[0]) {
       try {
-        const tsList = finalData.map((d: any) => Number(d.timestamp || d.time || 0)).filter(Boolean);
+        const tsList = finalData.map((d: MetricPoint) => Number(d.timestamp || d.time || 0)).filter(Boolean);
         if (tsList.length > 0) {
           const minTs = Math.min(...tsList);
           const maxTs = Math.max(...tsList);
@@ -475,14 +504,14 @@ const MetricsDetail = () => {
             baseConfig.xAxis.min = axisMinMs;
             baseConfig.xAxis.max = axisMaxMs;
             // 记录原始的 min ms 供 formatter 回补使用
-            (baseConfig.xAxis as any)._minMs = axisMinMs;
+            (baseConfig.xAxis as GenericRecord)._minMs = axisMinMs;
             // 计算最小相邻时间差，以决定是否需要子秒级刻度
             try {
               const sortedTs = tsList.slice().sort((a: number, b: number) => a - b);
               let minDiff = Number.MAX_SAFE_INTEGER;
               for (let i = 1; i < sortedTs.length; i++) {
-                const d = sortedTs[i] - sortedTs[i - 1];
-                if (d > 0 && d < minDiff) minDiff = d;
+                const deltaMs = sortedTs[i] - sortedTs[i - 1];
+                if (deltaMs > 0 && deltaMs < minDiff) minDiff = deltaMs;
               }
               if (minDiff !== Number.MAX_SAFE_INTEGER && minDiff < 1000) {
                 // 选择友好的 tick interval（毫秒）: 10,50,100,200,500
@@ -495,23 +524,23 @@ const MetricsDetail = () => {
                   return 1000;
                 };
                 const tickInterval = chooseNice(minDiff);
-                (baseConfig.xAxis as any).tickInterval = tickInterval; // milliseconds
+                (baseConfig.xAxis as GenericRecord).tickInterval = tickInterval; // milliseconds
                 // 显示毫秒部分？
                 // 不显示毫秒部分，统一使用秒级显示
-                (baseConfig.xAxis as any).mask = 'HH:mm:ss';
+                (baseConfig.xAxis as GenericRecord).mask = 'HH:mm:ss';
               }
             } catch (e) {
-              // ignore
+              // 容错：刻度计算失败时回退默认行为
             }
           } else {
             baseConfig.xAxis.min = new Date(axisMinMs);
             baseConfig.xAxis.max = new Date(axisMaxMs);
-            (baseConfig.xAxis as any)._minMs = axisMinMs;
+            (baseConfig.xAxis as GenericRecord)._minMs = axisMinMs;
           }
           // 已计算轴范围：axisMinMs / axisMaxMs
         }
       } catch (e) {
-        // ignore
+        // 容错：轴范围计算失败时保持图表默认配置
       }
 
       // 确保单点可见：设置点样式（填充与边框）
@@ -521,7 +550,9 @@ const MetricsDetail = () => {
       baseConfig.point.style.fill = chartColor;
       baseConfig.point.style.stroke = '#fff';
       try {
-        const vals = finalData.map((d: any) => Number(d.value ?? d[chart.dataKey])).filter((v: any) => Number.isFinite(v));
+        const vals = finalData
+          .map((d: MetricPoint) => Number(d.value ?? d[chart.dataKey]))
+          .filter((value: number) => Number.isFinite(value));
         if (vals.length > 0) {
           const vMin = Math.min(...vals);
           const vMax = Math.max(...vals);
@@ -535,7 +566,7 @@ const MetricsDetail = () => {
           baseConfig.yAxis.tickCount = 5;
         }
       } catch (e) {
-        // ignore
+        // 容错：y 轴范围计算失败时保持默认范围
       }
 
       // 视觉优化：适度强化线条与填充，使波动可视但不过分粗糙
@@ -586,23 +617,28 @@ const MetricsDetail = () => {
     }
   };
 
-  // 单个图表卡片组件，包含下拉选择器
-  const ChartCard: React.FC<{ chart: any }> = ({ chart }) => {
+  // ==================== 子组件：图表卡片 ====================
+  // 单个图表卡片组件，包含维度下拉选择器与图表渲染
+  const ChartCard: React.FC<{ chart: ChartConfigLike }> = ({ chart }) => {
     // 每张卡片选中的具体维度值（例如 cpu 的 core 值，network 的 interface，disk 的 device）
     const [selectedValue, setSelectedValue] = useState<string | number>('');
-    const [chartPoints, setChartPoints] = useState<any[]>([]);
+    const [chartPoints, setChartPoints] = useState<MetricPoint[]>([]);
     const [chartLoading, setChartLoading] = useState(true);
     // 当 metricTagsObj 返回且当前未选择具体维度时，默认选中第一个维度值
     useEffect(() => {
       if (!metricTagsObj) return;
-      const ns = chart.tag;
-      const obj = metricTagsObj[ns];
-      if (!obj) return;
-      const keys = Object.keys(obj || {});
-      if (keys.length === 0) return;
-      const list = obj[keys[0]];
-      if (Array.isArray(list) && list.length > 0 && (selectedValue === '' || selectedValue === null)) {
-        setSelectedValue(list[0]);
+      const namespaceKey = chart.tag;
+      const namespaceTags = metricTagsObj[namespaceKey];
+      if (!namespaceTags) return;
+      const dimensionKeys = Object.keys(namespaceTags || {});
+      if (dimensionKeys.length === 0) return;
+      const dimensionValues = namespaceTags[dimensionKeys[0]];
+      if (
+        Array.isArray(dimensionValues) &&
+        dimensionValues.length > 0 &&
+        (selectedValue === '' || selectedValue === null)
+      ) {
+        setSelectedValue(dimensionValues[0]);
       }
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [metricTagsObj]);
@@ -611,7 +647,7 @@ const MetricsDetail = () => {
     const ChartComponent = Line;
     const exceedsThreshold = checkThresholdExceeded(chart, chartPoints);
 
-    // 根据 timeRange 计算 time window
+    // 根据 timeRange 计算时间窗口
     const computeTimeRange = () => {
       const end = Date.now();
       let offset = 15 * 60 * 1000;
@@ -620,22 +656,21 @@ const MetricsDetail = () => {
       return { startTime: end - offset, endTime: end };
     };
 
-    // 构建查询参数并请求后端 chart 数据（使用 selectedValue 作为额外维度）
+    // 请求图表数据：构建参数 -> 拉取数据 -> 归一化点位 -> 排序/修正
     useEffect(() => {
       let mounted = true;
       const fetchChart = async () => {
-        // 需要命名空间与具体维度值
-        const ns = chart.tag;
-        if (!ns) return;
+        // 基础保护：没有命名空间或维度值时不请求
+        const namespaceKey = chart.tag;
+        if (!namespaceKey) return;
         if (selectedValue === '' || selectedValue === null) return;
         setChartLoading(true);
         try {
-          // const { startTime, endTime } = computeTimeRange();
-          // 临时写死时间参数为固定值（用于调试）
+          // 当前保留固定时间窗口（调试态）
           const startTime = 1768286994766;
           const endTime = 1768287007766;
-          const params: Record<string, any> = {
-            namespace: ns,
+          const params: GenericRecord = {
+            namespace: namespaceKey,
             startTime,
             endTime,
             // 将 name 参数映射为后端期望的固定指标名（按命名空间和当前 chart.dataKey）
@@ -662,20 +697,20 @@ const MetricsDetail = () => {
                   default: 'read_merged',
                 },
               };
-              const map = nameMap[ns];
-              if (!map) return chart.dataKey;
-              return map[chart.dataKey] || map.default || chart.dataKey;
+              const nameMapping = nameMap[namespaceKey];
+              if (!nameMapping) return chart.dataKey;
+              return nameMapping[chart.dataKey] || nameMapping.default || chart.dataKey;
             })(),
           };
 
           // 从 metricTagsObj 中取出维度名并使用 selectedValue 作为参数值
-          if (metricTagsObj && metricTagsObj[ns]) {
-            const inner = metricTagsObj[ns];
-            const innerKeys = Object.keys(inner || {});
-            if (innerKeys.length > 0) {
-              const dimKey = innerKeys[0];
+          if (metricTagsObj && metricTagsObj[namespaceKey]) {
+            const namespaceTagMap = metricTagsObj[namespaceKey];
+            const namespaceTagKeys = Object.keys(namespaceTagMap || {});
+            if (namespaceTagKeys.length > 0) {
+              const dimKey = namespaceTagKeys[0];
               // 后端对 cpu 期望的参数名是 `cpu` 而非 `core`
-              const paramName = ns === 'cpu' ? 'cpu' : dimKey;
+              const paramName = namespaceKey === 'cpu' ? 'cpu' : dimKey;
               params[paramName] = selectedValue;
             }
           }
@@ -685,24 +720,23 @@ const MetricsDetail = () => {
             params.agent_name = agentName;
           }
 
-          // 已准备好查询参数
           // 限制每次请求的数据点数量为 10
           params.dataSize = 10;
 
-          const res = await getChart(params);
+          const chartResponse = await getChart(params);
           if (!mounted) return;
           // 后端返回格式可能为 { total, data: [...] } 或直接为数组
-          let rawPoints: any[] = [];
-          if (res) {
-            if (Array.isArray(res)) rawPoints = res;
-            else if (Array.isArray((res as any).data)) rawPoints = (res as any).data;
+          let rawPoints: GenericRecord[] = [];
+          if (chartResponse) {
+            if (Array.isArray(chartResponse)) rawPoints = chartResponse;
+            else if (Array.isArray((chartResponse as GenericRecord).data)) {
+              rawPoints = (chartResponse as GenericRecord).data;
+            }
           }
-
-              // 已接收后端原始点
 
           // 转换为图表需要的格式：{ time: Date, [dataKey]: value, ...tags }
           const mapped = (rawPoints || [])
-            .map((d: any) => {
+            .map((d: GenericRecord) => {
               const ts = d.timestamp ?? d.time ?? d.t ?? null;
               let timestamp = ts !== null && ts !== undefined ? Number(ts) : undefined;
               // 后端可能返回秒级时间戳（10位），统一转换为毫秒（13位）以供绘图库使用
@@ -729,19 +763,24 @@ const MetricsDetail = () => {
               };
             })
             // 过滤掉无效时间戳或不可数值的点（保留只包含 timestamp/value 的原始点）
-            .filter((p: any) => (typeof p.timestamp === 'number' && Number.isFinite(p.timestamp)) || (typeof p.value === 'number' && Number.isFinite(p.value)));
-
-          // mapped 数据已生成
+            .filter(
+              (p: MetricPoint) =>
+                (typeof p.timestamp === 'number' && Number.isFinite(p.timestamp)) ||
+                (typeof p.value === 'number' && Number.isFinite(p.value)),
+            );
 
           // 按时间升序排序，保证点在 x 轴正确位置
-          const sorted = mapped.sort((a: any, b: any) => (a.timestamp || a.time.getTime()) - (b.timestamp || b.time.getTime()));
-
-          // 排序完成
+          const sorted = mapped.sort(
+            (a: MetricPoint, b: MetricPoint) =>
+              (a.timestamp || a.time?.getTime() || 0) - (b.timestamp || b.time?.getTime() || 0),
+          );
 
           // 回退处理：如果后端返回的所有 timestamp 相同（会导致所有点重叠），
           // 则基于查询的 startTime/endTime 对点进行均匀分布时间戳分配，保证横轴有跨度。
           if (sorted.length > 1) {
-            const tsList = sorted.map((p: any) => Number(p.timestamp || (p.time && p.time.getTime()))).filter(Boolean);
+            const tsList = sorted
+              .map((p: MetricPoint) => Number(p.timestamp || (p.time && p.time.getTime())))
+              .filter(Boolean);
             const allEqual = tsList.length > 0 && tsList.every((t: number) => t === tsList[0]);
             if (allEqual) {
               try {
@@ -750,7 +789,7 @@ const MetricsDetail = () => {
                 if (e <= s) e = s + (sorted.length - 1) * 60000;
                 const n = sorted.length;
                 const interval = n > 1 ? Math.floor((e - s) / (n - 1)) : 60000;
-                const redistributed = sorted.map((p: any, idx: number) => {
+                const redistributed = sorted.map((p: MetricPoint, idx: number) => {
                   const newTs = s + idx * interval;
                   return { ...p, timestamp: newTs, time: new Date(newTs) };
                 });
@@ -776,11 +815,18 @@ const MetricsDetail = () => {
       return () => {
         mounted = false;
       };
-      // 依赖：选中标签、时间范围、是否自动刷新、metricTagsObj
+      // 依赖：维度值、时间范围、自动刷新状态、tags
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [selectedValue, timeRange, autoRefresh, metricTagsObj]);
 
-    const cardTitleText = chart.tag === 'cpu' ? '请选择CPU核心数：' : chart.tag === 'network' ? '请选择网口：' : chart.tag === 'disk' ? '请选择磁盘：' : '';
+    const cardTitleText =
+      chart.tag === 'cpu'
+        ? '请选择CPU核心数：'
+        : chart.tag === 'network'
+        ? '请选择网口：'
+        : chart.tag === 'disk'
+        ? '请选择磁盘：'
+        : '';
 
     return (
       <Card
@@ -815,17 +861,19 @@ const MetricsDetail = () => {
               {
                 // 渲染对应命名空间的维度值列表（例如 cpu.core、network.interface、disk.device）
                 (() => {
-                  const ns = chart.tag;
-                  if (!metricTagsObj || !metricTagsObj[ns]) {
+                  const namespaceKey = chart.tag;
+                  if (!metricTagsObj || !metricTagsObj[namespaceKey]) {
                     return [<Option key="-" value="">-</Option>];
                   }
-                  const inner = metricTagsObj[ns];
-                  const innerKeys = Object.keys(inner || {});
-                  if (innerKeys.length === 0) return [<Option key="-" value="">-</Option>];
-                  const list = inner[innerKeys[0]] || [];
-                  return (list || []).map((v: any) => (
-                    <Option key={String(v)} value={v}>
-                      {String(v)}
+                  const namespaceTagMap = metricTagsObj[namespaceKey];
+                  const namespaceTagKeys = Object.keys(namespaceTagMap || {});
+                  if (namespaceTagKeys.length === 0) {
+                    return [<Option key="-" value="">-</Option>];
+                  }
+                  const dimensionValues = namespaceTagMap[namespaceTagKeys[0]] || [];
+                  return (dimensionValues || []).map((value: string | number) => (
+                    <Option key={String(value)} value={value}>
+                      {String(value)}
                     </Option>
                   ));
                 })()
@@ -922,13 +970,28 @@ const MetricsDetail = () => {
         {/* 图表区域：加载中展示图表骨架/加载，加载完成但无数据则展示“无数据”占位，否则绘制折线图 */}
         <div style={{ flex: 1, minHeight: '120px' }}>
           {chartLoading || loading ? (
-            <ChartComponent {...getChartConfig({ ...chart, type: 'line' }, chartPoints)} loading={chartLoading || loading} />
+            <ChartComponent
+              {...(getChartConfig({ ...chart, type: 'line' }, chartPoints) as any)}
+              loading={chartLoading || loading}
+            />
           ) : chartPoints.length === 0 ? (
-            <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#999', fontSize: 12 }}>
+            <div
+              style={{
+                height: '100%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#999',
+                fontSize: 12,
+              }}
+            >
               无数据
             </div>
           ) : (
-            <ChartComponent {...getChartConfig({ ...chart, type: 'line' }, chartPoints)} loading={false} />
+            <ChartComponent
+              {...(getChartConfig({ ...chart, type: 'line' }, chartPoints) as any)}
+              loading={false}
+            />
           )}
         </div>
 
@@ -966,6 +1029,7 @@ const MetricsDetail = () => {
     );
   };
 
+  // ==================== 过滤与展示衍生逻辑 ====================
   // 处理标签选择
   const handleTagSelect = (tagKey: string) => {
     if (tagKey === 'all') {
@@ -1014,33 +1078,33 @@ const MetricsDetail = () => {
   };
 
   // 日志表格列配置
-  const logColumns = [
+  const logColumns: any[] = [
     {
       title: '时间',
       dataIndex: 'timestamp',
       key: 'timestamp',
       width: 100,
-      sorter: (a: any, b: any) => a.timestamp.localeCompare(b.timestamp),
+      sorter: (a: GenericRecord, b: GenericRecord) => a.timestamp.localeCompare(b.timestamp),
     },
     {
       title: '数值',
       dataIndex: 'value',
       key: 'value',
       width: 100,
-      render: (value: any) => <Text strong>{value}</Text>,
+      render: (value: string | number) => <Text strong>{value}</Text>,
     },
     {
       title: '状态',
       dataIndex: 'status',
       key: 'status',
       width: 80,
-      render: (status: any) => <Badge color={getStatusColor(status)} text={status} />,
+      render: (status: string) => <Badge color={getStatusColor(status)} text={status} />,
       filters: [
         { text: '正常', value: '正常' },
         { text: '警告', value: '警告' },
         { text: '错误', value: '错误' },
       ],
-      onFilter: (value: any, record: any) => record.status === value,
+      onFilter: (value: any, record: GenericRecord) => record.status === value,
     },
     {
       title: '操作类型',
@@ -1055,7 +1119,7 @@ const MetricsDetail = () => {
         { text: '连接', value: '连接' },
         { text: '断开', value: '断开' },
       ],
-      onFilter: (value: any, record: any) => record.operation === value,
+      onFilter: (value: any, record: GenericRecord) => record.operation === value,
     },
     {
       title: '来源',
@@ -1069,7 +1133,7 @@ const MetricsDetail = () => {
         { text: 'server-4', value: 'server-4' },
         { text: 'server-5', value: 'server-5' },
       ],
-      onFilter: (value: any, record: any) => record.source === value,
+      onFilter: (value: any, record: GenericRecord) => record.source === value,
     },
     {
       title: '消息',
@@ -1080,18 +1144,19 @@ const MetricsDetail = () => {
   ];
 
   // 过滤显示的图表
-  // 判断某个 chart 是否有可供选择的维度选项
-  const chartHasOptions = (chart: any) => {
+  // 判断某个 chart 是否有可供选择的维度选项（当前策略：一律保留显示）
+  const chartHasOptions = (chart: ChartConfigLike) => {
     // 如果还未拉取到 metric tags，保持显示；
     // 即便 metricTagsObj 中存在命名空间但维度列表为空，也仍然显示图表，后端可返回全局数据。
     if (!metricTagsObj) return true;
-    const ns = chart.tag;
-    const inner = metricTagsObj[ns];
-    if (!inner) return true;
-    const innerKeys = Object.keys(inner || {});
-    if (innerKeys.length === 0) return true;
-    const list = inner[innerKeys[0]] || [];
+    const namespaceKey = chart.tag;
+    const namespaceTagMap = metricTagsObj[namespaceKey];
+    if (!namespaceTagMap) return true;
+    const namespaceTagKeys = Object.keys(namespaceTagMap || {});
+    if (namespaceTagKeys.length === 0) return true;
+    const dimensionValues = namespaceTagMap[namespaceTagKeys[0]] || [];
     // 即便 list 为空，也不要隐藏图表，允许 ChartCard 在没有具体维度时发起请求
+    void dimensionValues;
     return true;
   };
 
@@ -1110,8 +1175,8 @@ const MetricsDetail = () => {
       setLoading(false);
     }, 500);
 
-    // 自动刷新逻辑：当启用时，应调用后端拉取最新数据并更新 `metricsData`。
-    let interval: any;
+    // 自动刷新逻辑预留：当前由每个图表卡片独立请求数据
+    let interval: ReturnType<typeof setInterval> | undefined;
 
     return () => {
       clearTimeout(timer);
@@ -1124,12 +1189,14 @@ const MetricsDetail = () => {
     let mounted = true;
     const fetchTags = async () => {
       try {
-      // fetching metric tags
-      const res = await getMetricTags();
-      if (!mounted) return;
-        const keys = res && typeof res === 'object' && !Array.isArray(res) ? Object.keys(res) : [];
-        setMetricTagKeys(keys);
-        setMetricTagsObj(res || null);
+        const tagsResponse = await getMetricTags();
+        if (!mounted) return;
+        const namespaceKeys =
+          tagsResponse && typeof tagsResponse === 'object' && !Array.isArray(tagsResponse)
+            ? Object.keys(tagsResponse)
+            : [];
+        setMetricTagKeys(namespaceKeys);
+        setMetricTagsObj(tagsResponse || null);
       } catch (err) {
         // 失败时保留默认行为（不阻塞页面）
       }
@@ -1145,7 +1212,7 @@ const MetricsDetail = () => {
     <PageContainer
       content={
         <div>
-          <div style={{ display: 'flex', alignItems: 'center', marginBottom: 8 }}>
+          <div style={PAGE_TITLE_ROW_STYLE}>
             <DashboardOutlined style={{ marginRight: 8, fontSize: 18 }} />
             <span style={{ fontSize: 16, fontWeight: 500 }}>系统指标监控面板</span>
           </div>
@@ -1158,12 +1225,12 @@ const MetricsDetail = () => {
         <ProCard
           className="control-section"
           style={{ marginBottom: 16 }}
-          bodyStyle={{ padding: '16px 24px' }}
+          bodyStyle={CONTROL_CARD_BODY_STYLE}
         >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={CONTROL_ROW_STYLE}>
             <Space size="middle">
               <Text strong>筛选指标:</Text>
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <div style={FILTER_TAGS_WRAP_STYLE}>
                 {displayTags.map((tag) => {
                   const isSelected = selectedTags.includes(tag.key);
                   return (
