@@ -1,6 +1,7 @@
 import { CloudServerOutlined, CodeOutlined, ExclamationCircleOutlined } from '@ant-design/icons';
-import { Badge, Card, Divider, Popover, Progress, Skeleton, Space, Tag, Tooltip, Typography } from 'antd';
+import { Divider, Progress, Space, Tag, Tooltip, Typography } from 'antd';
 import React from 'react';
+import CommonCard from '../CommonCard';
 import useResizeObserver from '../../hooks/useResizeObserver';
 import './ui.less';
 
@@ -134,6 +135,10 @@ type Props<T = any> = {
 	showRibbon?: boolean;
 	// 是否启用交互态（hover/click）
 	interactive?: boolean;
+	// 是否启用 AntD hoverable 风格（默认跟随 interactive）
+	hoverable?: boolean;
+	// 是否启用悬停阴影（与 interactive 解耦）
+	hoverShadow?: boolean;
 	// 外部覆盖 Card/body 样式
 	cardStyle?: React.CSSProperties;
 	bodyStyle?: React.CSSProperties;
@@ -193,6 +198,8 @@ const ContainerCard = <T,>({
 	onResize,
 	showRibbon = true,
 	interactive = true,
+	hoverable = interactive,
+	hoverShadow = false,
 	cardStyle,
 	bodyStyle,
 	cardClassName,
@@ -406,10 +413,11 @@ const ContainerCard = <T,>({
 		borderRadius: '8px',
 		overflow: 'hidden',
 		border: interactive && isHovered ? '1px solid #69c0ff' : '1px solid #e8e8e8',
-		boxShadow:
-			interactive && isHovered
+		boxShadow: interactive
+			? isHovered
 				? '0 6px 18px rgba(0,0,0,0.12)'
-				: '0 2px 8px rgba(0,0,0,0.09)',
+				: '0 2px 8px rgba(0,0,0,0.09)'
+			: undefined,
 		display: 'flex',
 		flexDirection: 'column',
 		...(cardStyle || {}),
@@ -424,10 +432,12 @@ const ContainerCard = <T,>({
 		...(bodyStyle || {}),
 	};
 
-	const cardNode = (
-		<Card
-			className={cardClassName}
-			hoverable={interactive}
+	const cardElement = (
+		<CommonCard
+			cardClassName={cardClassName}
+			bodyClassName={bodyClassName}
+			hoverable={hoverable}
+			hoverShadow={hoverShadow}
 			onClick={
 				interactive && !isLoading
 					? () =>
@@ -440,46 +450,30 @@ const ContainerCard = <T,>({
 			}
 			onMouseEnter={() => setHoveredCard(containerKey)}
 			onMouseLeave={() => setHoveredCard(null)}
-			style={cardStyleComputed}
+			cardStyle={cardStyleComputed}
 			bodyStyle={cardBodyStyleComputed}
-			classNames={bodyClassName ? { body: bodyClassName } : undefined}
 			cover={renderers.renderCover ? renderers.renderCover(container, size) : defaultCover}
+			loading={isLoading}
+			loadingSkeletonRows={loadingSkeletonRows}
+			showRibbon={showRibbon}
+			ribbonText={getStatusText(accessors.status(container) as string)}
+			ribbonColor={getStatusColor(accessors.status(container) as string)}
+			showPopover={showPopover}
+			popoverOpen={hoveredCard === containerKey}
+			popoverContent={popoverContent}
+			popoverPlacement="right"
+			popoverOverlayClassName="container-card-popover"
 		>
-			{isLoading ? (
-				<div style={{ flex: 1, display: 'flex', alignItems: 'center' }}>
-					<Skeleton active paragraph={{ rows: loadingSkeletonRows }} title={{ width: '45%' }} />
-				</div>
-			) : (
-				<>
-					{renderers.renderHeader
-						? renderers.renderHeader(container, businessInfo, size)
-						: defaultHeader}
-					{renderers.renderContent ? renderers.renderContent(container, size) : defaultContent}
-				</>
-			)}
-		</Card>
-	);
-
-	const cardElement = showRibbon ? (
-		<Badge.Ribbon
-			text={getStatusText(accessors.status(container) as string)}
-			color={getStatusColor(accessors.status(container) as string)}
-		>
-			{cardNode}
-		</Badge.Ribbon>
-	) : (
-		cardNode
+			{renderers.renderHeader
+				? renderers.renderHeader(container, businessInfo, size)
+				: defaultHeader}
+			{renderers.renderContent ? renderers.renderContent(container, size) : defaultContent}
+		</CommonCard>
 	);
 
 	return (
 		<div ref={rootRef} style={containerStyle}>
-			{showPopover ? (
-				<Popover placement="right" trigger="hover" open={hoveredCard === containerKey} content={popoverContent} overlayClassName="container-card-popover">
-					{cardElement}
-				</Popover>
-			) : (
-				cardElement
-			)}
+			{cardElement}
 		</div>
 	);
 };

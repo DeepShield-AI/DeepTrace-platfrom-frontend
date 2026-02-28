@@ -839,12 +839,17 @@ const MetricsDetail = () => {
     const cssVars = (vars: Record<string, string>): React.CSSProperties =>
       vars as React.CSSProperties;
 
+    // 卡片视觉状态统一走 CSS 变量，方便 less 侧复用。
     const metricCardShellVars = cssVars({
-      '--metric-card-border': exceedsThreshold ? chart.thresholdColor : '#f0f0f0',
-      '--metric-card-shadow': exceedsThreshold
-        ? `0 4px 12px ${chart.thresholdColor}40`
-        : '0 2px 4px rgba(0,0,0,0.02)',
+      '--metric-card-border': exceedsThreshold ? chart.thresholdColor : '#d9d9d9',
+      '--metric-card-shadow': '0 2px 4px rgba(0,0,0,0.02)',
     });
+
+    // ContainerCard 内部有默认边框，这里显式覆盖，确保阈值态红边框一定生效。
+    const metricCardShellStyle: React.CSSProperties = {
+      ...metricCardShellVars,
+      border: `1px solid ${exceedsThreshold ? chart.thresholdColor : '#d9d9d9'}`,
+    };
 
     const metricThresholdVars = cssVars({ '--metric-threshold-color': chart.thresholdColor });
     const metricIconVars = cssVars({
@@ -874,11 +879,14 @@ const MetricsDetail = () => {
         formatNumber={(num) => String(num ?? 0)}
         showPopover={false}
         showRibbon={false}
+        // 指标卡不需要点击跳转，但保持业务概览卡同款 hoverable 视觉反馈。
         interactive={false}
+        hoverable
+        hoverShadow={false}
         height="100%"
         cardClassName="metric-card-shell"
         bodyClassName="metric-card-body"
-        cardStyle={metricCardShellVars}
+        cardStyle={metricCardShellStyle}
         cardConfig={readonlyCardConfig}
         renderers={{
           containerKeyAccessor: () => `chart-${chartCardId}`,
