@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import BusinessStatsCard from '../../components/BusinessStatsCard';
 import ContainerCard from '../../components/ContainerCard';
 import { getAgentList } from '../../services/metrics/api';
+import './ui.less';
 import type {
   BusinessLike,
   BusinessStatsLike,
@@ -47,34 +48,6 @@ const { Title, Text } = Typography;
 const { RangePicker } = DatePicker;
 const { Option } = Select;
 const { Search } = Input;
-
-// ===== UI 常量 =====
-const PAGE_STYLE = { padding: '24px', background: '#fafafa', minHeight: '100vh' };
-const CONTENT_STYLE = { maxWidth: '1400px', margin: '0 auto' };
-const HEADER_ROW_STYLE = {
-  display: 'flex',
-  justifyContent: 'space-between',
-  alignItems: 'center',
-  marginBottom: '8px',
-};
-const HEADER_ACTIONS_STYLE = { display: 'flex', alignItems: 'center', gap: '16px' };
-const HEADER_SWITCH_STYLE = { display: 'flex', alignItems: 'center', gap: '8px' };
-const REFRESH_INFO_STYLE = {
-  display: 'flex',
-  justifyContent: 'space-between',
-  alignItems: 'center',
-  marginBottom: '16px',
-  padding: '8px 12px',
-  background: '#f0f8ff',
-  borderRadius: '4px',
-  fontSize: '12px',
-  color: '#1890ff',
-};
-const PANEL_CARD_STYLE = {
-  marginBottom: '24px',
-  borderRadius: '8px',
-  boxShadow: '0 2px 8px rgba(0,0,0,0.09)',
-} as const;
 
 // 业务元数据（用于业务视图聚合与展示）
 const businessData: Record<string, BusinessLike> = {
@@ -358,7 +331,7 @@ const NetworkMetrics = () => {
 
     const config = priorityConfig[priority] || { color: '#d9d9d9', text: '未知' };
     return (
-      <Tag color={config.color} style={{ fontSize: '10px', padding: '0 4px' }}>
+      <Tag color={config.color} className="data-view-priority-tag">
         {config.text}
       </Tag>
     );
@@ -491,25 +464,12 @@ const NetworkMetrics = () => {
     return Math.max(0, Math.ceil((next - now) / 1000));
   };
 
-  // 列表首屏骨架卡
   const SkeletonCard = () => (
     <Card
-      style={{
-        minHeight: '520px',
-        height: '100%',
-        borderRadius: '8px',
-        overflow: 'hidden',
-      }}
+      className="data-view-skeleton-card"
       cover={
-        <div
-          style={{
-            background: 'linear-gradient(135deg, #f0f8ff 0%, #e6f7ff 100%)',
-            padding: '20px',
-            textAlign: 'center',
-            height: '100px',
-          }}
-        >
-          <Skeleton.Avatar active size={48} style={{ display: 'block', margin: '0 auto' }} />
+        <div className="data-view-skeleton-cover">
+          <Skeleton.Avatar active size={48} className="data-view-skeleton-avatar" />
         </div>
       }
     >
@@ -518,28 +478,28 @@ const NetworkMetrics = () => {
   );
 
   return (
-    <div style={PAGE_STYLE}>
-      <div style={CONTENT_STYLE}>
-        <div style={HEADER_ROW_STYLE}>
+    <div className="data-view-page">
+      <div className="data-view-content">
+        <div className="data-view-header-row">
           <div>
-            <Title level={2} style={{ color: '#262626', marginBottom: 0 }}>
-              <DesktopOutlined style={{ marginRight: 12, color: '#1890ff' }} />
+            <Title level={2} className="data-view-title">
+              <DesktopOutlined className="data-view-title-icon" />
               容器监控平台
             </Title>
-            <Text type="secondary" style={{ fontSize: '14px' }}>
+            <Text type="secondary" className="data-view-subtitle">
               实时监控容器状态和资源使用情况
             </Text>
           </div>
 
-          <div style={HEADER_ACTIONS_STYLE}>
-            <div style={HEADER_SWITCH_STYLE}>
+          <div className="data-view-header-actions">
+            <div className="data-view-header-switch">
               <Switch
                 checkedChildren="业务视图"
                 unCheckedChildren="列表视图"
                 checked={showBusinessPanel}
                 onChange={setShowBusinessPanel}
               />
-              <SyncOutlined style={{ color: autoRefresh ? '#52c41a' : '#d9d9d9' }} />
+              <SyncOutlined className={`data-view-sync-icon ${autoRefresh ? 'active' : 'inactive'}`} />
               <Text>自动刷新</Text>
               <Switch checked={autoRefresh} onChange={setAutoRefresh} size="small" />
               {autoRefresh && (
@@ -547,7 +507,7 @@ const NetworkMetrics = () => {
                   value={refreshInterval}
                   onChange={setRefreshInterval}
                   size="small"
-                  style={{ width: 100 }}
+                  className="data-view-refresh-interval"
                 >
                   <Option value={10}>10秒</Option>
                   <Option value={30}>30秒</Option>
@@ -568,7 +528,7 @@ const NetworkMetrics = () => {
           </div>
         </div>
 
-        <div style={REFRESH_INFO_STYLE}>
+        <div className="data-view-refresh-info">
           <div>{lastRefreshTime && <Text>最后更新: {formatTime(lastRefreshTime)}</Text>}</div>
           <div>
             {autoRefresh && nextRefreshTime && (
@@ -585,7 +545,7 @@ const NetworkMetrics = () => {
             description="请及时检查相关容器的运行状态"
             type="warning"
             showIcon
-            style={{ marginBottom: '16px', borderRadius: '8px' }}
+            className="data-view-anomaly-alert"
             action={
               <Button size="small" type="text" onClick={() => setStatusFilter('all')}>
                 查看所有容器
@@ -597,10 +557,10 @@ const NetworkMetrics = () => {
         {/* 业务概览面板 */}
         {showBusinessPanel && (
           <Card
-            style={PANEL_CARD_STYLE}
+            className="data-view-panel-card"
             title={
               <Space>
-                <ApartmentOutlined style={{ color: '#1890ff' }} />
+                <ApartmentOutlined className="data-view-panel-icon" />
                 <Text strong>业务概览</Text>
                 <Tag color="blue">{Object.keys(businessStats).length} 个业务</Tag>
               </Space>
@@ -628,17 +588,8 @@ const NetworkMetrics = () => {
             </Row>
 
             {selectedBusinessDetail && (
-              <div
-                style={{
-                  marginTop: '16px',
-                  padding: '12px',
-                  background: '#f6ffed',
-                  borderRadius: '6px',
-                }}
-              >
-                <div
-                  style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
-                >
+              <div className="data-view-business-detail">
+                <div className="data-view-business-detail-header">
                   <Space>
                     {selectedBusinessDetail.icon}
                     <Text strong>{selectedBusinessDetail.name} - 业务详情</Text>
@@ -658,11 +609,11 @@ const NetworkMetrics = () => {
                     清除筛选
                   </Button>
                 </div>
-                <div style={{ marginTop: '8px' }}>
+                <div className="data-view-mt-8">
                   <Text type="secondary">{selectedBusinessDetail.description}</Text>
-                  <div style={{ marginTop: '8px' }}>
+                  <div className="data-view-mt-8">
                     <Text>负责人: {selectedBusinessDetail.owner}</Text>
-                    <div style={{ marginTop: '4px' }}>
+                    <div className="data-view-mt-4">
                       <Space>
                         <Tag color="green">容器: {selectedBusinessDetail.containerCount}</Tag>
                         <Tag color="blue">运行中: {selectedBusinessDetail.runningCount}</Tag>
@@ -681,18 +632,18 @@ const NetworkMetrics = () => {
           </Card>
         )}
 
-        <Card style={PANEL_CARD_STYLE}>
+        <Card className="data-view-panel-card">
           <Row gutter={[16, 16]} align="middle">
             <Col xs={24} sm={12} md={6}>
               <div>
-                <Text strong style={{ fontSize: '14px' }}>
+                <Text strong className="data-view-form-label">
                   容器搜索:
                 </Text>
                 <Search
                   placeholder="搜索容器名称、镜像、机器或业务"
                   value={searchText}
                   onChange={(e) => setSearchText(e.target.value)}
-                  style={{ marginTop: '8px' }}
+                  className="data-view-form-control"
                   allowClear
                   enterButton={<SearchOutlined />}
                   size="large"
@@ -702,11 +653,11 @@ const NetworkMetrics = () => {
 
             <Col xs={24} sm={12} md={6}>
               <div>
-                <Text strong style={{ fontSize: '14px' }}>
+                <Text strong className="data-view-form-label">
                   时间范围:
                 </Text>
                 <RangePicker
-                  style={{ marginTop: '8px', width: '100%' }}
+                  className="data-view-form-control"
                   placeholder={['开始日期', '结束日期']}
                   value={dateRange as any}
                   onChange={(dates: any) => setDateRange(dates ? [dates[0], dates[1]] : [])}
@@ -718,11 +669,11 @@ const NetworkMetrics = () => {
 
             <Col xs={24} sm={12} md={4}>
               <div>
-                <Text strong style={{ fontSize: '14px' }}>
+                <Text strong className="data-view-form-label">
                   状态筛选:
                 </Text>
                 <Select
-                  style={{ marginTop: '8px', width: '100%' }}
+                  className="data-view-form-control"
                   value={statusFilter}
                   onChange={setStatusFilter}
                   placeholder="选择状态"
@@ -739,12 +690,12 @@ const NetworkMetrics = () => {
 
             <Col xs={24} sm={12} md={6}>
               <div>
-                <Text strong style={{ fontSize: '14px' }}>
+                <Text strong className="data-view-form-label">
                   业务筛选:
                 </Text>
                 <Select
                   mode="multiple"
-                  style={{ marginTop: '8px', width: '100%' }}
+                  className="data-view-form-control"
                   value={businessFilter}
                   onChange={setBusinessFilter}
                   placeholder="选择业务"
@@ -769,11 +720,7 @@ const NetworkMetrics = () => {
                 type="default"
                 icon={<ReloadOutlined />}
                 onClick={handleResetFilters}
-                style={{
-                  marginTop: '30px',
-                  width: '100%',
-                  height: '40px',
-                }}
+                className="data-view-reset-btn"
                 size="large"
               >
                 重置
@@ -781,33 +728,20 @@ const NetworkMetrics = () => {
             </Col>
           </Row>
 
-          <div
-            style={{
-              marginTop: '16px',
-              padding: '12px 0',
-              borderTop: '1px solid #f0f0f0',
-              display: 'flex',
-              alignItems: 'center',
-              flexWrap: 'wrap',
-              gap: '8px',
-            }}
-          >
-            <Text type="secondary" style={{ fontSize: '14px' }}>
+          <div className="data-view-filter-result">
+            <Text type="secondary" className="data-view-filter-result-text">
               筛选结果:
             </Text>
-            <Tag color="blue" style={{ fontSize: '13px', padding: '4px 8px' }}>
+            <Tag color="blue" className="data-view-filter-result-tag">
               共 {filteredContainers.length} 个容器
             </Tag>
             {searchText && (
-              <Tag color="orange" style={{ fontSize: '13px', padding: '4px 8px' }}>
+              <Tag color="orange" className="data-view-filter-result-tag">
                 搜索: {searchText}
               </Tag>
             )}
             {statusFilter !== 'all' && (
-              <Tag
-                color={getStatusColor(statusFilter)}
-                style={{ fontSize: '13px', padding: '4px 8px' }}
-              >
+              <Tag color={getStatusColor(statusFilter)} className="data-view-filter-result-tag">
                 状态: {getStatusText(statusFilter)}
               </Tag>
             )}
@@ -826,16 +760,13 @@ const NetworkMetrics = () => {
                   </Menu>
                 }
               >
-                <Tag
-                  color="purple"
-                  style={{ fontSize: '13px', padding: '4px 8px', cursor: 'pointer' }}
-                >
+                <Tag color="purple" className="data-view-filter-result-tag data-view-filter-dropdown-tag">
                   业务: {businessFilter.length} 个 <DownOutlined />
                 </Tag>
               </Dropdown>
             )}
             {dateRange.length === 2 && (
-              <Tag color="cyan" style={{ fontSize: '13px', padding: '4px 8px' }}>
+              <Tag color="cyan" className="data-view-filter-result-tag">
                 时间: {dateRange[0].format('YYYY-MM-DD')} 至 {dateRange[1].format('YYYY-MM-DD')}
               </Tag>
             )}
@@ -843,7 +774,7 @@ const NetworkMetrics = () => {
         </Card>
 
         {!showBusinessPanel && (
-          <div style={{ marginBottom: '16px', textAlign: 'right' }}>
+          <div className="data-view-business-toggle-wrap">
             <Button
               type="dashed"
               icon={<ApartmentOutlined />}
@@ -853,25 +784,6 @@ const NetworkMetrics = () => {
             </Button>
           </div>
         )}
-
-        <style>
-          {`
-            .container-card-scrollbar::-webkit-scrollbar {
-              width: 4px;
-            }
-            .container-card-scrollbar::-webkit-scrollbar-track {
-              background: #f1f1f1;
-              border-radius: 2px;
-            }
-            .container-card-scrollbar::-webkit-scrollbar-thumb {
-              background: #c1c1c1;
-              border-radius: 2px;
-            }
-            .container-card-scrollbar::-webkit-scrollbar-thumb:hover {
-              background: #a8a8a8;
-            }
-          `}
-        </style>
 
         {/* 容器列表 */}
         <Row gutter={[16, 16]}>
@@ -891,7 +803,7 @@ const NetworkMetrics = () => {
                     md={8}
                     lg={6}
                     key={containerKey}
-                    style={{ display: 'flex', flexDirection: 'column', alignItems: 'stretch' }}
+                    className="data-view-list-col"
                   >
                     {/* 使用组件ContainerCard */}
                     <ContainerCard
@@ -914,23 +826,14 @@ const NetworkMetrics = () => {
         </Row>
 
         {!loading && filteredContainers.length === 0 && (
-          <Card
-            style={{
-              textAlign: 'center',
-              marginTop: '20px',
-              borderRadius: '8px',
-              boxShadow: '0 2px 8px rgba(0,0,0,0.09)',
-            }}
-          >
-            <CloudServerOutlined
-              style={{ fontSize: '64px', color: '#d9d9d9', marginBottom: '16px' }}
-            />
-            <Title level={4} type="secondary" style={{ marginBottom: '8px' }}>
+          <Card className="data-view-empty-card">
+            <CloudServerOutlined className="data-view-empty-icon" />
+            <Title level={4} type="secondary" className="data-view-empty-title">
               暂无容器数据
             </Title>
             <Text type="secondary">当前没有符合条件的容器</Text>
             <br />
-            <Button type="primary" onClick={handleResetFilters} style={{ marginTop: '16px' }}>
+            <Button type="primary" onClick={handleResetFilters} className="data-view-empty-btn">
               清除筛选条件
             </Button>
           </Card>

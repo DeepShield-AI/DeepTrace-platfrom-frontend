@@ -2,6 +2,7 @@ import { CloudServerOutlined, CodeOutlined, ExclamationCircleOutlined } from '@a
 import { Badge, Card, Divider, Popover, Progress, Skeleton, Space, Tag, Tooltip, Typography } from 'antd';
 import React from 'react';
 import useResizeObserver from '../../hooks/useResizeObserver';
+import './ui.less';
 
 const { Text } = Typography as any;
 
@@ -136,6 +137,9 @@ type Props<T = any> = {
 	// 外部覆盖 Card/body 样式
 	cardStyle?: React.CSSProperties;
 	bodyStyle?: React.CSSProperties;
+	// 外部覆盖 Card/body className
+	cardClassName?: string;
+	bodyClassName?: string;
 	// 加载骨架行数（默认 6）
 	loadingSkeletonRows?: number;
 };
@@ -191,6 +195,8 @@ const ContainerCard = <T,>({
 	interactive = true,
 	cardStyle,
 	bodyStyle,
+	cardClassName,
+	bodyClassName,
 	loadingSkeletonRows = 6,
 }: Props<T>) => {
 	// 监听卡片尺寸，提供给自定义 renderer 做响应式布局
@@ -319,14 +325,7 @@ const ContainerCard = <T,>({
 	// 默认 cover（可覆盖）
 	const defaultCover = (
 		<div
-			style={{
-				background: 'linear-gradient(135deg, #f0f8ff 0%, #e6f7ff 100%)',
-				padding: '20px',
-				textAlign: 'center',
-				position: 'relative',
-				flexShrink: 0,
-				height: '100px',
-			}}
+			className="container-card-default-cover"
 		>
 			<CloudServerOutlined style={{ fontSize: '48px', color: '#69c0ff' }} />
 		</div>
@@ -399,10 +398,35 @@ const ContainerCard = <T,>({
 		height: '100%',
 	};
 
-	const cardMinHeight = typeof height === 'number' ? `${height}px` : height;
+	const cardStyleComputed: React.CSSProperties = {
+		height: '100%',
+		minHeight: typeof height === 'number' ? `${height}px` : height,
+		cursor: interactive ? 'pointer' : 'default',
+		transition: 'all 0.3s ease',
+		borderRadius: '8px',
+		overflow: 'hidden',
+		border: interactive && isHovered ? '1px solid #69c0ff' : '1px solid #e8e8e8',
+		boxShadow:
+			interactive && isHovered
+				? '0 6px 18px rgba(0,0,0,0.12)'
+				: '0 2px 8px rgba(0,0,0,0.09)',
+		display: 'flex',
+		flexDirection: 'column',
+		...(cardStyle || {}),
+	};
+
+	const cardBodyStyleComputed: React.CSSProperties = {
+		padding: '20px',
+		flex: 1,
+		overflowY: 'auto',
+		display: 'flex',
+		flexDirection: 'column',
+		...(bodyStyle || {}),
+	};
 
 	const cardNode = (
 		<Card
+			className={cardClassName}
 			hoverable={interactive}
 			onClick={
 				interactive && !isLoading
@@ -416,31 +440,9 @@ const ContainerCard = <T,>({
 			}
 			onMouseEnter={() => setHoveredCard(containerKey)}
 			onMouseLeave={() => setHoveredCard(null)}
-			style={{
-				height: '100%',
-				minHeight: cardMinHeight,
-				cursor: interactive ? 'pointer' : 'default',
-				transition: 'all 0.3s ease',
-				borderRadius: '8px',
-				overflow: 'hidden',
-				border:
-					interactive && isHovered ? '1px solid #69c0ff' : '1px solid #e8e8e8',
-				boxShadow:
-					interactive && isHovered
-						? '0 6px 18px rgba(0,0,0,0.12)'
-						: '0 2px 8px rgba(0,0,0,0.09)',
-				display: 'flex',
-				flexDirection: 'column',
-				...(cardStyle || {}),
-			}}
-			bodyStyle={{
-				padding: '20px',
-				flex: 1,
-				overflowY: 'auto',
-				display: 'flex',
-				flexDirection: 'column',
-				...(bodyStyle || {}),
-			}}
+			style={cardStyleComputed}
+			bodyStyle={cardBodyStyleComputed}
+			classNames={bodyClassName ? { body: bodyClassName } : undefined}
 			cover={renderers.renderCover ? renderers.renderCover(container, size) : defaultCover}
 		>
 			{isLoading ? (
@@ -472,7 +474,7 @@ const ContainerCard = <T,>({
 	return (
 		<div ref={rootRef} style={containerStyle}>
 			{showPopover ? (
-				<Popover placement="right" trigger="hover" open={hoveredCard === containerKey} content={popoverContent} overlayStyle={{ maxWidth: 460 }}>
+				<Popover placement="right" trigger="hover" open={hoveredCard === containerKey} content={popoverContent} overlayClassName="container-card-popover">
 					{cardElement}
 				</Popover>
 			) : (

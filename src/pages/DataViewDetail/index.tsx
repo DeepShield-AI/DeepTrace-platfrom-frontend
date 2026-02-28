@@ -32,6 +32,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import ContainerCard, { createReadonlyCardConfig } from '../../components/ContainerCard';
 import { getChart, getMetricTags } from '../../services/metrics/api';
+import './ui.less';
 import type {
   ChartConfigLike,
   GenericRecord,
@@ -43,15 +44,6 @@ import dayjs from 'dayjs';
 
 const { Title, Text } = Typography;
 const { Option } = Select;
-
-const PAGE_TITLE_ROW_STYLE = { display: 'flex', alignItems: 'center', marginBottom: 8 } as const;
-const CONTROL_ROW_STYLE = {
-  display: 'flex',
-  justifyContent: 'space-between',
-  alignItems: 'center',
-} as const;
-const FILTER_TAGS_WRAP_STYLE = { display: 'flex', gap: 8, flexWrap: 'wrap' } as const;
-const CONTROL_CARD_BODY_STYLE = { padding: '16px 24px' } as const;
 
 // ===== 工具方法 =====
 // 格式化 x 轴文本：兼容毫秒时间戳、秒级时间戳和偏移量
@@ -844,6 +836,37 @@ const MetricsDetail = () => {
       ));
     };
 
+    const cssVars = (vars: Record<string, string>): React.CSSProperties =>
+      vars as React.CSSProperties;
+
+    const metricCardShellVars = cssVars({
+      '--metric-card-border': exceedsThreshold ? chart.thresholdColor : '#f0f0f0',
+      '--metric-card-shadow': exceedsThreshold
+        ? `0 4px 12px ${chart.thresholdColor}40`
+        : '0 2px 4px rgba(0,0,0,0.02)',
+    });
+
+    const metricThresholdVars = cssVars({ '--metric-threshold-color': chart.thresholdColor });
+    const metricIconVars = cssVars({
+      '--metric-icon-bg': exceedsThreshold ? `${chart.thresholdColor}10` : `${chart.color}10`,
+      '--metric-icon-color': exceedsThreshold ? chart.thresholdColor : chart.color,
+    });
+    const metricNameVars = cssVars({
+      '--metric-name-color': exceedsThreshold ? chart.thresholdColor : 'inherit',
+    });
+    const metricValueVars = cssVars({
+      '--metric-value-color': exceedsThreshold ? chart.thresholdColor : chart.color,
+    });
+    const metricTrendVars = cssVars({ '--metric-trend-color': trendConfig.color });
+    const metricFooterVars = cssVars({
+      '--metric-footer-color': exceedsThreshold ? chart.thresholdColor : 'inherit',
+    });
+    const metricDimensionVars = cssVars({
+      '--metric-dim-bg': exceedsThreshold ? `${chart.thresholdColor}10` : '#f0f0f0',
+      '--metric-dim-color': exceedsThreshold ? chart.thresholdColor : '#666',
+      '--metric-dim-border': exceedsThreshold ? chart.thresholdColor : 'transparent',
+    });
+
     return (
       <ContainerCard
         container={{ ...chart, id: chartCardId, machineId: 'metrics' }}
@@ -853,23 +876,9 @@ const MetricsDetail = () => {
         showRibbon={false}
         interactive={false}
         height="100%"
-        cardStyle={{
-          height: '100%',
-          borderRadius: '8px',
-          border: exceedsThreshold ? `2px solid ${chart.thresholdColor}` : '1px solid #f0f0f0',
-          boxShadow: exceedsThreshold
-            ? `0 4px 12px ${chart.thresholdColor}40`
-            : '0 2px 4px rgba(0,0,0,0.02)',
-          position: 'relative',
-          overflow: 'hidden',
-          transition: 'all 0.3s ease',
-        }}
-        bodyStyle={{
-          padding: '16px',
-          height: '100%',
-          display: 'flex',
-          flexDirection: 'column',
-        }}
+        cardClassName="metric-card-shell"
+        bodyClassName="metric-card-body"
+        cardStyle={metricCardShellVars}
         cardConfig={readonlyCardConfig}
         renderers={{
           containerKeyAccessor: () => `chart-${chartCardId}`,
@@ -882,7 +891,7 @@ const MetricsDetail = () => {
                     value={selectedValue}
                     onChange={(val) => setSelectedValue(val)}
                     size="small"
-                    style={{ width: 160 }}
+                    className="metric-card-dimension-select"
                   >
                     {renderDimensionOptions()}
                   </Select>
@@ -892,7 +901,7 @@ const MetricsDetail = () => {
                       icon={<TableOutlined />}
                       size="small"
                       onClick={() => handleViewLogs(chart)}
-                      style={{ color: '#666' }}
+                      className="metric-card-log-btn"
                     />
                   </Tooltip>
                 </Space>
@@ -901,15 +910,8 @@ const MetricsDetail = () => {
             if (!cardTitleText && !headerExtra) return null;
 
             return (
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  marginBottom: '12px',
-                }}
-              >
-                <div style={{ fontSize: 14, fontWeight: 600 }}>{cardTitleText}</div>
+              <div className="metric-card-header">
+                <div className="metric-card-title">{cardTitleText}</div>
                 {headerExtra}
               </div>
             );
@@ -917,72 +919,36 @@ const MetricsDetail = () => {
           renderContent: () => (
             <>
               {exceedsThreshold && (
-                <div
-                  style={{
-                    position: 'absolute',
-                    top: '8px',
-                    right: '40px',
-                    color: chart.thresholdColor,
-                    animation: 'pulse 2s infinite',
-                  }}
-                >
+                <div className="metric-card-threshold-icon" style={metricThresholdVars}>
                   <ExclamationCircleOutlined />
                 </div>
               )}
 
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'flex-start',
-                  marginBottom: '12px',
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <div className="metric-card-summary">
+                <div className="metric-card-summary-main">
                   <div
-                    style={{
-                      width: '32px',
-                      height: '32px',
-                      borderRadius: '6px',
-                      background: exceedsThreshold ? `${chart.thresholdColor}10` : `${chart.color}10`,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      color: exceedsThreshold ? chart.thresholdColor : chart.color,
-                    }}
+                    className="metric-card-icon-wrap"
+                    style={metricIconVars}
                   >
                     {chart.icon}
                   </div>
                   <div>
-                    <Text
-                      strong
-                      style={{
-                        fontSize: '14px',
-                        display: 'block',
-                        color: exceedsThreshold ? chart.thresholdColor : 'inherit',
-                      }}
-                    >
+                    <Text strong className="metric-card-name" style={metricNameVars}>
                       {chart.title}
                       {exceedsThreshold && (
                         <Tooltip title={`当前值已超过阈值 ${chart.threshold}${chart.unit}`}>
                           <ExclamationCircleOutlined
-                            style={{ marginLeft: 4, color: chart.thresholdColor, fontSize: 12 }}
+                            className="metric-card-threshold-inline-icon"
+                            style={metricThresholdVars}
                           />
                         </Tooltip>
                       )}
                     </Text>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                      <Text
-                        strong
-                        style={{
-                          fontSize: '18px',
-                          color: exceedsThreshold ? chart.thresholdColor : chart.color,
-                          lineHeight: 1,
-                        }}
-                      >
+                    <div className="metric-card-value-row">
+                      <Text strong className="metric-card-value" style={metricValueVars}>
                         {chart.value}
                       </Text>
-                      <Text style={{ fontSize: '12px', color: trendConfig.color, lineHeight: 1 }}>
+                      <Text className="metric-card-trend" style={metricTrendVars}>
                         {trendConfig.icon} {chart.change}
                       </Text>
                     </div>
@@ -990,23 +956,14 @@ const MetricsDetail = () => {
                 </div>
               </div>
 
-              <div style={{ flex: 1, minHeight: '120px' }}>
+              <div className="metric-card-chart-wrap">
                 {chartLoading || loading ? (
                   <ChartComponent
                     {...(getChartConfig({ ...chart, type: 'line' }, chartPoints) as any)}
                     loading={chartLoading || loading}
                   />
                 ) : chartPoints.length === 0 ? (
-                  <div
-                    style={{
-                      height: '100%',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      color: '#999',
-                      fontSize: 12,
-                    }}
-                  >
+                  <div className="metric-card-empty">
                     无数据
                   </div>
                 ) : (
@@ -1017,35 +974,11 @@ const MetricsDetail = () => {
                 )}
               </div>
 
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  marginTop: '8px',
-                  paddingTop: '8px',
-                  borderTop: '1px solid #f0f0f0',
-                }}
-              >
-                <Text
-                  type="secondary"
-                  style={{
-                    fontSize: '12px',
-                    color: exceedsThreshold ? chart.thresholdColor : 'inherit',
-                  }}
-                >
+              <div className="metric-card-footer">
+                <Text type="secondary" className="metric-card-footer-time" style={metricFooterVars}>
                   最后更新: 刚刚{exceedsThreshold && ' • 超过阈值'}
                 </Text>
-                <div
-                  style={{
-                    padding: '2px 6px',
-                    background: exceedsThreshold ? `${chart.thresholdColor}10` : '#f0f0f0',
-                    borderRadius: '4px',
-                    fontSize: '10px',
-                    color: exceedsThreshold ? chart.thresholdColor : '#666',
-                    border: `1px solid ${exceedsThreshold ? chart.thresholdColor : 'transparent'}`,
-                  }}
-                >
+                <div className="metric-card-dimension-tag" style={metricDimensionVars}>
                   {String(selectedValue).toUpperCase()}
                 </div>
               </div>
@@ -1238,9 +1171,9 @@ const MetricsDetail = () => {
     <PageContainer
       content={
         <div>
-          <div style={PAGE_TITLE_ROW_STYLE}>
-            <DashboardOutlined style={{ marginRight: 8, fontSize: 18 }} />
-            <span style={{ fontSize: 16, fontWeight: 500 }}>系统指标监控面板</span>
+          <div className="data-view-detail-title-row">
+            <DashboardOutlined className="data-view-detail-title-icon" />
+            <span className="data-view-detail-title-text">系统指标监控面板</span>
           </div>
           <Text type="secondary">实时监控系统各项关键性能指标，支持多维度数据可视化展示</Text>
         </div>
@@ -1248,15 +1181,11 @@ const MetricsDetail = () => {
     >
       <div className="network-metrics">
         {/* 控制栏 */}
-        <ProCard
-          className="control-section"
-          style={{ marginBottom: 16 }}
-          bodyStyle={CONTROL_CARD_BODY_STYLE}
-        >
-          <div style={CONTROL_ROW_STYLE}>
+        <ProCard className="control-section data-view-detail-control-card">
+          <div className="data-view-detail-control-row">
             <Space size="middle">
               <Text strong>筛选指标:</Text>
-              <div style={FILTER_TAGS_WRAP_STYLE}>
+              <div className="data-view-detail-filter-tags">
                 {displayTags.map((tag) => {
                   const isSelected = selectedTags.includes(tag.key);
                   return (
@@ -1264,23 +1193,10 @@ const MetricsDetail = () => {
                       key={tag.key}
                       checked={isSelected}
                       onChange={() => handleTagSelect(tag.key)}
-                      style={{
-                        padding: '6px 14px',
-                        border: isSelected ? `1px solid ${tag.color}` : '1px solid #d9d9d9',
-                        borderRadius: '16px',
-                        cursor: 'pointer',
-                        background: isSelected ? tag.color : '#fff',
-                        color: isSelected ? '#fff' : '#666',
-                        fontWeight: isSelected ? 600 : 500,
-                        boxShadow: isSelected ? `0 6px 18px ${tag.color}33` : 'none',
-                        transform: isSelected ? 'translateY(-2px)' : 'none',
-                        transition: 'all 0.12s ease',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: 6,
-                      }}
+                      className={`data-view-detail-checkable-tag ${isSelected ? 'selected' : ''}`}
+                      style={{ '--tag-color': tag.color } as React.CSSProperties}
                     >
-                      <span style={{ marginRight: 4 }}>{tag.icon}</span>
+                      <span className="data-view-detail-tag-icon">{tag.icon}</span>
                       {tag.label}
                     </Tag.CheckableTag>
                   );
@@ -1289,7 +1205,12 @@ const MetricsDetail = () => {
             </Space>
 
             <Space>
-              <Select value={timeRange} onChange={setTimeRange} style={{ width: 120 }} size="small">
+              <Select
+                value={timeRange}
+                onChange={setTimeRange}
+                className="data-view-detail-time-range"
+                size="small"
+              >
                 <Option value="15分钟">最近15分钟</Option>
                 <Option value="30分钟">最近30分钟</Option>
                 <Option value="1小时">最近1小时</Option>
@@ -1318,41 +1239,31 @@ const MetricsDetail = () => {
 
         {/* 空状态 */}
         {filteredCharts.length === 0 && (
-          <ProCard
-            style={{
-              height: '200px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              marginTop: '16px',
-            }}
-          >
-            <div style={{ textAlign: 'center' }}>
-              <DashboardOutlined
-                style={{ fontSize: '48px', color: '#d9d9d9', marginBottom: '16px' }}
-              />
+          <ProCard className="data-view-detail-empty-card">
+            <div className="data-view-detail-empty-center">
+              <DashboardOutlined className="data-view-detail-empty-icon" />
               <Text type="secondary">没有找到匹配的指标图表，请调整筛选条件</Text>
             </div>
           </ProCard>
         )}
 
         {/* 页脚统计 */}
-        <ProCard style={{ marginTop: '16px' }} bodyStyle={{ padding: '12px 16px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <ProCard className="data-view-detail-summary-card">
+          <div className="data-view-detail-summary-row">
             <div>
               <Text type="secondary">
                 共显示 {filteredCharts.length} 个指标图表
                 {!selectedTags.includes('all') && ` (${selectedTags.join(', ')})`}
               </Text>
               {filteredCharts.some((chart) => checkThresholdExceeded(chart)) && (
-                <Text type="danger" style={{ marginLeft: 16 }}>
+                <Text type="danger" className="data-view-detail-summary-alert">
                   <ExclamationCircleOutlined />有{' '}
                   {filteredCharts.filter((chart) => checkThresholdExceeded(chart)).length}{' '}
                   个指标超过阈值
                 </Text>
               )}
             </div>
-            <Text type="secondary" style={{ fontSize: '12px' }}>
+            <Text type="secondary" className="data-view-detail-summary-time">
               数据更新时间: {new Date().toLocaleTimeString()}
             </Text>
           </div>
@@ -1361,8 +1272,8 @@ const MetricsDetail = () => {
         {/* 日志抽屉 */}
         <Drawer
           title={
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div className="data-view-detail-drawer-title">
+              <div className="data-view-detail-drawer-title-left">
                 {currentChart?.icon}
                 <span>{currentChart?.title} - 详细日志</span>
               </div>
@@ -1378,32 +1289,30 @@ const MetricsDetail = () => {
           onClose={handleCloseDrawer}
           open={drawerVisible}
           width="80%"
-          style={{ maxWidth: '1200px' }}
+          className="data-view-detail-drawer"
         >
           {currentChart && (
-            <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+            <div className="data-view-detail-drawer-content">
               {/* 日志统计 */}
-              <ProCard style={{ marginBottom: 16 }} bodyStyle={{ padding: '12px 16px' }}>
-                <div
-                  style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
-                >
+              <ProCard className="data-view-detail-log-summary-card">
+                <div className="data-view-detail-log-summary-row">
                   <div>
                     <Text strong>日志统计:</Text>
-                    <span style={{ marginLeft: 16 }}>
+                    <span className="data-view-detail-log-summary-item">
                       <Badge color="green" text="正常" />
-                      <span style={{ margin: '0 8px' }}>
+                      <span className="data-view-detail-log-summary-count">
                         {logData.filter((item) => item.status === '正常').length}
                       </span>
                     </span>
-                    <span style={{ marginLeft: 16 }}>
+                    <span className="data-view-detail-log-summary-item">
                       <Badge color="orange" text="警告" />
-                      <span style={{ margin: '0 8px' }}>
+                      <span className="data-view-detail-log-summary-count">
                         {logData.filter((item) => item.status === '警告').length}
                       </span>
                     </span>
-                    <span style={{ marginLeft: 16 }}>
+                    <span className="data-view-detail-log-summary-item">
                       <Badge color="red" text="错误" />
-                      <span style={{ margin: '0 8px' }}>
+                      <span className="data-view-detail-log-summary-count">
                         {logData.filter((item) => item.status === '错误').length}
                       </span>
                     </span>
@@ -1413,7 +1322,7 @@ const MetricsDetail = () => {
               </ProCard>
 
               {/* 日志列表 */}
-              <div style={{ flex: 1 }}>
+              <div className="data-view-detail-log-table-wrap">
                 <Table
                   columns={logColumns}
                   dataSource={logData}
@@ -1433,41 +1342,6 @@ const MetricsDetail = () => {
         </Drawer>
       </div>
 
-      <style>{`
-        .network-metrics {
-          padding: 0;
-        }
-
-        .control-section {
-          background: #fff;
-          border-radius: 8px;
-        }
-
-        .chart-grid {
-          display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-          gap: 16px;
-          margin-top: 16px;
-        }
-
-        @keyframes pulse {
-          0% {
-            opacity: 1;
-          }
-          50% {
-            opacity: 0.5;
-          }
-          100% {
-            opacity: 1;
-          }
-        }
-
-        @media (max-width: 768px) {
-          .chart-grid {
-            grid-template-columns: 1fr;
-          }
-        }
-      `}</style>
     </PageContainer>
   );
 };
