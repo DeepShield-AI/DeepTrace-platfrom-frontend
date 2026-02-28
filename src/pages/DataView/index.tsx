@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import BusinessStatsCard from '../../components/BusinessStatsCard';
 import ContainerCard from '../../components/ContainerCard';
@@ -10,7 +10,6 @@ import type {
   DateRangeLike,
   GenericRecord,
 } from '../../types/sharedTypes';
-// import type { Dayjs } from 'dayjs';
 import {
   ApartmentOutlined,
   AppstoreOutlined,
@@ -49,7 +48,7 @@ const { RangePicker } = DatePicker;
 const { Option } = Select;
 const { Search } = Input;
 
-// ==================== 基础配置 ====================
+// ===== UI 常量 =====
 const PAGE_STYLE = { padding: '24px', background: '#fafafa', minHeight: '100vh' };
 const CONTENT_STYLE = { maxWidth: '1400px', margin: '0 auto' };
 const HEADER_ROW_STYLE = {
@@ -71,8 +70,13 @@ const REFRESH_INFO_STYLE = {
   fontSize: '12px',
   color: '#1890ff',
 };
+const PANEL_CARD_STYLE = {
+  marginBottom: '24px',
+  borderRadius: '8px',
+  boxShadow: '0 2px 8px rgba(0,0,0,0.09)',
+} as const;
 
-// 业务数据 mock（用于页面展示和业务统计）
+// 业务元数据（用于业务视图聚合与展示）
 const businessData: Record<string, BusinessLike> = {
   ecommerce: {
     id: 'ecommerce',
@@ -129,37 +133,35 @@ const businessData: Record<string, BusinessLike> = {
 const NetworkMetrics = () => {
   const navigate = useNavigate();
 
-  // ==================== 页面状态 ====================
+  // ===== 页面状态 =====
   const [allContainers, setAllContainers] = useState<ContainerLike[]>([]);
   const [filteredContainers, setFilteredContainers] = useState<ContainerLike[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [dateRange, setDateRange] = useState<DateRangeLike>([]);
   const [statusFilter, setStatusFilter] = useState<string>('all');
-  const [businessFilter, setBusinessFilter] = useState<string[]>([]); // 多选业务筛选
+  const [businessFilter, setBusinessFilter] = useState<string[]>([]); // 业务多选筛选
   const [searchText, setSearchText] = useState<string>('');
   const [hoveredCard, setHoveredCard] = useState<string | null>(null);
   const [autoRefresh, setAutoRefresh] = useState<boolean>(false);
   const [refreshInterval, setRefreshInterval] = useState<number>(30);
   const [lastRefreshTime, setLastRefreshTime] = useState<Date | null>(null);
   const [nextRefreshTime, setNextRefreshTime] = useState<Date | null>(null);
-  const [cardLoading, setCardLoading] = useState<Record<string, boolean>>({}); // 单个卡片加载状态
-  const [showBusinessPanel, setShowBusinessPanel] = useState<boolean>(true); // 是否显示业务概览面板
+  const [cardLoading, setCardLoading] = useState<Record<string, boolean>>({}); // 卡片级 loading
+  const [showBusinessPanel, setShowBusinessPanel] = useState<boolean>(true); // 业务视图开关
   const [selectedBusinessDetail, setSelectedBusinessDetail] =
-    useState<BusinessStatsLike | null>(null); // 选中的业务详情
+    useState<BusinessStatsLike | null>(null); // 当前选中的业务
 
-  // ==================== 通用展示函数 ====================
-  // 格式化数字，避免 UI 出现 NaN / undefined
+  // 统一数值格式化，避免 NaN/undefined 泄漏到 UI
   const formatNumber = (num: number | unknown): string => {
     if (typeof num !== 'number') return '0.00';
     return num.toFixed(2);
   };
 
-  // ==================== 聚合计算逻辑 ====================
-  // 业务统计聚合：容器数、运行数、异常数、CPU/内存均值
+  // 按业务维度聚合容器统计（数量、异常、平均 CPU/内存）
   const getBusinessStats = () => {
     const stats: Record<string, BusinessStatsLike> = {};
 
-    // 初始化所有业务
+    // 先构建基础桶位，确保无容器业务也可展示
     Object.keys(businessData).forEach((businessId) => {
       stats[businessId] = {
         ...businessData[businessId],
@@ -174,7 +176,7 @@ const NetworkMetrics = () => {
       };
     });
 
-    // 统计容器数据
+    // 累积容器指标
     allContainers.forEach((container: ContainerLike) => {
       const businessId = container.business || 'infrastructure';
       if (stats[businessId]) {
@@ -184,7 +186,7 @@ const NetworkMetrics = () => {
           stats[businessId].runningCount += 1;
         }
 
-        // 检查异常
+        // 异常容器记入 warning/error
         const anomalies = checkContainerAnomalies(container);
         if (anomalies.length > 0) {
           const hasError = anomalies.some((anomaly: GenericRecord) => anomaly.level === 'error');
@@ -200,7 +202,7 @@ const NetworkMetrics = () => {
       }
     });
 
-    // 计算平均值
+    // 计算均值
     Object.keys(stats).forEach((businessId) => {
       if (stats[businessId].containerCount > 0) {
         stats[businessId].avgCpuUsage =
@@ -216,12 +218,11 @@ const NetworkMetrics = () => {
     return stats;
   };
 
-  // ==================== 数据拉取逻辑 ====================
-  // 拉取容器数据并同步更新列表与卡片加载状态
+  // 拉取容器列表并同步卡片 loading 状态
   const fetchMachines = async () => {
     setLoading(true);
     try {
-      // 获取API数据
+      // 拉取并归一化后端字段
       const apiRes = await getAgentList();
       const containers = (apiRes?.content || []).map((item: GenericRecord) => ({
         ...item,
@@ -235,8 +236,7 @@ const NetworkMetrics = () => {
         time: item.createTime,
         state: item.state,
       }));
-      console.log('Fetched containers:', containers);
-      // 初始化卡片加载状态（与 ContainerCard key 保持一致）
+      // 初始化卡片 loading（key 与 ContainerCard 保持一致）
       const loadingStates: Record<string, boolean> = {};
       containers.forEach((container: ContainerLike) => {
         const key = `${container.machineId}-${container.id}`;
@@ -247,7 +247,7 @@ const NetworkMetrics = () => {
       setFilteredContainers(containers);
       setLoading(false);
       setLastRefreshTime(new Date());
-      // 卡片逐个加载完成效果
+      // 逐卡片收敛 loading，形成分批渲染观感
       containers.forEach((container: ContainerLike, index: number) => {
         const key = `${container.machineId}-${container.id}`;
         setTimeout(() => {
@@ -257,7 +257,7 @@ const NetworkMetrics = () => {
           }));
         }, index * 200);
       });
-      // 计算下一次刷新时间
+      // 记录下次自动刷新时间
       if (autoRefresh) {
         const nextTime = new Date();
         nextTime.setSeconds(nextTime.getSeconds() + refreshInterval);
@@ -275,7 +275,7 @@ const NetworkMetrics = () => {
     fetchMachines();
   };
 
-  // 首次进入页面时拉取数据
+  // 首屏加载
   useEffect(() => {
     fetchMachines();
   }, []);
@@ -297,8 +297,8 @@ const NetworkMetrics = () => {
     };
   }, [autoRefresh, refreshInterval]);
 
-  // ==================== 异常与状态显示 ====================
-  // 检查容器是否存在资源/状态异常
+  // ===== 告警与状态映射 =====
+  // 统一异常判定：CPU、内存、运行状态
   const checkContainerAnomalies = (container: ContainerLike) => {
     const anomalies: GenericRecord[] = [];
 
@@ -329,7 +329,7 @@ const NetworkMetrics = () => {
     return anomalies;
   };
 
-  // 获取进度条颜色
+  // 资源使用率颜色分级
   const getProgressColor = (usage: number, type?: string) => {
     if (usage > 90) return '#ff7875';
     if (usage > 80) return '#ffc53d';
@@ -337,17 +337,17 @@ const NetworkMetrics = () => {
     return '#73d13d';
   };
 
-  // 获取业务颜色
+  // 业务色值映射
   const getBusinessColor = (businessId: string) => {
     return businessData[businessId]?.color || '#d9d9d9';
   };
 
-  // 获取业务名称
+  // 业务名称映射
   const getBusinessName = (businessId: string) => {
     return businessData[businessId]?.name || businessId;
   };
 
-  // 获取业务优先级标签
+  // 优先级标签渲染
   const getPriorityTag = (priority: string) => {
     const priorityConfig: Record<string, { color: string; text: string }> = {
       critical: { color: '#f5222d', text: '关键' },
@@ -364,8 +364,8 @@ const NetworkMetrics = () => {
     );
   };
 
-  // ==================== 筛选逻辑 ====================
-  // 按搜索词、状态、时间范围执行列表过滤
+  // ===== 筛选 =====
+  // 根据搜索词/状态/日期计算过滤结果
   const applyFilters = () => {
     let filtered = [...allContainers];
 
@@ -402,17 +402,17 @@ const NetworkMetrics = () => {
     applyFilters();
   }, [dateRange, statusFilter, businessFilter, searchText, allContainers]);
 
-  // ==================== 交互处理 ====================
+  // ===== 交互 =====
   const handleCardClick = (containerId: string, machineId: string, item?: ContainerLike) => {
     const containerKey = `${machineId}-${containerId}`;
 
-    // 设置当前卡片为加载状态
+    // 点击后先置为 loading，再执行导航
     setCardLoading((prev) => ({
       ...prev,
       [containerKey]: true,
     }));
 
-    // 模拟导航延迟
+    // 轻微延迟用于展示加载反馈
     setTimeout(() => {
       navigate(`/Data/metricDetail?containerId=${containerId}&machineId=${machineId}`, {
         state: { agent_name: item?.name || item?.agent_name || undefined },
@@ -451,35 +451,29 @@ const NetworkMetrics = () => {
     return statusTexts[status] || status;
   };
 
-  // 读取当前业务详情（来源于业务统计结果）
-  const getBusinessDetail = (businessId: string) => {
-    const stats = getBusinessStats();
-    return stats[businessId];
-  };
+  // 仅在容器集合变化时重算聚合，避免重复计算
+  const businessStats = useMemo(() => getBusinessStats(), [allContainers]);
 
-  // 处理业务卡片点击
+  // 业务卡片选中/反选
   const handleBusinessCardClick = (businessId: string) => {
     if (selectedBusinessDetail && selectedBusinessDetail.id === businessId) {
       setSelectedBusinessDetail(null);
       setBusinessFilter([]);
     } else {
-      const detail = getBusinessDetail(businessId);
+      const detail = businessStats[businessId];
       setSelectedBusinessDetail(detail);
       setBusinessFilter([businessId]);
     }
   };
 
-  // ==================== 派生数据 ====================
-  // 统计异常容器数量（用于顶部告警提示）
+  // ===== 派生数据 =====
+  // 顶部告警数量
   const anomalyContainers = allContainers.filter((container) => {
     const anomalies = checkContainerAnomalies(container);
     return anomalies.length > 0;
   }).length;
 
-  // 业务统计（用于业务概览卡片）
-  const businessStats = getBusinessStats();
-
-  // 格式化时间显示
+  // 时间文本格式化
   const formatTime = (date?: Date | null) => {
     if (!date) return '';
     return date.toLocaleTimeString('zh-CN', {
@@ -489,7 +483,7 @@ const NetworkMetrics = () => {
     });
   };
 
-  // 计算距离下次刷新的时间
+  // 距离下次刷新剩余秒数
   const getTimeUntilNextRefresh = () => {
     if (!nextRefreshTime) return 0;
     const now = new Date().getTime();
@@ -497,7 +491,7 @@ const NetworkMetrics = () => {
     return Math.max(0, Math.ceil((next - now) / 1000));
   };
 
-  // 骨架屏卡片组件
+  // 列表首屏骨架卡
   const SkeletonCard = () => (
     <Card
       style={{
@@ -603,11 +597,7 @@ const NetworkMetrics = () => {
         {/* 业务概览面板 */}
         {showBusinessPanel && (
           <Card
-            style={{
-              marginBottom: '24px',
-              borderRadius: '8px',
-              boxShadow: '0 2px 8px rgba(0,0,0,0.09)',
-            }}
+            style={PANEL_CARD_STYLE}
             title={
               <Space>
                 <ApartmentOutlined style={{ color: '#1890ff' }} />
@@ -691,13 +681,7 @@ const NetworkMetrics = () => {
           </Card>
         )}
 
-        <Card
-          style={{
-            marginBottom: '24px',
-            borderRadius: '8px',
-            boxShadow: '0 2px 8px rgba(0,0,0,0.09)',
-          }}
-        >
+        <Card style={PANEL_CARD_STYLE}>
           <Row gutter={[16, 16]} align="middle">
             <Col xs={24} sm={12} md={6}>
               <div>
@@ -922,6 +906,7 @@ const NetworkMetrics = () => {
                       getStatusText={getStatusText}
                       getStatusColor={getStatusColor}
                       businessData={businessData}
+                      loadingSkeletonRows={8}
                     />
                   </Col>
                 );

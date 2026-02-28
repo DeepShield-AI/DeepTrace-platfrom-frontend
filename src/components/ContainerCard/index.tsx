@@ -1,14 +1,14 @@
 import { CloudServerOutlined, CodeOutlined, ExclamationCircleOutlined } from '@ant-design/icons';
-import { Badge, Card, Divider, Popover, Progress, Space, Tag, Tooltip, Typography, Skeleton } from 'antd';
+import { Badge, Card, Divider, Popover, Progress, Skeleton, Space, Tag, Tooltip, Typography } from 'antd';
 import React from 'react';
 import useResizeObserver from '../../hooks/useResizeObserver';
 
 const { Text } = Typography as any;
 
-// DataAccessor: 简单的字段访问器，返回字符串或数值
+// 字段读取函数：从 container 提取展示值
 type DataAccessor = (item: any) => string | number;
 
-// FieldConfig: 用于描述可配置字段的显示、访问器或自定义渲染
+// 字段展示配置：支持 label / accessor / render 三种扩展点
 type FieldConfig = {
 	key: string;
 	label?: string;
@@ -17,10 +17,10 @@ type FieldConfig = {
 };
 
 /**
- * CardConfig: 用于控制 ContainerCard 内部字段的标签与访问器
+ * 控制卡片字段映射与展示文案
  * - labels: 文案本地化
- * - accessors: 从 container 对象中提取字段值的函数集合
- * - fields: 控制卡片中显示的可配置字段（顺序 & 自定义渲染）
+ * - accessors: 字段访问函数
+ * - fields: 字段展示顺序与渲染策略
  */
 export type CardConfig = {
 	labels: {
@@ -52,14 +52,53 @@ export type CardConfig = {
 		ports: (item: any) => any[];
 		business: DataAccessor;
 	};
-	// 可配置显示字段（顺序 & 可自定义 accessor/render）
+	// 可配置字段（控制顺序与渲染）
 	fields?: FieldConfig[];
 };
 
+export const DEFAULT_CONTAINER_CARD_LABELS: CardConfig['labels'] = {
+	cpu: 'CPU',
+	memory: '内存',
+	machineId: '机器ID',
+	arch: '架构',
+	os: 'OS',
+	ip: 'IP',
+	creationTime: '创建时间',
+	memorySize: '内存',
+	ports: '端口',
+};
+
 /**
- * Renderers: render props，允许父组件按需覆盖卡片的不同区域渲染逻辑
- * - 各函数会被传入当前 container 对象
- * - 新增 `size` 参数（{width,height}），便于在渲染时根据尺寸调整布局
+ * 只读卡片配置工厂
+ * 用于 DataViewDetail / BusinessStats 等非容器实体卡片
+ */
+export const createReadonlyCardConfig = (
+	identity: { id: string; name: string; machineId?: string },
+): CardConfig => ({
+	labels: DEFAULT_CONTAINER_CARD_LABELS,
+	accessors: {
+		status: () => '',
+		machineId: () => identity.machineId || 'readonly',
+		id: () => identity.id,
+		name: () => identity.name,
+		image: () => '',
+		cpuUsage: () => 0,
+		memoryUsage: () => 0,
+		arch: () => '',
+		os: () => '',
+		ip: () => '',
+		time: () => '',
+		createTime: () => '',
+		memorySize: () => '',
+		cpuNum: () => '',
+		ports: () => [],
+		business: () => '',
+	},
+});
+
+/**
+ * Render props：按需覆盖卡片分区渲染
+ * 各 renderer 会收到当前容器对象和尺寸信息
  */
 type Renderers<T> = {
 	renderCover?: (item: T, size?: { width: number; height: number }) => React.ReactNode;
@@ -70,67 +109,52 @@ type Renderers<T> = {
 };
 
 type Props<T = any> = {
-	container: T; // 数据对象（泛化）
-	cardLoading: Record<string, boolean>;
-	hoveredCard: string | null;
-	setHoveredCard: (s: string | null) => void;
-	handleCardClick: (id: string, machineId: string, item?: T) => void;
-	getProgressColor: (usage: number) => string;
-	formatNumber: (num: any) => string;
-	checkContainerAnomalies: (c: any) => any[];
-	getStatusText: (s: string) => string;
-	getStatusColor: (s: string) => string;
-	businessData: Record<string, any>;
+	container: T; // 当前卡片数据
+	cardLoading?: Record<string, boolean>;
+	hoveredCard?: string | null;
+	setHoveredCard?: (s: string | null) => void;
+	handleCardClick?: (id: string, machineId: string, item?: T) => void;
+	getProgressColor?: (usage: number) => string;
+	formatNumber?: (num: any) => string;
+	checkContainerAnomalies?: (c: any) => any[];
+	getStatusText?: (s: string) => string;
+	getStatusColor?: (s: string) => string;
+	businessData?: Record<string, any>;
 	cardConfig?: CardConfig;
-	// 新增 render props，全部可选
+	// 分区渲染扩展点
 	renderers?: Renderers<T>;
-	// 是否在 hover 时显示 popover（默认 true）
+	// hover 是否显示 popover（默认 true）
 	showPopover?: boolean;
-	// 卡片高度，默认 520（支持数字或字符串）
+	// 卡片高度（默认 520）
 	height?: number | string;
-	// 可选的尺寸变化回调
+	// 尺寸变化回调
 	onResize?: (size: { width: number; height: number }) => void;
+	// 是否显示状态 ribbon（默认 true）
+	showRibbon?: boolean;
+	// 是否启用交互态（hover/click）
+	interactive?: boolean;
+	// 外部覆盖 Card/body 样式
+	cardStyle?: React.CSSProperties;
+	bodyStyle?: React.CSSProperties;
+	// 加载骨架行数（默认 6）
+	loadingSkeletonRows?: number;
 };
 
-// 骨架占位组件
-const SkeletonPlaceholder: React.FC = () => (
-	<Card style={{ minHeight: '520px', height: '100%', borderRadius: '8px', overflow: 'hidden' }}>
-		<div
-			style={{
-				background: 'linear-gradient(135deg, #f0f8ff 0%, #e6f7ff 100%)',
-				padding: '20px',
-				textAlign: 'center',
-				height: '100px',
-			}}
-		/>
-	</Card>
-);
-
-// 通用组件实现（保持对原有逻辑的默认支持）
+// 通用卡片实现：默认兼容现有容器卡逻辑
 const ContainerCard = <T,>({
 	container,
-	cardLoading,
-	hoveredCard,
-	setHoveredCard,
-	handleCardClick,
-	getProgressColor,
-	formatNumber,
-	checkContainerAnomalies,
-	getStatusText,
-	getStatusColor,
-	businessData,
+	cardLoading = {},
+	hoveredCard = null,
+	setHoveredCard = () => {},
+	handleCardClick = () => {},
+	getProgressColor = () => '#73d13d',
+	formatNumber = (num) => (typeof num === 'number' ? num.toFixed(2) : '0.00'),
+	checkContainerAnomalies = () => [],
+	getStatusText = (status) => status,
+	getStatusColor = () => '#d9d9d9',
+	businessData = {},
 	cardConfig = {
-		labels: {
-			cpu: 'CPU',
-			memory: '内存',
-			machineId: '机器ID',
-			arch: '架构',
-			os: 'OS',
-			ip: 'IP',
-			creationTime: '创建时间',
-			memorySize: '内存',
-			ports: '端口',
-		},
+		labels: DEFAULT_CONTAINER_CARD_LABELS,
 		accessors: {
 			status: (c) => c?.status || c?.state || '',
 			machineId: (c) => c?.machineId || '',
@@ -149,9 +173,9 @@ const ContainerCard = <T,>({
 			ports: (c) => (Array.isArray(c?.ports) ? c.ports : []),
 			business: (c) => c?.business || '',
 		},
-		// 默认可配置字段（可被外部覆盖）
+		// 默认字段顺序（可由外部覆盖）
 		fields: [
-			{ key: 'ip', label: '田' },
+			{ key: 'ip', label: 'IP' },
 			{ key: 'arch', label: '架构' },
 			{ key: 'memorySize', label: '内存' },
 			{ key: 'cpuNum', label: 'CPU核数' },
@@ -163,30 +187,33 @@ const ContainerCard = <T,>({
 	showPopover = true,
 	height = 520,
 	onResize,
+	showRibbon = true,
+	interactive = true,
+	cardStyle,
+	bodyStyle,
+	loadingSkeletonRows = 6,
 }: Props<T>) => {
-	// useResizeObserver 返回 [ref, size]
-	// size 初始为 {width:0,height:0}，会在挂载后被填充
+	// 监听卡片尺寸，提供给自定义 renderer 做响应式布局
 	const [rootRef, size] = useResizeObserver<HTMLDivElement>();
 
-	// 当 size 变化时，调用外部回调（如果提供），便于父组件做响应式布局
+	// 尺寸变化时透传给外部
 	React.useEffect(() => {
 		if (onResize && size) onResize(size);
 	}, [onResize, size]);
 
 	const { accessors, labels } = cardConfig;
-	// 支持自定义 containerKeyAccessor，否则用 machineId-id 组合（兼容旧逻辑）
-	// containerKey 用于标识卡片（hover、loading 等场景），优先使用 renderers 提供的 accessor
+	// 卡片唯一键：优先使用外部 accessor，默认 machineId-id
 	const containerKey = renderers.containerKeyAccessor
 		? renderers.containerKeyAccessor(container)
 		: `${accessors.machineId(container)}-${accessors.id(container)}`;
 	const isLoading = (cardLoading || {})[containerKey];
-	const anomalies = (checkContainerAnomalies && checkContainerAnomalies(container)) || [];
+	const anomalies = checkContainerAnomalies(container) || [];
 	const ports = accessors.ports(container);
 	const businessId = accessors.business(container) as string;
 	const businessInfo = businessId ? businessData[businessId] : null;
 	const isHovered = hoveredCard === containerKey;
 
-	// 渲染可配置字段的值，优先级：render -> field.accessor -> cardConfig.accessors[key] -> '-'
+	// 字段取值优先级：render > field.accessor > accessors[key] > '-'
 	const renderFieldValue = (f: FieldConfig) => {
 		if (f.render) return f.render(container);
 		const raw = f.accessor
@@ -195,7 +222,7 @@ const ContainerCard = <T,>({
 			? (accessors as any)[f.key](container)
 			: undefined;
 
-		// 对 creationTime/time 做兼容处理
+		// 兼容创建时间字段别名
 		if ((f.key === 'creationTime' || f.key === 'time') && (raw === undefined || raw === '')) {
 			return (accessors.time(container) || accessors.createTime(container) || '-') as any;
 		}
@@ -203,8 +230,7 @@ const ContainerCard = <T,>({
 		return raw === undefined || raw === null || raw === '' ? '-' : raw;
 	};
 
-	// 默认 popover 内容（保留原有展示，但字段由 cardConfig.fields 控制）
-	// 默认的 Popover 内容（hover 时展示的详细信息）
+	// 默认 Popover 详情（字段由 cardConfig.fields 控制）
 	const defaultPopover = (
 		<div style={{ maxWidth: 420 }}>
 			<div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -257,7 +283,7 @@ const ContainerCard = <T,>({
 
 			<Divider style={{ margin: '12px 0' }} />
 
-			{/* 使用可配置字段渲染（两列网格） */}
+			{/* 可配置字段：两列布局 */}
 			<div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 8 }}>
 				{(cardConfig.fields || []).map((f, idx) => (
 					<Text key={idx} type="secondary">
@@ -285,13 +311,12 @@ const ContainerCard = <T,>({
 		</div>
 	);
 
-	// 使用外部提供的 renderPopoverContent（若存在）否则使用默认
+	// Popover 内容支持外部覆盖
 	const popoverContent = renderers.renderPopoverContent
 		? renderers.renderPopoverContent(container, size)
 		: defaultPopover;
 
-	// 默认 cover/header/content（保留原有布局）
-	// 默认卡片封面（左上插图）
+	// 默认 cover（可覆盖）
 	const defaultCover = (
 		<div
 			style={{
@@ -307,7 +332,7 @@ const ContainerCard = <T,>({
 		</div>
 	);
 
-	// 默认 header，显示名称与业务信息
+	// 默认 header（名称 + 业务标签）
 	const defaultHeader = (
 		<div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
 			<CodeOutlined style={{ color: '#69c0ff' }} />
@@ -320,7 +345,7 @@ const ContainerCard = <T,>({
 		</div>
 	);
 
-	// 默认卡片内容（用于 card 主区域）
+	// 默认内容区
 	const defaultContent = (
 		<>
 			{anomalies.length > 0 && (
@@ -356,7 +381,7 @@ const ContainerCard = <T,>({
 
 			<Divider style={{ margin: '12px 0' }} />
 
-			{/* 卡片内也使用可配置字段渲染（竖列） */}
+			{/* 可配置字段：纵向布局 */}
 			<div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
 				{(cardConfig.fields || []).map((f, idx) => (
 					<Text key={idx} type="secondary">
@@ -374,37 +399,74 @@ const ContainerCard = <T,>({
 		height: '100%',
 	};
 
-	const cardElement = (
-		<Badge.Ribbon text={getStatusText(accessors.status(container) as string)} color={getStatusColor(accessors.status(container) as string)}>
-			<Card
-				hoverable
-				onClick={() => handleCardClick(accessors.id(container) as string, accessors.machineId(container) as string, container)}
-				onMouseEnter={() => setHoveredCard(containerKey)}
-				onMouseLeave={() => setHoveredCard(null)}
-				style={{
-					height: '100%',
-					cursor: 'pointer',
-					transition: 'all 0.3s ease',
-					borderRadius: '8px',
-					overflow: 'hidden',
-					border: isHovered ? '1px solid #69c0ff' : '1px solid #e8e8e8',
-					boxShadow: isHovered ? '0 6px 18px rgba(0,0,0,0.12)' : '0 2px 8px rgba(0,0,0,0.09)',
-					display: 'flex',
-					flexDirection: 'column',
-				}}
-				bodyStyle={{
-					padding: '20px',
-					flex: 1,
-					overflowY: 'auto',
-					display: 'flex',
-					flexDirection: 'column',
-				}}
-				cover={renderers.renderCover ? renderers.renderCover(container, size) : defaultCover}
-			>
-				{renderers.renderHeader ? renderers.renderHeader(container, businessInfo, size) : defaultHeader}
-				{renderers.renderContent ? renderers.renderContent(container, size) : defaultContent}
-			</Card>
+	const cardMinHeight = typeof height === 'number' ? `${height}px` : height;
+
+	const cardNode = (
+		<Card
+			hoverable={interactive}
+			onClick={
+				interactive && !isLoading
+					? () =>
+							handleCardClick(
+								accessors.id(container) as string,
+								accessors.machineId(container) as string,
+								container,
+							)
+					: undefined
+			}
+			onMouseEnter={() => setHoveredCard(containerKey)}
+			onMouseLeave={() => setHoveredCard(null)}
+			style={{
+				height: '100%',
+				minHeight: cardMinHeight,
+				cursor: interactive ? 'pointer' : 'default',
+				transition: 'all 0.3s ease',
+				borderRadius: '8px',
+				overflow: 'hidden',
+				border:
+					interactive && isHovered ? '1px solid #69c0ff' : '1px solid #e8e8e8',
+				boxShadow:
+					interactive && isHovered
+						? '0 6px 18px rgba(0,0,0,0.12)'
+						: '0 2px 8px rgba(0,0,0,0.09)',
+				display: 'flex',
+				flexDirection: 'column',
+				...(cardStyle || {}),
+			}}
+			bodyStyle={{
+				padding: '20px',
+				flex: 1,
+				overflowY: 'auto',
+				display: 'flex',
+				flexDirection: 'column',
+				...(bodyStyle || {}),
+			}}
+			cover={renderers.renderCover ? renderers.renderCover(container, size) : defaultCover}
+		>
+			{isLoading ? (
+				<div style={{ flex: 1, display: 'flex', alignItems: 'center' }}>
+					<Skeleton active paragraph={{ rows: loadingSkeletonRows }} title={{ width: '45%' }} />
+				</div>
+			) : (
+				<>
+					{renderers.renderHeader
+						? renderers.renderHeader(container, businessInfo, size)
+						: defaultHeader}
+					{renderers.renderContent ? renderers.renderContent(container, size) : defaultContent}
+				</>
+			)}
+		</Card>
+	);
+
+	const cardElement = showRibbon ? (
+		<Badge.Ribbon
+			text={getStatusText(accessors.status(container) as string)}
+			color={getStatusColor(accessors.status(container) as string)}
+		>
+			{cardNode}
 		</Badge.Ribbon>
+	) : (
+		cardNode
 	);
 
 	return (

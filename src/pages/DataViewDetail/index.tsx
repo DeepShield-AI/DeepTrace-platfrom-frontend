@@ -18,7 +18,6 @@ import { PageContainer, ProCard } from '@ant-design/pro-components';
 import {
   Badge,
   Button,
-  Card,
   Col,
   Drawer,
   Row,
@@ -29,8 +28,9 @@ import {
   Tooltip,
   Typography,
 } from 'antd';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useLocation } from 'react-router-dom';
+import ContainerCard, { createReadonlyCardConfig } from '../../components/ContainerCard';
 import { getChart, getMetricTags } from '../../services/metrics/api';
 import type {
   ChartConfigLike,
@@ -53,8 +53,8 @@ const CONTROL_ROW_STYLE = {
 const FILTER_TAGS_WRAP_STYLE = { display: 'flex', gap: 8, flexWrap: 'wrap' } as const;
 const CONTROL_CARD_BODY_STYLE = { padding: '16px 24px' } as const;
 
-// ==================== 工具函数 ====================
-// 格式化 x 轴标签（支持绝对毫秒、秒级、以及相对于基准 min 的偏移）
+// ===== 工具方法 =====
+// 格式化 x 轴文本：兼容毫秒时间戳、秒级时间戳和偏移量
 const formatXAxisValue = (v: any, baseMinMs?: number, usesTimestampValue?: boolean) => {
   if (v === null || v === undefined || v === '') return '';
   const rawNum = Number(v);
@@ -82,7 +82,7 @@ const formatXAxisValue = (v: any, baseMinMs?: number, usesTimestampValue?: boole
 };
 
 const MetricsDetail = () => {
-  // ==================== 页面状态 ====================
+  // ===== 页面状态 =====
   const [timeRange, setTimeRange] = useState('15分钟');
   const [autoRefresh, setAutoRefresh] = useState(false);
   const [selectedTags, setSelectedTags] = useState<string[]>(['all']);
@@ -96,12 +96,12 @@ const MetricsDetail = () => {
   const [agentName, setAgentName] = useState<string | null>(null);
   const location = useLocation();
 
-  // ==================== 标签与筛选展示 ====================
-  // 图表标签配置（当前由后端命名空间驱动）
+  // ===== 标签与筛选 =====
+  // 预留标签配置（当前主要由后端命名空间驱动）
   const chartTags: Array<{ key: string; label: string; color: string; icon: React.ReactNode }> =
     [];
 
-  // 将 API 返回的命名空间作为筛选标签来源
+  // 由后端 namespace 生成可选标签
   const allowedNamespaces = metricTagKeys.filter((k) => k !== 'all');
   const displayTags = allowedNamespaces
     .filter((k) => metricTagKeys.length === 0 || metricTagKeys.includes(k))
@@ -117,7 +117,7 @@ const MetricsDetail = () => {
       );
     });
 
-  // 从路由 state 读取 agent_name（优先），回退到 URL 查询参数
+  // 优先从路由 state 读取 agent_name，失败再回退 URL 参数
   useEffect(() => {
     try {
       const routeState = (location?.state || {}) as RouteStateLike;
@@ -130,15 +130,15 @@ const MetricsDetail = () => {
       const queryAgentName = qs.get('agent_name') || qs.get('agent');
       if (queryAgentName) setAgentName(queryAgentName);
     } catch (e) {
-      // 容错：解析路由参数失败时不影响页面渲染
+      // 参数解析失败时静默降级，不阻塞页面渲染
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location]);
 
-  // ==================== 图表元数据配置 ====================
-  // 图表数据配置（含阈值、单位、展示图标）
+  // ===== 图表元数据 =====
+  // 指标基础配置：阈值、单位、颜色、图标
   const chartConfigs = [
-    // CPU 三个独立指标
+    // CPU 指标
     {
       id: 1,
       title: 'CPU - user_usage',
@@ -185,7 +185,7 @@ const MetricsDetail = () => {
       unit: '%',
     },
 
-    // Network 四个独立指标
+    // Network 指标
     {
       id: 5,
       title: 'Network - tx_bytes',
@@ -262,7 +262,7 @@ const MetricsDetail = () => {
       unit: '',
     },
 
-    // Disk 四个独立指标
+    // Disk 指标
     {
       id: 10,
       title: 'Disk - read_merged',
@@ -310,23 +310,23 @@ const MetricsDetail = () => {
     },
   ];
 
-  // ==================== 交互处理函数 ====================
-  // 打开抽屉查看日志表格
+  // ===== 交互处理 =====
+  // 打开日志抽屉
   const handleViewLogs = (chart: ChartConfigLike) => {
     setCurrentChart(chart);
-    // 暂不生成 mock 日志，保留空数据或由后端拉取真实日志
+    // 日志数据来源由后端决定，这里仅初始化抽屉状态
     setLogData([]);
     setDrawerVisible(true);
   };
 
-  // 关闭抽屉
+  // 关闭日志抽屉
   const handleCloseDrawer = () => {
     setDrawerVisible(false);
     setCurrentChart(null);
     setLogData([]);
   };
 
-  // 检查是否超过阈值（可传入自定义数据源）
+  // 阈值判断（支持传入覆盖数据）
   const checkThresholdExceeded = (chart: ChartConfigLike, dataSource?: MetricPoint[]) => {
     const source = dataSource || metricsData;
     if (!chart.threshold && chart.threshold !== 0) return false;
@@ -335,24 +335,24 @@ const MetricsDetail = () => {
     return source.some((data: MetricPoint) => {
       const value = data[chart.dataKey];
       if (chart.reverseThreshold) {
-        return value < chart.threshold; // 反向阈值：低于阈值才警告
+        return value < chart.threshold; // 反向阈值
       }
-      return value > chart.threshold; // 正向阈值：高于阈值警告
+      return value > chart.threshold; // 正向阈值
     });
   };
 
-  // ==================== 图表配置构建 ====================
-  // 获取图表配置（按图表类型、阈值状态、时间轴格式动态拼装）
+  // ===== 图表配置构建 =====
+  // 按图表类型和数据特征动态拼装 AntV 配置
   const getChartConfig = (chart: ChartConfigLike, overrideData?: MetricPoint[]) => {
     const dataSource = overrideData || metricsData;
-    // normalize dataSource to array - AntV plots expect an array
+    // 统一数据结构为数组（AntV 要求）
     const finalData = Array.isArray(dataSource)
       ? dataSource
       : dataSource && Array.isArray((dataSource as GenericRecord).data)
       ? (dataSource as GenericRecord).data
       : [];
     const exceedsThreshold = checkThresholdExceeded(chart, finalData);
-    // 预留：如需切换多序列，可从 metricTagsObj 解析 seriesField
+    // 预留：多序列字段推导（当前仍使用单序列）
     const seriesField = (() => {
       try {
         if (!metricTagsObj) return undefined;
@@ -360,16 +360,16 @@ const MetricsDetail = () => {
         if (!namespaceTagMap) return undefined;
         const namespaceTagKeys = Object.keys(namespaceTagMap || {});
         if (namespaceTagKeys.length === 0) return undefined;
-        // 对 cpu 命名空间使用 'cpu' 参数名兼容后端
+        // CPU namespace 使用 `cpu` 作为兼容参数名
         return chart.tag === 'cpu' ? 'cpu' : namespaceTagKeys[0];
       } catch (e) {
         return undefined;
       }
     })();
-    // 当前保持单序列渲染，暂不启用 seriesField
+    // 当前固定单序列渲染
     void seriesField;
 
-    // 优先检测后端原始 timestamp/value 字段
+    // 后端原始点位（timestamp/value）模式检测
     const usesTimestampValue =
       Array.isArray(finalData) &&
       finalData.length > 0 &&
@@ -378,14 +378,13 @@ const MetricsDetail = () => {
 
     const baseConfig: GenericRecord = {
       data: finalData,
-      // 当后端返回原始 timestamp/value 时，使用数字毫秒字段 `timestamp` 作为 x 轴，
-      // 能避免库内对日期字符串/Date 对象的二次转换导致的时区/格式问题。
+      // timestamp/value 模式下直接使用毫秒时间戳，避免二次时区转换
       xField: usesTimestampValue ? 'timestamp' : 'time',
       yField: usesTimestampValue ? 'value' : chart.dataKey,
-      // 不使用 seriesField，强制单序列渲染以保持所有图表样式一致
+      // 保持单序列样式一致
       height: 120,
       autoFit: true,
-      // 平滑曲线（非 timestamp/raw 数据）以获得更柔和视觉
+      // 非 timestamp 模式启用平滑线
       smooth: usesTimestampValue ? false : true,
       loading: loading,
       xAxis: {
@@ -419,7 +418,7 @@ const MetricsDetail = () => {
         shared: true,
         showCrosshairs: true,
         formatter: (datum: any) => {
-          // 支持聚合点（含 min/max/count）和普通点
+          // 同时兼容聚合点（min/max/count）与普通点
           if (!datum) return { name: chart.title, value: '-' };
           const hasRange = typeof datum.min === 'number' && typeof datum.max === 'number' && datum.count;
           if (hasRange) {
@@ -455,9 +454,9 @@ const MetricsDetail = () => {
           return { name: chart.title, value: formatted };
         },
       },
-      // 点的默认大小（非侵入式），在 timestamp/raw 场景略大一些以便可见
+      // timestamp 场景适当放大点位，提升可读性
       point: { size: usesTimestampValue ? 4 : 3 },
-      // 添加阈值线（类型断言为 any 避免类型不兼容）
+      // 阈值线（与图表类型定义存在轻微类型差异，保留断言）
       annotations: (chart.threshold
         ? [
             {
@@ -484,28 +483,27 @@ const MetricsDetail = () => {
         : []) as GenericRecord,
     };
 
-    // 根据是否超过阈值调整颜色强度
+    // 阈值状态驱动主色
     const chartColor = exceedsThreshold ? chart.thresholdColor : chart.color;
 
-    // 如果使用后端 timestamp/value，需要计算 x 轴域并保证单点可见（添加左右 padding）
+    // timestamp 模式下补齐 x 轴范围，避免单点塌缩
     if (Array.isArray(finalData) && finalData.length > 0 && 'timestamp' in finalData[0]) {
       try {
         const tsList = finalData.map((d: MetricPoint) => Number(d.timestamp || d.time || 0)).filter(Boolean);
         if (tsList.length > 0) {
           const minTs = Math.min(...tsList);
           const maxTs = Math.max(...tsList);
-          // 使用数据的精确起止时间作为 x 轴范围，保持从开始时间到结束时间可见。
-          // 对于单点情况，提供 1 秒的最小可视范围以避免折线图完全塌缩。
+          // 单点时补 1 秒窗口，避免图形退化为不可见竖线
           const axisMinMs = minTs === maxTs ? minTs - 1000 : minTs;
           const axisMaxMs = minTs === maxTs ? maxTs + 1000 : maxTs;
-          // 将 min/max 设置到 xAxis，针对 usesTimestampValue 使用数字毫秒，避免 Date 对象导致的刻度单位变化
+          // timestamp 模式使用毫秒 min/max，Date 模式使用 Date 对象
           if (!baseConfig.xAxis) baseConfig.xAxis = {};
           if (usesTimestampValue) {
             baseConfig.xAxis.min = axisMinMs;
             baseConfig.xAxis.max = axisMaxMs;
-            // 记录原始的 min ms 供 formatter 回补使用
+            // 记录 minMs，供 xAxis formatter 回补偏移
             (baseConfig.xAxis as GenericRecord)._minMs = axisMinMs;
-            // 计算最小相邻时间差，以决定是否需要子秒级刻度
+            // 基于最小间隔决定 tickInterval
             try {
               const sortedTs = tsList.slice().sort((a: number, b: number) => a - b);
               let minDiff = Number.MAX_SAFE_INTEGER;
@@ -514,7 +512,7 @@ const MetricsDetail = () => {
                 if (deltaMs > 0 && deltaMs < minDiff) minDiff = deltaMs;
               }
               if (minDiff !== Number.MAX_SAFE_INTEGER && minDiff < 1000) {
-                // 选择友好的 tick interval（毫秒）: 10,50,100,200,500
+                // 选择更稳定的毫秒级 tickInterval
                 const chooseNice = (ms: number) => {
                   if (ms <= 10) return 10;
                   if (ms <= 50) return 50;
@@ -524,26 +522,24 @@ const MetricsDetail = () => {
                   return 1000;
                 };
                 const tickInterval = chooseNice(minDiff);
-                (baseConfig.xAxis as GenericRecord).tickInterval = tickInterval; // milliseconds
-                // 显示毫秒部分？
-                // 不显示毫秒部分，统一使用秒级显示
+                (baseConfig.xAxis as GenericRecord).tickInterval = tickInterval;
+                // 统一秒级展示，避免高频刻度闪烁
                 (baseConfig.xAxis as GenericRecord).mask = 'HH:mm:ss';
               }
             } catch (e) {
-              // 容错：刻度计算失败时回退默认行为
+              // 刻度计算失败时回退默认行为
             }
           } else {
             baseConfig.xAxis.min = new Date(axisMinMs);
             baseConfig.xAxis.max = new Date(axisMaxMs);
             (baseConfig.xAxis as GenericRecord)._minMs = axisMinMs;
           }
-          // 已计算轴范围：axisMinMs / axisMaxMs
         }
       } catch (e) {
-        // 容错：轴范围计算失败时保持图表默认配置
+        // 轴范围计算失败时保持默认配置
       }
 
-      // 确保单点可见：设置点样式（填充与边框）
+      // 点位样式兜底，保证单点可见
       baseConfig.point = baseConfig.point || {};
       baseConfig.point.style = baseConfig.point.style || {};
       baseConfig.point.size = baseConfig.point.size || 6;
@@ -566,10 +562,10 @@ const MetricsDetail = () => {
           baseConfig.yAxis.tickCount = 5;
         }
       } catch (e) {
-        // 容错：y 轴范围计算失败时保持默认范围
+        // y 轴计算失败时保持默认范围
       }
 
-      // 视觉优化：适度强化线条与填充，使波动可视但不过分粗糙
+      // 阈值态下增强线条视觉权重
       baseConfig.line = baseConfig.line || {};
       baseConfig.line.size = baseConfig.line.size || (exceedsThreshold ? 3 : 2);
       baseConfig.areaStyle = baseConfig.areaStyle || { fill: `l(90) 0:${chartColor}20 1:${chartColor}44` };
@@ -577,7 +573,7 @@ const MetricsDetail = () => {
       baseConfig.point.style = { ...baseConfig.point.style, fill: chartColor, stroke: '#fff' };
     }
 
-    // 所有图表纵坐标保留两位小数显示
+    // 统一 y 轴两位小数
     baseConfig.yAxis = baseConfig.yAxis || {};
     baseConfig.yAxis.label = baseConfig.yAxis.label || {};
     baseConfig.yAxis.label.formatter = (v: any) => {
@@ -617,14 +613,14 @@ const MetricsDetail = () => {
     }
   };
 
-  // ==================== 子组件：图表卡片 ====================
-  // 单个图表卡片组件，包含维度下拉选择器与图表渲染
+  // ===== 子组件：图表卡片 =====
+  // 职责：维度选择 + 数据请求 + 图表渲染
   const ChartCard: React.FC<{ chart: ChartConfigLike }> = ({ chart }) => {
-    // 每张卡片选中的具体维度值（例如 cpu 的 core 值，network 的 interface，disk 的 device）
+    // 当前卡片维度值（cpu core / network iface / disk device）
     const [selectedValue, setSelectedValue] = useState<string | number>('');
     const [chartPoints, setChartPoints] = useState<MetricPoint[]>([]);
     const [chartLoading, setChartLoading] = useState(true);
-    // 当 metricTagsObj 返回且当前未选择具体维度时，默认选中第一个维度值
+    // metric tags 可用且未选择维度时，默认选首项
     useEffect(() => {
       if (!metricTagsObj) return;
       const namespaceKey = chart.tag;
@@ -643,11 +639,11 @@ const MetricsDetail = () => {
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [metricTagsObj]);
     const trendConfig = getTrendConfig(chart.trend);
-    // 统一使用折线图（Line）样式展示，和 CPU 风格保持一致
+    // 当前统一为折线图风格
     const ChartComponent = Line;
     const exceedsThreshold = checkThresholdExceeded(chart, chartPoints);
 
-    // 根据 timeRange 计算时间窗口
+    // 计算查询时间窗口
     const computeTimeRange = () => {
       const end = Date.now();
       let offset = 15 * 60 * 1000;
@@ -656,24 +652,24 @@ const MetricsDetail = () => {
       return { startTime: end - offset, endTime: end };
     };
 
-    // 请求图表数据：构建参数 -> 拉取数据 -> 归一化点位 -> 排序/修正
+    // 请求流程：组装参数 -> 拉取 -> 归一化 -> 排序/修正
     useEffect(() => {
       let mounted = true;
       const fetchChart = async () => {
-        // 基础保护：没有命名空间或维度值时不请求
+        // 参数保护：命名空间或维度值缺失时不请求
         const namespaceKey = chart.tag;
         if (!namespaceKey) return;
         if (selectedValue === '' || selectedValue === null) return;
         setChartLoading(true);
         try {
-          // 当前保留固定时间窗口（调试态）
+          // TODO: 当前保留固定时间窗口（调试态）
           const startTime = 1768286994766;
           const endTime = 1768287007766;
           const params: GenericRecord = {
             namespace: namespaceKey,
             startTime,
             endTime,
-            // 将 name 参数映射为后端期望的固定指标名（按命名空间和当前 chart.dataKey）
+            // 指标名映射：按 namespace + dataKey 转换为后端入参
             name: (() => {
               const nameMap: Record<string, Record<string, string>> = {
                 cpu: {
@@ -703,29 +699,29 @@ const MetricsDetail = () => {
             })(),
           };
 
-          // 从 metricTagsObj 中取出维度名并使用 selectedValue 作为参数值
+          // 写入维度参数
           if (metricTagsObj && metricTagsObj[namespaceKey]) {
             const namespaceTagMap = metricTagsObj[namespaceKey];
             const namespaceTagKeys = Object.keys(namespaceTagMap || {});
             if (namespaceTagKeys.length > 0) {
               const dimKey = namespaceTagKeys[0];
-              // 后端对 cpu 期望的参数名是 `cpu` 而非 `core`
+              // CPU 场景使用 `cpu` 作为参数名
               const paramName = namespaceKey === 'cpu' ? 'cpu' : dimKey;
               params[paramName] = selectedValue;
             }
           }
 
-          // 附带当前选中的 agent 名称（如果有）
+          // 透传 agent_name（如果存在）
           if (agentName) {
             params.agent_name = agentName;
           }
 
-          // 限制每次请求的数据点数量为 10
+          // 限制点位数量，避免单次请求过大
           params.dataSize = 10;
 
           const chartResponse = await getChart(params);
           if (!mounted) return;
-          // 后端返回格式可能为 { total, data: [...] } 或直接为数组
+          // 兼容后端返回：数组 / { data: [] }
           let rawPoints: GenericRecord[] = [];
           if (chartResponse) {
             if (Array.isArray(chartResponse)) rawPoints = chartResponse;
@@ -734,14 +730,13 @@ const MetricsDetail = () => {
             }
           }
 
-          // 转换为图表需要的格式：{ time: Date, [dataKey]: value, ...tags }
+          // 归一化点位结构：{ timestamp, time, value, [dataKey], ...tags }
           const mapped = (rawPoints || [])
             .map((d: GenericRecord) => {
               const ts = d.timestamp ?? d.time ?? d.t ?? null;
               let timestamp = ts !== null && ts !== undefined ? Number(ts) : undefined;
-              // 后端可能返回秒级时间戳（10位），统一转换为毫秒（13位）以供绘图库使用
+              // 秒级时间戳统一转毫秒
               if (typeof timestamp === 'number' && Number.isFinite(timestamp)) {
-                // 小于 1e12 视为秒级或异常短的时间戳，转换为毫秒
                 if (timestamp > 0 && timestamp < 1e12) {
                   timestamp = Math.floor(timestamp * 1000);
                 }
@@ -750,33 +745,27 @@ const MetricsDetail = () => {
               const value = d.value !== undefined ? Number(d.value) : Number(d[chart.dataKey] || 0);
               const tags = d.tags || {};
               return {
-                // 保留后端原始 timestamp（毫秒或秒）并尽量转换为数字
                 timestamp,
-                // 兼容旧逻辑：同时保留 Date 对象（如果 timestamp 可用）
                 time,
-                // 统一使用 value 字段作为 y 值，便于直接映射后端返回
                 value,
-                // 兼容旧逻辑：仍然提供按 chart.dataKey 命名的字段
                 [chart.dataKey]: value,
-                // 透传 tags 以便按 tag 分系列（如 cpu core）
                 ...tags,
               };
             })
-            // 过滤掉无效时间戳或不可数值的点（保留只包含 timestamp/value 的原始点）
+            // 过滤非法点
             .filter(
               (p: MetricPoint) =>
                 (typeof p.timestamp === 'number' && Number.isFinite(p.timestamp)) ||
                 (typeof p.value === 'number' && Number.isFinite(p.value)),
             );
 
-          // 按时间升序排序，保证点在 x 轴正确位置
+          // 按时间升序，确保 x 轴顺序正确
           const sorted = mapped.sort(
             (a: MetricPoint, b: MetricPoint) =>
               (a.timestamp || a.time?.getTime() || 0) - (b.timestamp || b.time?.getTime() || 0),
           );
 
-          // 回退处理：如果后端返回的所有 timestamp 相同（会导致所有点重叠），
-          // 则基于查询的 startTime/endTime 对点进行均匀分布时间戳分配，保证横轴有跨度。
+          // 所有 timestamp 相同则回退均匀分布，避免点位重叠
           if (sorted.length > 1) {
             const tsList = sorted
               .map((p: MetricPoint) => Number(p.timestamp || (p.time && p.time.getTime())))
@@ -793,7 +782,6 @@ const MetricsDetail = () => {
                   const newTs = s + idx * interval;
                   return { ...p, timestamp: newTs, time: new Date(newTs) };
                 });
-                // 对相同时间戳的条目进行了均匀分布处理
                 setChartPoints(redistributed);
               } catch (e) {
                 setChartPoints(sorted);
@@ -815,7 +803,7 @@ const MetricsDetail = () => {
       return () => {
         mounted = false;
       };
-      // 依赖：维度值、时间范围、自动刷新状态、tags
+      // 依赖：维度值、时间范围、自动刷新、tags
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [selectedValue, timeRange, autoRefresh, metricTagsObj]);
 
@@ -828,11 +816,44 @@ const MetricsDetail = () => {
         ? '请选择磁盘：'
         : '';
 
+    const chartCardId = String(chart.key || chart.tag || chart.title);
+
+    // 与 BusinessStatsCard 复用同一只读卡片配置
+    const readonlyCardConfig = useMemo(
+      () =>
+        createReadonlyCardConfig({
+          id: chartCardId,
+          name: chart.title,
+          machineId: 'metrics',
+        }),
+      [chartCardId, chart.title],
+    );
+
+    const renderDimensionOptions = () => {
+      const namespaceTagMap = metricTagsObj?.[chart.tag];
+      if (!namespaceTagMap) return [<Option key="-" value="">-</Option>];
+
+      const namespaceTagKeys = Object.keys(namespaceTagMap || {});
+      if (namespaceTagKeys.length === 0) return [<Option key="-" value="">-</Option>];
+
+      const dimensionValues = namespaceTagMap[namespaceTagKeys[0]] || [];
+      return (dimensionValues || []).map((value: string | number) => (
+        <Option key={String(value)} value={value}>
+          {String(value)}
+        </Option>
+      ));
+    };
+
     return (
-      <Card
-        title={cardTitleText ? <div style={{ fontSize: 14, fontWeight: 600 }}>{cardTitleText}</div> : undefined}
-        size="small"
-        style={{
+      <ContainerCard
+        container={{ ...chart, id: chartCardId, machineId: 'metrics' }}
+        getProgressColor={() => '#52c41a'}
+        formatNumber={(num) => String(num ?? 0)}
+        showPopover={false}
+        showRibbon={false}
+        interactive={false}
+        height="100%"
+        cardStyle={{
           height: '100%',
           borderRadius: '8px',
           border: exceedsThreshold ? `2px solid ${chart.thresholdColor}` : '1px solid #f0f0f0',
@@ -849,183 +870,189 @@ const MetricsDetail = () => {
           display: 'flex',
           flexDirection: 'column',
         }}
-        loading={loading}
-        extra={!(chartLoading || loading) ? (
-          <Space>
-            <Select
-              value={selectedValue}
-              onChange={(val) => setSelectedValue(val)}
-              size="small"
-              style={{ width: 160 }}
-            >
-              {
-                // 渲染对应命名空间的维度值列表（例如 cpu.core、network.interface、disk.device）
-                (() => {
-                  const namespaceKey = chart.tag;
-                  if (!metricTagsObj || !metricTagsObj[namespaceKey]) {
-                    return [<Option key="-" value="">-</Option>];
-                  }
-                  const namespaceTagMap = metricTagsObj[namespaceKey];
-                  const namespaceTagKeys = Object.keys(namespaceTagMap || {});
-                  if (namespaceTagKeys.length === 0) {
-                    return [<Option key="-" value="">-</Option>];
-                  }
-                  const dimensionValues = namespaceTagMap[namespaceTagKeys[0]] || [];
-                  return (dimensionValues || []).map((value: string | number) => (
-                    <Option key={String(value)} value={value}>
-                      {String(value)}
-                    </Option>
-                  ));
-                })()
-              }
-            </Select>
-            <Tooltip title="查看详细日志">
-              <Button
-                type="text"
-                icon={<TableOutlined />}
-                size="small"
-                onClick={() => handleViewLogs(chart)}
-                style={{ color: '#666' }}
-              />
-            </Tooltip>
-          </Space>
-        ) : null}
-      >
-        {/* 阈值警告图标 */}
-        {exceedsThreshold && (
-          <div
-            style={{
-              position: 'absolute',
-              top: '8px',
-              right: '40px',
-              color: chart.thresholdColor,
-              animation: 'pulse 2s infinite',
-            }}
-          >
-            <ExclamationCircleOutlined />
-          </div>
-        )}
-
-        {/* 图表头部 */}
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'flex-start',
-            marginBottom: '12px',
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <div
-              style={{
-                width: '32px',
-                height: '32px',
-                borderRadius: '6px',
-                background: exceedsThreshold ? `${chart.thresholdColor}10` : `${chart.color}10`,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: exceedsThreshold ? chart.thresholdColor : chart.color,
-              }}
-            >
-              {chart.icon}
-            </div>
-            <div>
-              <Text
-                strong
-                style={{
-                  fontSize: '14px',
-                  display: 'block',
-                  color: exceedsThreshold ? chart.thresholdColor : 'inherit',
-                }}
-              >
-                {chart.title}
-                {exceedsThreshold && (
-                  <Tooltip title={`当前值已超过阈值 ${chart.threshold}${chart.unit}`}>
-                    <ExclamationCircleOutlined
-                      style={{ marginLeft: 4, color: chart.thresholdColor, fontSize: 12 }}
+        cardConfig={readonlyCardConfig}
+        renderers={{
+          containerKeyAccessor: () => `chart-${chartCardId}`,
+          renderCover: () => null,
+          renderHeader: () => {
+            const headerExtra =
+              !(chartLoading || loading) ? (
+                <Space>
+                  <Select
+                    value={selectedValue}
+                    onChange={(val) => setSelectedValue(val)}
+                    size="small"
+                    style={{ width: 160 }}
+                  >
+                    {renderDimensionOptions()}
+                  </Select>
+                  <Tooltip title="查看详细日志">
+                    <Button
+                      type="text"
+                      icon={<TableOutlined />}
+                      size="small"
+                      onClick={() => handleViewLogs(chart)}
+                      style={{ color: '#666' }}
                     />
                   </Tooltip>
-                )}
-              </Text>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <Text
-                  strong
+                </Space>
+              ) : null;
+
+            if (!cardTitleText && !headerExtra) return null;
+
+            return (
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  marginBottom: '12px',
+                }}
+              >
+                <div style={{ fontSize: 14, fontWeight: 600 }}>{cardTitleText}</div>
+                {headerExtra}
+              </div>
+            );
+          },
+          renderContent: () => (
+            <>
+              {exceedsThreshold && (
+                <div
                   style={{
-                    fontSize: '18px',
-                    color: exceedsThreshold ? chart.thresholdColor : chart.color,
-                    lineHeight: 1,
+                    position: 'absolute',
+                    top: '8px',
+                    right: '40px',
+                    color: chart.thresholdColor,
+                    animation: 'pulse 2s infinite',
                   }}
                 >
-                  {chart.value}
-                </Text>
-                <Text style={{ fontSize: '12px', color: trendConfig.color, lineHeight: 1 }}>
-                  {trendConfig.icon} {chart.change}
-                </Text>
+                  <ExclamationCircleOutlined />
+                </div>
+              )}
+
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'flex-start',
+                  marginBottom: '12px',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div
+                    style={{
+                      width: '32px',
+                      height: '32px',
+                      borderRadius: '6px',
+                      background: exceedsThreshold ? `${chart.thresholdColor}10` : `${chart.color}10`,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: exceedsThreshold ? chart.thresholdColor : chart.color,
+                    }}
+                  >
+                    {chart.icon}
+                  </div>
+                  <div>
+                    <Text
+                      strong
+                      style={{
+                        fontSize: '14px',
+                        display: 'block',
+                        color: exceedsThreshold ? chart.thresholdColor : 'inherit',
+                      }}
+                    >
+                      {chart.title}
+                      {exceedsThreshold && (
+                        <Tooltip title={`当前值已超过阈值 ${chart.threshold}${chart.unit}`}>
+                          <ExclamationCircleOutlined
+                            style={{ marginLeft: 4, color: chart.thresholdColor, fontSize: 12 }}
+                          />
+                        </Tooltip>
+                      )}
+                    </Text>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <Text
+                        strong
+                        style={{
+                          fontSize: '18px',
+                          color: exceedsThreshold ? chart.thresholdColor : chart.color,
+                          lineHeight: 1,
+                        }}
+                      >
+                        {chart.value}
+                      </Text>
+                      <Text style={{ fontSize: '12px', color: trendConfig.color, lineHeight: 1 }}>
+                        {trendConfig.icon} {chart.change}
+                      </Text>
+                    </div>
+                  </div>
+                </div>
               </div>
-            </div>
-          </div>
-        </div>
 
-        {/* 图表区域：加载中展示图表骨架/加载，加载完成但无数据则展示“无数据”占位，否则绘制折线图 */}
-        <div style={{ flex: 1, minHeight: '120px' }}>
-          {chartLoading || loading ? (
-            <ChartComponent
-              {...(getChartConfig({ ...chart, type: 'line' }, chartPoints) as any)}
-              loading={chartLoading || loading}
-            />
-          ) : chartPoints.length === 0 ? (
-            <div
-              style={{
-                height: '100%',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: '#999',
-                fontSize: 12,
-              }}
-            >
-              无数据
-            </div>
-          ) : (
-            <ChartComponent
-              {...(getChartConfig({ ...chart, type: 'line' }, chartPoints) as any)}
-              loading={false}
-            />
-          )}
-        </div>
+              <div style={{ flex: 1, minHeight: '120px' }}>
+                {chartLoading || loading ? (
+                  <ChartComponent
+                    {...(getChartConfig({ ...chart, type: 'line' }, chartPoints) as any)}
+                    loading={chartLoading || loading}
+                  />
+                ) : chartPoints.length === 0 ? (
+                  <div
+                    style={{
+                      height: '100%',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: '#999',
+                      fontSize: 12,
+                    }}
+                  >
+                    无数据
+                  </div>
+                ) : (
+                  <ChartComponent
+                    {...(getChartConfig({ ...chart, type: 'line' }, chartPoints) as any)}
+                    loading={false}
+                  />
+                )}
+              </div>
 
-        {/* 底部状态 */}
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            marginTop: '8px',
-            paddingTop: '8px',
-            borderTop: '1px solid #f0f0f0',
-          }}
-        >
-          <Text
-            type="secondary"
-            style={{ fontSize: '12px', color: exceedsThreshold ? chart.thresholdColor : 'inherit' }}
-          >
-            最后更新: 刚刚{exceedsThreshold && ' • 超过阈值'}
-          </Text>
-          <div
-            style={{
-              padding: '2px 6px',
-              background: exceedsThreshold ? `${chart.thresholdColor}10` : '#f0f0f0',
-              borderRadius: '4px',
-              fontSize: '10px',
-              color: exceedsThreshold ? chart.thresholdColor : '#666',
-              border: `1px solid ${exceedsThreshold ? chart.thresholdColor : 'transparent'}`,
-            }}
-          >
-            {String(selectedValue).toUpperCase()}
-          </div>
-        </div>
-      </Card>
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  marginTop: '8px',
+                  paddingTop: '8px',
+                  borderTop: '1px solid #f0f0f0',
+                }}
+              >
+                <Text
+                  type="secondary"
+                  style={{
+                    fontSize: '12px',
+                    color: exceedsThreshold ? chart.thresholdColor : 'inherit',
+                  }}
+                >
+                  最后更新: 刚刚{exceedsThreshold && ' • 超过阈值'}
+                </Text>
+                <div
+                  style={{
+                    padding: '2px 6px',
+                    background: exceedsThreshold ? `${chart.thresholdColor}10` : '#f0f0f0',
+                    borderRadius: '4px',
+                    fontSize: '10px',
+                    color: exceedsThreshold ? chart.thresholdColor : '#666',
+                    border: `1px solid ${exceedsThreshold ? chart.thresholdColor : 'transparent'}`,
+                  }}
+                >
+                  {String(selectedValue).toUpperCase()}
+                </div>
+              </div>
+            </>
+          ),
+        }}
+      />
     );
   };
 
@@ -1143,11 +1170,10 @@ const MetricsDetail = () => {
     },
   ];
 
-  // 过滤显示的图表
-  // 判断某个 chart 是否有可供选择的维度选项（当前策略：一律保留显示）
+  // ===== 图表过滤 =====
+  // 当前策略：即使没有维度选项，也保留图表展示
   const chartHasOptions = (chart: ChartConfigLike) => {
-    // 如果还未拉取到 metric tags，保持显示；
-    // 即便 metricTagsObj 中存在命名空间但维度列表为空，也仍然显示图表，后端可返回全局数据。
+    // 未返回 tags 时保持展示，避免首屏空白
     if (!metricTagsObj) return true;
     const namespaceKey = chart.tag;
     const namespaceTagMap = metricTagsObj[namespaceKey];
@@ -1155,7 +1181,7 @@ const MetricsDetail = () => {
     const namespaceTagKeys = Object.keys(namespaceTagMap || {});
     if (namespaceTagKeys.length === 0) return true;
     const dimensionValues = namespaceTagMap[namespaceTagKeys[0]] || [];
-    // 即便 list 为空，也不要隐藏图表，允许 ChartCard 在没有具体维度时发起请求
+    // list 为空也不隐藏，允许 ChartCard 走兜底请求
     void dimensionValues;
     return true;
   };
@@ -1165,17 +1191,17 @@ const MetricsDetail = () => {
   );
 
   useEffect(() => {
-    // 仅当启用自动刷新时，才展示全局 loading/轮询逻辑；默认进入页面不触发第一个骨架屏
+    // 仅在自动刷新开启时展示全局 loading
     if (!autoRefresh) return;
 
     setLoading(true);
 
     const timer = setTimeout(() => {
-      // 数据由后端初始化填充（已移除本地 mock）
+      // 数据初始化由后端请求完成
       setLoading(false);
     }, 500);
 
-    // 自动刷新逻辑预留：当前由每个图表卡片独立请求数据
+    // 预留：全局轮询入口（当前由 ChartCard 独立请求）
     let interval: ReturnType<typeof setInterval> | undefined;
 
     return () => {
@@ -1184,7 +1210,7 @@ const MetricsDetail = () => {
     };
   }, [autoRefresh]);
 
-  // 从后端获取可用的 metric tags（ { cpu: {...}, network: {...} }）
+  // 拉取可用 metric tags（例如 { cpu: {...}, network: {...} }）
   useEffect(() => {
     let mounted = true;
     const fetchTags = async () => {
@@ -1198,7 +1224,7 @@ const MetricsDetail = () => {
         setMetricTagKeys(namespaceKeys);
         setMetricTagsObj(tagsResponse || null);
       } catch (err) {
-        // 失败时保留默认行为（不阻塞页面）
+        // 拉取失败时不阻塞页面
       }
     };
 
@@ -1221,7 +1247,7 @@ const MetricsDetail = () => {
       }
     >
       <div className="network-metrics">
-        {/* 头部控制区域 */}
+        {/* 控制栏 */}
         <ProCard
           className="control-section"
           style={{ marginBottom: 16 }}
@@ -1281,7 +1307,7 @@ const MetricsDetail = () => {
           </div>
         </ProCard>
 
-        {/* 图表网格 */}
+        {/* 图表区 */}
         <Row gutter={[16, 16]}>
           {filteredCharts.map((chart) => (
             <Col key={chart.id} xs={24} sm={12} md={12} lg={6}>
@@ -1290,7 +1316,7 @@ const MetricsDetail = () => {
           ))}
         </Row>
 
-        {/* 空状态提示 */}
+        {/* 空状态 */}
         {filteredCharts.length === 0 && (
           <ProCard
             style={{
@@ -1310,7 +1336,7 @@ const MetricsDetail = () => {
           </ProCard>
         )}
 
-        {/* 统计信息 */}
+        {/* 页脚统计 */}
         <ProCard style={{ marginTop: '16px' }} bodyStyle={{ padding: '12px 16px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div>
@@ -1332,7 +1358,7 @@ const MetricsDetail = () => {
           </div>
         </ProCard>
 
-        {/* 日志表格抽屉 */}
+        {/* 日志抽屉 */}
         <Drawer
           title={
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -1356,7 +1382,7 @@ const MetricsDetail = () => {
         >
           {currentChart && (
             <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-              {/* 统计信息 */}
+              {/* 日志统计 */}
               <ProCard style={{ marginBottom: 16 }} bodyStyle={{ padding: '12px 16px' }}>
                 <div
                   style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
@@ -1386,7 +1412,7 @@ const MetricsDetail = () => {
                 </div>
               </ProCard>
 
-              {/* 日志表格 */}
+              {/* 日志列表 */}
               <div style={{ flex: 1 }}>
                 <Table
                   columns={logColumns}
