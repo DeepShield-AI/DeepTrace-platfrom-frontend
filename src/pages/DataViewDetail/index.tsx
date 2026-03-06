@@ -1000,20 +1000,23 @@ const MetricsDetail = () => {
   // ==================== 过滤与展示衍生逻辑 ====================
   // 处理标签选择
   const handleTagSelect = (tagKey: string) => {
-    if (tagKey === 'all') {
-      setSelectedTags(['all']);
-    } else {
-      const newTags = selectedTags.includes('all') ? [] : [...selectedTags];
+    const allKeys = displayTags.map((tag) => tag.key);
 
-      if (newTags.includes(tagKey)) {
-        // 如果已经选中，则移除
-        const filtered = newTags.filter((tag) => tag !== tagKey);
-        setSelectedTags(filtered.length === 0 ? ['all'] : filtered);
-      } else {
-        // 如果未选中，则添加
-        newTags.push(tagKey);
-        setSelectedTags(newTags);
-      }
+    // 默认全选态：点击某项时改为取消该项
+    if (selectedTags.includes('all')) {
+      setSelectedTags(allKeys.filter((key) => key !== tagKey));
+      return;
+    }
+
+    if (selectedTags.includes(tagKey)) {
+      // 已选中则取消
+      const nextSelected = selectedTags.filter((tag) => tag !== tagKey);
+      setSelectedTags(nextSelected);
+    } else {
+      // 未选中则添加
+      const nextSelected = [...selectedTags, tagKey];
+      // 全部手动选中后折叠为 all 语义
+      setSelectedTags(nextSelected.length === allKeys.length ? ['all'] : nextSelected);
     }
   };
 
@@ -1195,7 +1198,7 @@ const MetricsDetail = () => {
               <Text strong>筛选指标:</Text>
               <div className="data-view-detail-filter-tags">
                 {displayTags.map((tag) => {
-                  const isSelected = selectedTags.includes(tag.key);
+                  const isSelected = selectedTags.includes('all') || selectedTags.includes(tag.key);
                   return (
                     <Tag.CheckableTag
                       key={tag.key}
