@@ -195,6 +195,80 @@ const requestData =
         },
 
     ]
+
+    // 默认表格数据
+    const DEFAULT_TABLE_DATA = [
+        {
+            trace_id: "a1b2c3d4e5f60001",
+            status_code: "200",
+            client_ip: "10.0.1.10",
+            client_port: "54321",
+            component_name: "api-gateway",
+            endpoint: "/api/v1/users",
+            protocol: "HTTP/1.1",
+            server_ip: "10.0.2.20",
+            server_port: "8080",
+            e2e_duration: 2500000,
+            span_num: 5,
+            end_time: "2025-06-17T10:30:00.000Z",
+        },
+        {
+            trace_id: "a1b2c3d4e5f60002",
+            status_code: "200",
+            client_ip: "10.0.1.11",
+            client_port: "54322",
+            component_name: "order-service",
+            endpoint: "/api/v1/orders",
+            protocol: "HTTP/1.1",
+            server_ip: "10.0.2.21",
+            server_port: "8081",
+            e2e_duration: 8500000,
+            span_num: 8,
+            end_time: "2025-06-17T10:30:05.000Z",
+        },
+        {
+            trace_id: "a1b2c3d4e5f60003",
+            status_code: "500",
+            client_ip: "10.0.1.12",
+            client_port: "54323",
+            component_name: "payment-service",
+            endpoint: "/api/v1/payments",
+            protocol: "HTTP/1.1",
+            server_ip: "10.0.2.22",
+            server_port: "8082",
+            e2e_duration: 15000000,
+            span_num: 3,
+            end_time: "2025-06-17T10:30:10.000Z",
+        },
+        {
+            trace_id: "a1b2c3d4e5f60004",
+            status_code: "201",
+            client_ip: "10.0.1.13",
+            client_port: "54324",
+            component_name: "user-service",
+            endpoint: "/api/v1/users/register",
+            protocol: "HTTP/2",
+            server_ip: "10.0.2.23",
+            server_port: "8083",
+            e2e_duration: 3200000,
+            span_num: 4,
+            end_time: "2025-06-17T10:30:15.000Z",
+        },
+        {
+            trace_id: "a1b2c3d4e5f60005",
+            status_code: "200",
+            client_ip: "10.0.1.14",
+            client_port: "54325",
+            component_name: "inventory-service",
+            endpoint: "/api/v1/inventory",
+            protocol: "HTTP/1.1",
+            server_ip: "10.0.2.24",
+            server_port: "8084",
+            e2e_duration: 1200000,
+            span_num: 6,
+            end_time: "2025-06-17T10:30:20.000Z",
+        },
+    ];
     // 主监控组件
 const MonitorNative = () => {
     const navigate = useNavigate();
@@ -248,28 +322,41 @@ const MonitorNative = () => {
     };
 
     const getFlamegraphDataByTraceIdFun = async (traceId) => {
-        const res = await getFlamegraphDataByTraceId(traceId)
-        console.log(res, "rrrrr");
-        
-        const spansList = res?.data?.records
-        const relationData = res?.data?.data
-        
-        const spans = spansList?.map((spans_ori) => {
-            return {
-            ...spans_ori.metric,
-            ...spans_ori.content,
-            ...spans_ori.context,
-            ...spans_ori.tag.ebpf_tag,
-            ...spans_ori.tag.docker_tag
+        try {
+            const res = await getFlamegraphDataByTraceId(traceId)
+            console.log(res, "rrrrr");
+            
+            const spansList = res?.data?.records
+            const relationData = res?.data?.data
+            
+            if (Array.isArray(spansList)) {
+                const spans = spansList?.map((spans_ori) => {
+                    return {
+                    ...spans_ori.metric,
+                    ...spans_ori.content,
+                    ...spans_ori.context,
+                    ...spans_ori.tag.ebpf_tag,
+                    ...spans_ori.tag.docker_tag
+                    }
+                })
+                const spansTree = transformToTree(spans)
+                console.log(spans, spansTree, "火焰图原始数据--");
+                
+                setFlameTreeData(spansTree)
+                
+                setGraphData(convertToGraphStructure(spans))
+                setRelationData(relationData)
+            } else {
+                setFlameTreeData([])
+                setGraphData({})
+                setRelationData({})
             }
-        })
-        const spansTree = transformToTree(spans)
-        console.log(spans, spansTree, "火焰图原始数据--");
-        
-        setFlameTreeData(spansTree)
-        
-        setGraphData(convertToGraphStructure(spans))
-        setRelationData(relationData)
+        } catch (error) {
+            console.error('获取火焰图数据失败:', error)
+            setFlameTreeData([])
+            setGraphData({})
+            setRelationData({})
+        }
     }
 
     // 获取表格数据函数
@@ -286,16 +373,22 @@ const MonitorNative = () => {
             
             const response = await traceTableQuery(params);
             const data = response?.data || {};
-            setTableListDataSource(data.content || []);
+            const content = data.content || [];
+            setTableListDataSource(content.length > 0 ? content : DEFAULT_TABLE_DATA);
             
             setPagination({
                 ...pagination,
-                total: data.totalElements || 0,
+                total: data.totalElements || DEFAULT_TABLE_DATA.length,
             });
 
         } catch (error) {
-            message.error('Trace监控数据获取失败，请刷新重试');
+            message.warning('Trace监控数据获取失败，使用默认数据');
             console.error('Trace data fetch error:', error);
+            setTableListDataSource(DEFAULT_TABLE_DATA);
+            setPagination({
+                ...pagination,
+                total: DEFAULT_TABLE_DATA.length,
+            });
         } finally {
             setLoading(false);
         }
@@ -328,8 +421,19 @@ const MonitorNative = () => {
             setStatusFilters(uniqueCode);
 
         } catch (error) {
-            message.error('获取筛选选项失败');
+            message.warning('获取筛选选项失败，使用默认筛选选项');
             console.error('Filter options fetch error:', error);
+            // 默认筛选选项
+            const defaultEndpoints = ["/api/v1/users", "/api/v1/orders", "/api/v1/payments", "/api/v1/users/register", "/api/v1/inventory"];
+            const defaultProtocols = ["HTTP/1.1", "HTTP/2"];
+            const defaultStatusOptions = ["200", "201", "500"];
+            
+            setAllEndpoints(defaultEndpoints);
+            setAllProtocols(defaultProtocols);
+            setAllStatusOptions(defaultStatusOptions);
+            setEndpointFilters(defaultEndpoints);
+            setProtocolFilters(defaultProtocols);
+            setStatusFilters(defaultStatusOptions);
         }
     };
 
@@ -367,19 +471,22 @@ const MonitorNative = () => {
                 traceChartQuery('statusCount'),      // 错误数
                 traceChartQuery('latencyStats')      // 响应时延
             ]);
-            console.log(requestResponse.data, errorResponse.data, latencyResponse.data, "0000");
+            console.log(requestResponse?.data, errorResponse?.data, latencyResponse?.data, "0000");
             
-            // TODO 测试
-            // setChartData({
-            //     requestData: requestResponse?.data || [],
-            //     errorData: errorResponse?.data || [],
-            //     latencyData: latencyResponse?.data || []
-            // });
-            
+            setChartData({
+                requestData: requestResponse?.data?.length > 0 ? requestResponse.data : requestData,
+                errorData: errorResponse?.data?.length > 0 ? errorResponse.data : errorData,
+                latencyData: latencyResponse?.data?.length > 0 ? latencyResponse.data : latencyData,
+            });
 
         } catch (error) {
-            message.error('图表数据获取失败');
+            message.warning('图表数据获取失败，使用默认数据');
             console.error('Chart data fetch error:', error);
+            setChartData({
+                requestData: requestData,
+                errorData: errorData,
+                latencyData: latencyData,
+            });
         } finally {
             setChartLoading(false);
         }
@@ -465,6 +572,7 @@ const MonitorNative = () => {
         if([200, 201, 202, 205].includes(code_num)) {
             return "success"
         }
+        return "error"
     }
 
     // 状态标签渲染
@@ -524,7 +632,7 @@ const MonitorNative = () => {
     
     // 图表配置
     const requestChartConfig = {
-        data: requestData,
+        data: chartData.requestData,
         xField: 'timeKey',
         yField: 'docCount',
         height: 200,
@@ -575,7 +683,7 @@ const MonitorNative = () => {
         },
     };    
     // 1. 先确保转换后的数据格式正确（复用你的 transformData 函数，无需修改）
-    const transformedErrorData = transformData(errorData);
+    const transformedErrorData = transformData(chartData.errorData);
 
     // 2. 优化后的错误数图表配置（多线折线图）
     const errorChartConfig = {
@@ -723,7 +831,7 @@ const MonitorNative = () => {
     }, []);
     }
     const latencyChartConfig = {
-        data: transformDurationData(latencyData),
+        data: transformDurationData(chartData.latencyData),
         xField: 'timeKey',          // X轴：时间戳
         yField: 'value',         // Y轴：错误数
         seriesField: 'type',        // 核心：按状态码（type）分组，生成多条线
@@ -837,10 +945,13 @@ const MonitorNative = () => {
     };
 
     // 计算图表统计数据
-    const totalRequests = chartData.requestData.reduce((sum, item) => sum + item.count, 0);
-    const totalErrors = chartData.errorData.reduce((sum, item) => sum + item.count, 0);
+    const totalRequests = chartData.requestData.reduce((sum, item) => sum + (item.docCount || 0), 0);
+    const totalErrors = chartData.errorData.reduce((sum, statusItem) => {
+        const statusBuckets = statusItem?.timeBuckets || [];
+        return sum + statusBuckets.reduce((s, bucket) => s + (bucket.docCount || 0), 0);
+    }, 0);
     const avgLatency = chartData.latencyData.length > 0 
-        ? (chartData.latencyData.reduce((sum, item) => sum + item.latency, 0) / chartData.latencyData.length).toFixed(2)
+        ? (chartData.latencyData.reduce((sum, item) => sum + (item.avgDuration || 0), 0) / chartData.latencyData.length).toFixed(2)
         : 0;
 
 

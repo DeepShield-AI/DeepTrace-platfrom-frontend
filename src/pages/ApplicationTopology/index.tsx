@@ -301,14 +301,14 @@ const ApplicationTopology = () => {
 
             // 更新节点数据（接口成功则用接口数据，失败则用默认数据）
             if (nodesResponse) {
-                setNodeData(nodesResponse || DEFAULT_NODE_DATA);
+                setNodeData(nodesResponse?.data || DEFAULT_NODE_DATA);
             } else {
                 setNodeData(DEFAULT_NODE_DATA);
             }
 
             // 更新边数据（接口成功则用接口数据，失败则用默认数据）
             if (edgesResponse) {
-                setEdgeData(edgesResponse || DEFAULT_EDGE_DATA);
+                setEdgeData(edgesResponse?.data || DEFAULT_EDGE_DATA);
             } else {
                 setEdgeData(DEFAULT_EDGE_DATA);
             }
