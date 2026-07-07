@@ -43,15 +43,15 @@ import { Line, Area } from '@ant-design/plots';
 
 // import { Line, Area } from '@ant-design/charts';
 
-// 导入你的接口
+// 导入接口 - 已切换为v2版本
 import { 
-    traceTableQuery, 
-    traceChartQuery, 
-    getFlamegraphDataByTraceId, 
-    getFilters, 
-    getTraceDetail,
-    getTraceCharts
-
+    queryTraceList,          // v2: 查询Trace列表（分页） - TraceInfoDTO
+    queryTraceCountTimeSeries,  // v2: 查询Trace请求数时间序列 - TimeSeriesDTO
+    queryTraceErrorTimeSeries,  // v2: 查询Trace错误数时间序列 - TimeSeriesDTO
+    queryTraceLatencyTimeSeries, // v2: 查询Trace响应时延时间序列 - TimeSeriesDTO
+    getFilterFields,         // v2: 查询表过滤字段配置 - FilterFieldsDTO
+    querySpanDetailsByTrace, // v2: 根据TraceId查询Span明细 - SpanDTO
+    getFlamegraphDataByTraceId, // v1: 火焰图数据（暂无v2版本）
 } from '../../services/server.js';
 import GraphVisEGraphVisualizationxample from '../../components/topology/index.jsx';
 import FlameGraphMain from "../../components/flamegraph/index.jsx";
@@ -60,6 +60,36 @@ import {transformToTree} from "../../utils/span2tree.js"
 import {convertToGraphStructure} from "../../utils/convert2graph.js"
 
 const { TabPane } = Tabs;
+
+// v2 筛选选项常量（从 FilterFieldsDTO 提取）
+const ENDPOINTS_OPTIONS = [
+    "UnknownEndpoint",
+    "ComposeUrls",
+    "/api/v1/users",
+    "/api/v1/orders",
+    "/api/v1/payments",
+    "/api/v1/users/register",
+    "/api/v1/inventory",
+];
+
+const PROTOCOLS_OPTIONS = [
+    "HTTP/1.1",
+    "HTTP/2",
+    "Thrift",
+    "gRPC",
+];
+
+const STATUS_CODE_OPTIONS = [
+    "200",
+    "201",
+    "400",
+    "401",
+    "403",
+    "404",
+    "500",
+    "502",
+    "503",
+];
 
 const requestData = 
     [
@@ -197,76 +227,82 @@ const requestData =
     ]
 
     // 默认表格数据
+    // v2: 默认表格数据 - TraceInfoDTO 格式
     const DEFAULT_TABLE_DATA = [
         {
-            trace_id: "a1b2c3d4e5f60001",
-            status_code: "200",
-            client_ip: "10.0.1.10",
-            client_port: "54321",
-            component_name: "api-gateway",
-            endpoint: "/api/v1/users",
-            protocol: "HTTP/1.1",
-            server_ip: "10.0.2.20",
-            server_port: "8080",
-            e2e_duration: 2500000,
-            span_num: 5,
-            end_time: "2025-06-17T10:30:00.000Z",
+            traceId: "a1b2c3d4e5f60001",
+            rootResponseStatus: "200",
+            rootAppService: "api-gateway",
+            rootEndpoint: "/api/v1/users",
+            rootL7Protocol: "HTTP/1.1",
+            rootRequestDomain: "api.example.com",
+            rootRequestResource: "GET /api/v1/users",
+            rootBizType: "user",
+            durationUs: 2500000,
+            spanCount: 5,
+            errorSpanCount: 0,
+            startTime: "2025-06-17T10:30:00.000Z",
+            endTime: "2025-06-17T10:30:02.500Z",
         },
         {
-            trace_id: "a1b2c3d4e5f60002",
-            status_code: "200",
-            client_ip: "10.0.1.11",
-            client_port: "54322",
-            component_name: "order-service",
-            endpoint: "/api/v1/orders",
-            protocol: "HTTP/1.1",
-            server_ip: "10.0.2.21",
-            server_port: "8081",
-            e2e_duration: 8500000,
-            span_num: 8,
-            end_time: "2025-06-17T10:30:05.000Z",
+            traceId: "a1b2c3d4e5f60002",
+            rootResponseStatus: "200",
+            rootAppService: "order-service",
+            rootEndpoint: "/api/v1/orders",
+            rootL7Protocol: "HTTP/1.1",
+            rootRequestDomain: "api.example.com",
+            rootRequestResource: "POST /api/v1/orders",
+            rootBizType: "order",
+            durationUs: 8500000,
+            spanCount: 8,
+            errorSpanCount: 0,
+            startTime: "2025-06-17T10:30:05.000Z",
+            endTime: "2025-06-17T10:30:13.500Z",
         },
         {
-            trace_id: "a1b2c3d4e5f60003",
-            status_code: "500",
-            client_ip: "10.0.1.12",
-            client_port: "54323",
-            component_name: "payment-service",
-            endpoint: "/api/v1/payments",
-            protocol: "HTTP/1.1",
-            server_ip: "10.0.2.22",
-            server_port: "8082",
-            e2e_duration: 15000000,
-            span_num: 3,
-            end_time: "2025-06-17T10:30:10.000Z",
+            traceId: "a1b2c3d4e5f60003",
+            rootResponseStatus: "500",
+            rootAppService: "payment-service",
+            rootEndpoint: "/api/v1/payments",
+            rootL7Protocol: "HTTP/1.1",
+            rootRequestDomain: "api.example.com",
+            rootRequestResource: "POST /api/v1/payments",
+            rootBizType: "payment",
+            durationUs: 15000000,
+            spanCount: 3,
+            errorSpanCount: 1,
+            startTime: "2025-06-17T10:30:10.000Z",
+            endTime: "2025-06-17T10:30:25.000Z",
         },
         {
-            trace_id: "a1b2c3d4e5f60004",
-            status_code: "201",
-            client_ip: "10.0.1.13",
-            client_port: "54324",
-            component_name: "user-service",
-            endpoint: "/api/v1/users/register",
-            protocol: "HTTP/2",
-            server_ip: "10.0.2.23",
-            server_port: "8083",
-            e2e_duration: 3200000,
-            span_num: 4,
-            end_time: "2025-06-17T10:30:15.000Z",
+            traceId: "a1b2c3d4e5f60004",
+            rootResponseStatus: "201",
+            rootAppService: "user-service",
+            rootEndpoint: "/api/v1/users/register",
+            rootL7Protocol: "HTTP/2",
+            rootRequestDomain: "api.example.com",
+            rootRequestResource: "POST /api/v1/users/register",
+            rootBizType: "user",
+            durationUs: 3200000,
+            spanCount: 4,
+            errorSpanCount: 0,
+            startTime: "2025-06-17T10:30:15.000Z",
+            endTime: "2025-06-17T10:30:18.200Z",
         },
         {
-            trace_id: "a1b2c3d4e5f60005",
-            status_code: "200",
-            client_ip: "10.0.1.14",
-            client_port: "54325",
-            component_name: "inventory-service",
-            endpoint: "/api/v1/inventory",
-            protocol: "HTTP/1.1",
-            server_ip: "10.0.2.24",
-            server_port: "8084",
-            e2e_duration: 1200000,
-            span_num: 6,
-            end_time: "2025-06-17T10:30:20.000Z",
+            traceId: "a1b2c3d4e5f60005",
+            rootResponseStatus: "200",
+            rootAppService: "inventory-service",
+            rootEndpoint: "/api/v1/inventory",
+            rootL7Protocol: "HTTP/1.1",
+            rootRequestDomain: "api.example.com",
+            rootRequestResource: "GET /api/v1/inventory",
+            rootBizType: "inventory",
+            durationUs: 1200000,
+            spanCount: 6,
+            errorSpanCount: 0,
+            startTime: "2025-06-17T10:30:20.000Z",
+            endTime: "2025-06-17T10:30:21.200Z",
         },
     ];
     // 主监控组件
@@ -359,7 +395,7 @@ const MonitorNative = () => {
         }
     }
 
-    // 获取表格数据函数
+    // 获取表格数据函数 - v2: queryTraceList (TraceInfoDTO)
     const fetchTraceData = async () => {
         setLoading(true);
         try {
@@ -371,14 +407,14 @@ const MonitorNative = () => {
                 pageSize: pagination.pageSize
             };
             
-            const response = await traceTableQuery(params);
-            const data = response?.data || {};
-            const content = data.content || [];
-            setTableListDataSource(content.length > 0 ? content : DEFAULT_TABLE_DATA);
+            const response = await queryTraceList(params);
+            // v2返回格式: { totalCount, pageSize, pageIndex, totalPages, data: TraceInfoDTO[] }
+            const dataList = response?.data || [];
+            setTableListDataSource(dataList.length > 0 ? dataList : DEFAULT_TABLE_DATA);
             
             setPagination({
                 ...pagination,
-                total: data.totalElements || DEFAULT_TABLE_DATA.length,
+                total: response?.totalCount || DEFAULT_TABLE_DATA.length,
             });
 
         } catch (error) {
@@ -396,26 +432,24 @@ const MonitorNative = () => {
 
      const fetchFilterOptions = async () => {
         try {
-            // 初始化请求获取选项
-            const response = await traceTableQuery({
-                pageNum: 1,
-                pageSize: 10
-            });
+            // v2: 获取过滤字段配置 - getFilterFields (FilterFieldsDTO)
+            const filterFields = await getFilterFields();
+            console.log(filterFields, "filterFields v2");
+            
+            // v2返回格式: { database, tableName, filterFields: FilterFieldConfig[] }
+            // 从filterFields中提取endpoint、protocol、status等字段的可选值
+            const endpointField = filterFields?.filterFields?.find(f => f.field === 'endpoint' || f.field === 'rootEndpoint');
+            const protocolField = filterFields?.filterFields?.find(f => f.field === 'l7_protocol' || f.field === 'rootL7Protocol');
+            const statusField = filterFields?.filterFields?.find(f => f.field === 'response_status' || f.field === 'rootResponseStatus');
+            
+            // v2暂不直接返回枚举值，使用默认选项
+            const uniqueEndpoints = ENDPOINTS_OPTIONS;
+            const uniqueProtocols = PROTOCOLS_OPTIONS;            
+            const uniqueCode = STATUS_CODE_OPTIONS;
 
-            const filters = await getFilters()
-            console.log(filters, "filters");
-            
-            
-            const data = response?.data || {};
-            const uniqueEndpoints = [...new Set(filters.allEndpoints || [])];
-            const uniqueProtocols = [...new Set(filters.allProtocols || [])];            
-            const uniqueCode = [...new Set(filters.allStatusOptions || [])];
-
-            
             setAllEndpoints(uniqueEndpoints);
             setAllProtocols(uniqueProtocols);
-            setAllStatusOptions(uniqueCode)
-            // 初始选中所有选项
+            setAllStatusOptions(uniqueCode);
             setEndpointFilters(uniqueEndpoints);
             setProtocolFilters(uniqueProtocols);
             setStatusFilters(uniqueCode);
@@ -423,17 +457,12 @@ const MonitorNative = () => {
         } catch (error) {
             message.warning('获取筛选选项失败，使用默认筛选选项');
             console.error('Filter options fetch error:', error);
-            // 默认筛选选项
-            const defaultEndpoints = ["/api/v1/users", "/api/v1/orders", "/api/v1/payments", "/api/v1/users/register", "/api/v1/inventory"];
-            const defaultProtocols = ["HTTP/1.1", "HTTP/2"];
-            const defaultStatusOptions = ["200", "201", "500"];
-            
-            setAllEndpoints(defaultEndpoints);
-            setAllProtocols(defaultProtocols);
-            setAllStatusOptions(defaultStatusOptions);
-            setEndpointFilters(defaultEndpoints);
-            setProtocolFilters(defaultProtocols);
-            setStatusFilters(defaultStatusOptions);
+            setAllEndpoints(ENDPOINTS_OPTIONS);
+            setAllProtocols(PROTOCOLS_OPTIONS);
+            setAllStatusOptions(STATUS_CODE_OPTIONS);
+            setEndpointFilters(ENDPOINTS_OPTIONS);
+            setProtocolFilters(PROTOCOLS_OPTIONS);
+            setStatusFilters(STATUS_CODE_OPTIONS);
         }
     };
 
@@ -461,22 +490,23 @@ const MonitorNative = () => {
         
         return transformedData;
     }
-    // 获取图表数据函数
+    // 获取图表数据函数 - v2: 使用Trace时序接口 (TimeSeriesDTO)
     const fetchChartData = async () => {
         setChartLoading(true);
         try {            
-            // 使用Promise.all并行请求三个图表数据
+            // v2: 并行请求三个时序接口
             const [requestResponse, errorResponse, latencyResponse] = await Promise.all([
-                traceChartQuery('count'),           // 请求数
-                traceChartQuery('statusCount'),      // 错误数
-                traceChartQuery('latencyStats')      // 响应时延
+                queryTraceCountTimeSeries(),       // v2: 请求数时序 - 返回 TimeSeriesDTO[]
+                queryTraceErrorTimeSeries(),       // v2: 错误数时序 - 返回 TimeSeriesDTO[]
+                queryTraceLatencyTimeSeries()      // v2: 响应时延时序 - 返回 TimeSeriesDTO[]
             ]);
-            console.log(requestResponse?.data, errorResponse?.data, latencyResponse?.data, "0000");
+            console.log(requestResponse, errorResponse, latencyResponse, "v2 chart data");
             
+            // v2 TimeSeriesDTO 格式: { minute, totalRequests, errorRequests, avgLatencySeconds, p50LatencySeconds, p75LatencySeconds, p99LatencySeconds }
             setChartData({
-                requestData: requestResponse?.data?.length > 0 ? requestResponse.data : requestData,
-                errorData: errorResponse?.data?.length > 0 ? errorResponse.data : errorData,
-                latencyData: latencyResponse?.data?.length > 0 ? latencyResponse.data : latencyData,
+                requestData: requestResponse?.length > 0 ? requestResponse : requestData,
+                errorData: errorResponse?.length > 0 ? errorResponse : errorData,
+                latencyData: latencyResponse?.length > 0 ? latencyResponse : latencyData,
             });
 
         } catch (error) {
@@ -492,37 +522,26 @@ const MonitorNative = () => {
         }
     };
 
-    // 获取Trace详情数据
+    // 获取Trace详情数据 - v2: querySpanDetailsByTrace (SpanDTO)
     const fetchTraceDetail = async (traceId) => {
         setTraceDetailLoading(true);
         try {
-            // 调用接口获取Trace详情
-            const response = await getTraceDetail(traceId);
-            console.log(response, "response");
+            // v2: 根据TraceId查询Span明细
+            const response = await querySpanDetailsByTrace({ traceId });
+            console.log(response, "v2 trace detail response");
             
-            const traceDetail = response?.content[0] || {};
+            // v2返回 SpanDTO[] 数组
+            const spanList = Array.isArray(response) ? response : (response?.data || []);
             
-            // 设置Trace详情
-            setCurrentTrace(traceDetail);
+            // 使用第一个Span构建Trace详情
+            const firstSpan = spanList[0] || {};
+            setCurrentTrace({
+                trace_id: traceId,
+                ...firstSpan,
+            });
             
             // 设置Span数据
-            if (traceDetail.spans && Array.isArray(traceDetail.spans)) {
-                const spans = traceDetail.spans.map((span) => {
-                    return {
-                        ...span.metric,
-                        ...span.content,
-                        ...span.context,
-                        ...span.tag.ebpf_tag,
-                        ...span.tag.docker_tag
-                    }
-                });
-                console.log(spans, "spans");
-                
-                setSpanData(spans);
-            } else {
-                setSpanData([]);
-                message.warning('未找到Span数据');
-            }
+            setSpanData(spanList.length > 0 ? spanList : []);
             
         } catch (error) {
             message.error('获取Trace详情失败');
@@ -564,6 +583,7 @@ const MonitorNative = () => {
         return 'error';
     };
     
+    // v2: 根据响应状态码判断状态 - rootResponseStatus
     const getStatusByCode = (code) => {
         const code_num = Number(code)
         if([102,100,101].includes(code_num)) {
@@ -575,9 +595,9 @@ const MonitorNative = () => {
         return "error"
     }
 
-    // 状态标签渲染
+    // v2: 状态标签渲染 - 使用 rootResponseStatus
     const renderStatusTag = (item) => {
-        const status = getStatusByCode(item.status_code);
+        const status = getStatusByCode(item.rootResponseStatus);
         const statusConfig = {
             success: { color: 'green', text: '正常', icon: <CheckCircleOutlined /> },
             handling: { color: 'orange', text: '处理中', icon: <QuestionCircleOutlined /> },
@@ -586,21 +606,20 @@ const MonitorNative = () => {
         const config = statusConfig[status];
         return (
             <Tag color={config.color} icon={config.icon}>
-                {config.text}（{(item.e2e_duration / 1000).toFixed(2)}ms）
+                {config.text}（{((item.durationUs || 0) / 1000).toFixed(2)}ms）
             </Tag>
         );
     };
 
-    // 详情页跳转处理
+    // 详情页跳转处理 - v2: 使用 traceId
     const handleViewDetail = async (record) => {
         setTraceDetailLoading(true);
         setDrawerVisible(true);
         
         try {
-            // 并行获取火焰图数据和Trace详情
             await Promise.all([
-                getFlamegraphDataByTraceIdFun(record.trace_id),
-                fetchTraceDetail(record.trace_id)
+                getFlamegraphDataByTraceIdFun(record.traceId),
+                fetchTraceDetail(record.traceId)
             ]);
         } catch (error) {
             console.error('获取详情数据失败:', error);
@@ -630,18 +649,16 @@ const MonitorNative = () => {
     };
 
     
-    // 图表配置
+    // 图表配置 - v2: TimeSeriesDTO 格式 (minute, totalRequests, errorRequests, avgLatencySeconds, p50LatencySeconds, p75LatencySeconds, p99LatencySeconds)
     const requestChartConfig = {
         data: chartData.requestData,
-        xField: 'timeKey',
-        yField: 'docCount',
+        xField: 'minute',
+        yField: 'totalRequests',
         height: 200,
-        // 新增：配置x轴为时间类型，并格式化显示
         xAxis: {
-            type: 'time', // 指定为时间类型
+            type: 'time',
             label: {
                 formatter: (v) => {
-                    // 将时间戳转换为可读格式
                     return new Date(v).toLocaleTimeString('zh-CN', {
                         hour: '2-digit',
                         minute: '2-digit'
@@ -652,7 +669,7 @@ const MonitorNative = () => {
         yAxis: {
             label: {
             style: { fontSize: 12 },
-            formatter: (value) => `${value} 次`, // y轴标签添加单位（如 "166 次"）
+            formatter: (value) => `${value} 次`,
             },
         },
         point: {
@@ -662,9 +679,8 @@ const MonitorNative = () => {
         interaction: {
             tooltip: {
             marker: false,
-            // 优化tooltip：显示格式化时间和请求数
             formatter: (datum) => {
-                const formatTime = new Date(datum.timeKey).toLocaleString('zh-CN', {
+                const formatTime = new Date(datum.minute).toLocaleString('zh-CN', {
                 year: 'numeric',
                 month: '2-digit',
                 day: '2-digit',
@@ -673,7 +689,7 @@ const MonitorNative = () => {
                 });
                 return [
                 { name: '时间', value: formatTime },
-                { name: '请求数', value: `${datum.docCount} 次` },
+                { name: '请求数', value: `${datum.totalRequests} 次` },
                 ];
             },
             },
@@ -682,94 +698,52 @@ const MonitorNative = () => {
             lineWidth: 2,
         },
     };    
-    // 1. 先确保转换后的数据格式正确（复用你的 transformData 函数，无需修改）
-    const transformedErrorData = transformData(chartData.errorData);
-
-    // 2. 优化后的错误数图表配置（多线折线图）
+    // v2: 错误数图表配置 - TimeSeriesDTO 使用 errorRequests 字段
     const errorChartConfig = {
-        data: transformedErrorData, // 转换后的数据（含 type、timeKey、docCount）
-        xField: 'timeKey',          // X轴：时间戳
-        yField: 'docCount',         // Y轴：错误数
-        seriesField: 'type',        // 核心：按状态码（type）分组，生成多条线
+        data: chartData.errorData,
+        xField: 'minute',
+        yField: 'errorRequests',
         height: 200,
-        // 3. 自定义每条线的颜色（按状态码分配，区分明显）
-        color: ({ type }) => {
-            const colorMap = {
-            '200': '#1890ff', // 200状态码：蓝色
-            '201': '#52c41a', // 201状态码：绿色
-            '404': '#faad14', // 若后续有404：橙色（提前预留）
-            '500': '#ff4d4f'  // 若后续有500：红色（提前预留）
-            };
-            return colorMap[type] || '#8c8c8c'; // 默认：灰色
-        },
-        // 4. 折线样式优化（线条宽度、点样式）
+        color: '#ff4d4f',
         line: {
             style: {
-            lineWidth: 2, // 线条宽度，确保清晰
+            lineWidth: 2,
             },
         },
-        // 5. 数据点样式（统一形状，按分组区分颜色）
         point: {
-            shape: 'circle', // 点形状：圆形（比方形更友好）
-            size: 4,         // 点大小：适中，避免遮挡
-            fill: ({ type }) => { // 点填充色与线条色一致
-            const colorMap = {
-                '200': '#1890ff',
-                '201': '#52c41a',
-                '404': '#faad14',
-                '500': '#ff4d4f'
-            };
-            return colorMap[type] || '#8c8c8c';
-            },
-            stroke: '#fff', // 点边框：白色，增强立体感
+            shape: 'circle',
+            size: 4,
+            fill: '#ff4d4f',
+            stroke: '#fff',
             strokeWidth: 1,
         },
-        // 6. X轴配置（时间格式化，与请求数图表保持一致）
         xAxis: {
             type: 'time',
-            tickCount: 5, // 控制刻度数量，避免标签重叠
+            tickCount: 5,
             label: {
             fontSize: 12,
             formatter: (timestamp) => {
-                // 时间格式：仅显示时分（适合当天内数据，若跨天可加年月日）
                 return new Date(timestamp).toLocaleTimeString('zh-CN', {
                 hour: '2-digit',
                 minute: '2-digit'
                 });
             }
             },
-            range: [0.05, 0.95] // 轴两端留空白，避免数据贴边
+            range: [0.05, 0.95]
         },
-        // 7. Y轴配置（从0开始，添加单位）
         yAxis: {
             label: {
             fontSize: 12,
-            formatter: (value) => `${value} 次` // 单位：次
+            formatter: (value) => `${value} 次`
             },
-            min: 0, // Y轴从0开始，避免数据比例失真
-            tickCount: 4 // 控制Y轴刻度数量
+            min: 0,
+            tickCount: 4
         },
-        // 8. 图例配置（显示状态码，支持交互）
-        legend: {
-            position: 'top', // 图例位置：顶部（可选 right/left/bottom）
-            title: {
-            text: '响应状态码', // 图例标题，明确含义
-            fontSize: 12,
-            padding: [0, 0, 4, 0] // 标题与图例间距
-            },
-            label: {
-            fontSize: 12,
-            formatter: (type) => `状态码 ${type}` // 图例文本：优化为“状态码 200”
-            },
-            interactive: true // 支持点击图例隐藏/显示对应线条
-        },
-        // 9. Tooltip 配置（显示完整信息）
         interaction: {
             tooltip: {
-            marker: true, // 显示 tooltip 对应的点标记
+            marker: true,
             formatter: (datum) => {
-                // 格式化时间：显示完整年月日时分秒
-                const fullTime = new Date(datum.timeKey).toLocaleString('zh-CN', {
+                const fullTime = new Date(datum.minute).toLocaleString('zh-CN', {
                 year: 'numeric',
                 month: '2-digit',
                 day: '2-digit',
@@ -779,13 +753,12 @@ const MonitorNative = () => {
                 });
                 return [
                 { name: '时间', value: fullTime },
-                { name: '响应状态码', value: datum.type },
-                { name: '错误数', value: `${datum.docCount} 次` }
+                { name: '错误数', value: `${datum.errorRequests} 次` }
                 ];
             }
             }
         },
-        // 10. 网格线配置（辅助读数，降低透明度避免干扰）
+        // 网格线配置
         grid: {
             horizontal: {
             visible: true,
@@ -800,29 +773,25 @@ const MonitorNative = () => {
         }
     };
 
+    // v2: 时延数据转换 - TimeSeriesDTO 使用 avgLatencySeconds, p50LatencySeconds, p75LatencySeconds, p99LatencySeconds
     function transformDurationData(originalData) {
-    // 创建映射关系：原始字段名 -> 新类型名
     const fieldMap = {
-        'avgDuration': 'avg',
-        'p75Duration': 'p75',
-        'p90Duration': 'p90',
-        'p99Duration': 'p99'
+        'avgLatencySeconds': 'avg',
+        'p50LatencySeconds': 'p50',
+        'p75LatencySeconds': 'p75',
+        'p99LatencySeconds': 'p99'
     };
     
-    // 使用 reduce 遍历原始数据并构建新数组
     return originalData.reduce((result, item) => {
-        // 遍历每个字段映射
         Object.entries(fieldMap).forEach(([originalField, newType]) => {
-        // 获取原始值并转换为数字
         const rawValue = item[originalField];
         const value = typeof rawValue === 'string' ? 
                     parseFloat(rawValue) : 
                     Number(rawValue);
         
-        // 创建新对象并添加到结果数组
         result.push({
-            timeKey: item.timeKey,
-            value: isNaN(value) ? 0 : value, // 处理无效数值
+            minute: item.minute,  // v2使用minute字段
+            value: isNaN(value) ? 0 : value,
             type: newType
         });
         });
@@ -832,50 +801,45 @@ const MonitorNative = () => {
     }
     const latencyChartConfig = {
         data: transformDurationData(chartData.latencyData),
-        xField: 'timeKey',          // X轴：时间戳
-        yField: 'value',         // Y轴：错误数
-        seriesField: 'type',        // 核心：按状态码（type）分组，生成多条线
+        xField: 'minute',          // v2: X轴使用minute字段
+        yField: 'value',
+        seriesField: 'type',
         height: 200,
-        // 3. 自定义每条线的颜色（按状态码分配，区分明显）
         color: ({ type }) => {
             const colorMap = {
-            'avg': '#1890ff', // 200状态码：蓝色
-            'p75': '#52c41a', // 201状态码：绿色
-            'p90': '#faad14', // 若后续有404：橙色（提前预留）
-            'p99': '#ff4d4f'  // 若后续有500：红色（提前预留）
+            'avg': '#1890ff',
+            'p50': '#52c41a',
+            'p75': '#faad14',
+            'p99': '#ff4d4f'
             };
-            return colorMap[type] || '#8c8c8c'; // 默认：灰色
+            return colorMap[type] || '#8c8c8c';
         },
-        // 4. 折线样式优化（线条宽度、点样式）
         line: {
             style: {
-            lineWidth: 2, // 线条宽度，确保清晰
+            lineWidth: 2,
             },
         },
-        // 5. 数据点样式（统一形状，按分组区分颜色）
         point: {
-            shape: 'circle', // 点形状：圆形（比方形更友好）
-            size: 4,         // 点大小：适中，避免遮挡
-            fill: ({ type }) => { // 点填充色与线条色一致
+            shape: 'circle',
+            size: 4,
+            fill: ({ type }) => {
             const colorMap = {
                 'avg': '#1890ff',
-                'p75': '#52c41a',
-                'p90': '#faad14',
+                'p50': '#52c41a',
+                'p75': '#faad14',
                 'p99': '#ff4d4f'
             };
             return colorMap[type] || '#8c8c8c';
             },
-            stroke: '#fff', // 点边框：白色，增强立体感
+            stroke: '#fff',
             strokeWidth: 1,
         },
-        // 6. X轴配置（时间格式化，与请求数图表保持一致）
         xAxis: {
             type: 'time',
-            tickCount: 5, // 控制刻度数量，避免标签重叠
+            tickCount: 5,
             label: {
             fontSize: 12,
             formatter: (timestamp) => {
-                // 时间格式：仅显示时分（适合当天内数据，若跨天可加年月日）
                 return new Date(timestamp).toLocaleTimeString('zh-CN', {
                 hour: '2-digit',
                 minute: '2-digit'
@@ -944,14 +908,11 @@ const MonitorNative = () => {
         }
     };
 
-    // 计算图表统计数据
-    const totalRequests = chartData.requestData.reduce((sum, item) => sum + (item.docCount || 0), 0);
-    const totalErrors = chartData.errorData.reduce((sum, statusItem) => {
-        const statusBuckets = statusItem?.timeBuckets || [];
-        return sum + statusBuckets.reduce((s, bucket) => s + (bucket.docCount || 0), 0);
-    }, 0);
+    // 计算图表统计数据 - v2: TimeSeriesDTO 格式
+    const totalRequests = chartData.requestData.reduce((sum, item) => sum + (item.totalRequests || 0), 0);
+    const totalErrors = chartData.errorData.reduce((sum, item) => sum + (item.errorRequests || 0), 0);
     const avgLatency = chartData.latencyData.length > 0 
-        ? (chartData.latencyData.reduce((sum, item) => sum + (item.avgDuration || 0), 0) / chartData.latencyData.length).toFixed(2)
+        ? (chartData.latencyData.reduce((sum, item) => sum + (item.avgLatencySeconds || 0), 0) / chartData.latencyData.length).toFixed(2)
         : 0;
 
 
@@ -1189,7 +1150,7 @@ const MonitorNative = () => {
                                 key: 'traceId',
                                 width: 180,
                                 render: (_, record) => {
-                                    const traceId = record?.trace_id || '未知';
+                                    const traceId = record?.traceId || '未知';
                                     return <span title={traceId}>{traceId}</span>;
                                 },
                             },
@@ -1200,70 +1161,93 @@ const MonitorNative = () => {
                                 render: (_, record) => renderStatusTag(record),
                             },
                             {
-                                title: '客户端IP',
-                                dataIndex: 'client_ip',
-                                key: 'client_ip',
-                                width: 120,
-                            },
-                            {
-                                title: '客户端端口',
-                                dataIndex: 'client_port',
-                                key: 'client_port',
-                                width: 100,
-                            },
-                            {
-                                title: '组件名称',
-                                dataIndex: 'component_name',
-                                key: 'component_name',
+                                title: '应用服务',
+                                dataIndex: 'rootAppService',
+                                key: 'rootAppService',
                                 width: 140,
                             },
                             {
                                 title: '请求端点',
-                                dataIndex: 'endpoint',
-                                key: 'endpoint',
-                                width: 120,
+                                dataIndex: 'rootEndpoint',
+                                key: 'rootEndpoint',
+                                width: 180,
                             },
                             {
                                 title: '传输协议',
-                                dataIndex: 'protocol',
-                                key: 'protocol',
+                                dataIndex: 'rootL7Protocol',
+                                key: 'rootL7Protocol',
                                 width: 100,
                             },
                             {
-                                title: '服务端IP',
-                                dataIndex: 'server_ip',
-                                key: 'server_ip',
-                                width: 120,
-                            },
-                            {
-                                title: '服务端端口',
-                                dataIndex: 'server_port',
-                                key: 'server_port',
+                                title: '响应状态码',
+                                dataIndex: 'rootResponseStatus',
+                                key: 'rootResponseStatus',
                                 width: 100,
                             },
                             {
-                                title: '端到端耗时',
-                                dataIndex: 'e2e_duration',
-                                key: 'e2e_duration',
+                                title: '请求域名',
+                                dataIndex: 'rootRequestDomain',
+                                key: 'rootRequestDomain',
+                                width: 160,
+                            },
+                            {
+                                title: '请求资源',
+                                dataIndex: 'rootRequestResource',
+                                key: 'rootRequestResource',
+                                width: 140,
+                            },
+                            {
+                                title: '业务类型',
+                                dataIndex: 'rootBizType',
+                                key: 'rootBizType',
+                                width: 100,
+                            },
+                            {
+                                title: '耗时',
+                                dataIndex: 'durationUs',
+                                key: 'durationUs',
                                 width: 130,
-                                render: (duration) => {
-                                    const ms = duration / 1000;
+                                render: (durationUs) => {
+                                    const ms = (durationUs / 1000).toFixed(2);
                                     let color = '#52c41a';
                                     if (ms > 10) color = '#ff4d4f';
                                     else if (ms > 5) color = '#faad14';
-                                    return <span style={{ color }}>{ms.toFixed(2)} ms</span>;
+                                    return <span style={{ color }}>{ms} ms</span>;
                                 },
                             },
                             {
                                 title: 'Span数量',
-                                dataIndex: 'span_num',
-                                key: 'span_num',
+                                dataIndex: 'spanCount',
+                                key: 'spanCount',
                                 width: 100,
                             },
                             {
+                                title: '错误Span数',
+                                dataIndex: 'errorSpanCount',
+                                key: 'errorSpanCount',
+                                width: 100,
+                            },
+                            {
+                                title: '开始时间',
+                                dataIndex: 'startTime',
+                                key: 'startTime',
+                                width: 160,
+                                render: (time) => {
+                                    if (!time) return '未知';
+                                    return new Date(time).toLocaleString('zh-CN', {
+                                        year: 'numeric',
+                                        month: '2-digit',
+                                        day: '2-digit',
+                                        hour: '2-digit',
+                                        minute: '2-digit',
+                                        second: '2-digit',
+                                    });
+                                },
+                            },
+                            {
                                 title: '结束时间',
-                                dataIndex: 'end_time',
-                                key: 'end_time',
+                                dataIndex: 'endTime',
+                                key: 'endTime',
                                 width: 160,
                                 render: (time) => {
                                     if (!time) return '未知';
@@ -1305,7 +1289,7 @@ const MonitorNative = () => {
                         onChange={handleTableChange}
                         search={false}
                         rowKey={(record) => 
-                            record.trace_id || `${record.client_ip}-${record.client_port}-${record.endpoint}`
+                            record.traceId || `${record.rootAppService}-${record.rootEndpoint}`
                         }
                         toolBarRender={false}
                     />
@@ -1378,30 +1362,43 @@ const MonitorNative = () => {
                                                             <div style={{ fontWeight: 'bold', fontSize: 15 }}>{currentTrace.endpoint}</div>
                                                         </Descriptions.Item>
                                                         <Descriptions.Item label="协议">
-                                                            <Tag color="purple" style={{ fontSize: 14 }}>{currentTrace.protocol}</Tag>
+                                                            <Tag color="purple" style={{ fontSize: 14 }}>{currentTrace.l7Protocol}</Tag>
+                                                        </Descriptions.Item>
+                                                        <Descriptions.Item label="业务类型">
+                                                            <Tag color="purple" style={{ fontSize: 14 }}>{currentTrace.rootBizType}</Tag>
                                                         </Descriptions.Item>
                                                     </Descriptions>
                                                 </Col>
                                                 <Col span={12}>
                                                     <Descriptions column={1} size="middle">
-                                                        <Descriptions.Item label="客户端">
+                                                        <Descriptions.Item label="客户端IP">
                                                             <div style={{ fontWeight: 'bold' }}>
-                                                                {currentTrace.client_ip}:{currentTrace.client_port}
+                                                                {currentTrace.ip40}
                                                             </div>
                                                         </Descriptions.Item>
-                                                        <Descriptions.Item label="服务端">
+                                                        <Descriptions.Item label="客户端端口">
                                                             <div style={{ fontWeight: 'bold' }}>
-                                                                {currentTrace.server_ip}:{currentTrace.server_port}
+                                                                {currentTrace.clientPort}
                                                             </div>
                                                         </Descriptions.Item>
-                                                        <Descriptions.Item label="端到端耗时">
+                                                        <Descriptions.Item label="服务端IP">
+                                                            <div style={{ fontWeight: 'bold' }}>
+                                                                {currentTrace.ip41}
+                                                            </div>
+                                                        </Descriptions.Item>
+                                                        <Descriptions.Item label="服务端端口">
+                                                            <div style={{ fontWeight: 'bold' }}>
+                                                                {currentTrace.serverPort}
+                                                            </div>
+                                                        </Descriptions.Item>
+                                                        <Descriptions.Item label="耗时">
                                                             <span style={{ fontWeight: 'bold', fontSize: 16, color: '#1890ff' }}>
-                                                                {(currentTrace.e2e_duration / 1000).toFixed(2)} ms
+                                                                {((currentTrace.responseDuration || 0) / 1000).toFixed(2)} ms
                                                             </span>
                                                         </Descriptions.Item>
                                                         <Descriptions.Item label="Span数量">
                                                             <span style={{ fontWeight: 'bold', fontSize: 16 }}>
-                                                                {currentTrace.span_num}
+                                                                {spanData.length}
                                                             </span>
                                                         </Descriptions.Item>
                                                     </Descriptions>
@@ -1523,23 +1520,9 @@ const MonitorNative = () => {
                                 <ProTable
                                     columns={[
                                         {
-                                        title: 'Span ID',
-                                        dataIndex: 'span_id',
-                                        key: 'span_id',
-                                        width: 180,
-                                        render: (id) => 
-                                            {
-                                                    return (<Tooltip title={id}>
-                                                        <Tag color="blue" style={{ maxWidth: 150, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                                        {id}
-                                                        </Tag>
-                                                    </Tooltip>)
-                                            }
-                                        },
-                                        {
-                                        title: '组件',
-                                        dataIndex: 'component',
-                                        key: 'component',
+                                        title: '应用服务',
+                                        dataIndex: 'appService',
+                                        key: 'appService',
                                         width: 150,
                                         render: (component) => <Tag color="purple">{component}</Tag>,
                                         },
@@ -1551,44 +1534,56 @@ const MonitorNative = () => {
                                         },
                                         {
                                         title: '协议',
-                                        dataIndex: 'protocol',
-                                        key: 'protocol',
+                                        dataIndex: 'l7Protocol',
+                                        key: 'l7Protocol',
                                         width: 100,
                                         render: (protocol) => <Tag color="cyan">{protocol}</Tag>,
                                         },
                                         {
-                                        title: '方向',
-                                        dataIndex: 'direction',
-                                        key: 'direction',
-                                        width: 100,
-                                        render: (direction) => (
-                                            <Tag color={direction === 'Ingress' ? 'green' : 'orange'}>
-                                            {direction}
-                                            </Tag>
-                                        ),
+                                        title: '请求域名',
+                                        dataIndex: 'requestDomain',
+                                        key: 'requestDomain',
+                                        width: 160,
+                                        },
+                                        {
+                                        title: '请求资源',
+                                        dataIndex: 'requestResource',
+                                        key: 'requestResource',
+                                        width: 140,
                                         },
                                         {
                                         title: '耗时',
-                                        dataIndex: 'duration',
-                                        key: 'duration',
+                                        dataIndex: 'responseDuration',
+                                        key: 'responseDuration',
                                         width: 100,
                                         render: (duration) => (
                                             <span style={{ fontWeight: 'bold' }}>
-                                            {(duration / 1000000).toFixed(2)}ms
+                                            {(duration / 1000).toFixed(2)}ms
                                             </span>
                                         ),
                                         },
                                         {
+                                        title: '响应状态码',
+                                        dataIndex: 'responseCode',
+                                        key: 'responseCode',
+                                        width: 100,
+                                        render: (code) => (
+                                            <Tag color={code === 200 ? 'green' : 'red'}>
+                                            {code}
+                                            </Tag>
+                                        ),
+                                        },
+                                        {
                                         title: '开始时间',
-                                        dataIndex: 'start_time',
-                                        key: 'start_time',
+                                        dataIndex: 'startTime',
+                                        key: 'startTime',
                                         width: 180,
                                         render: (time) => new Date(time).toLocaleString(),
                                         },
                                         {
                                         title: '结束时间',
-                                        dataIndex: 'end_time',
-                                        key: 'end_time',
+                                        dataIndex: 'endTime',
+                                        key: 'endTime',
                                         width: 180,
                                         render: (time) => new Date(time).toLocaleString(),
                                         },
@@ -1598,8 +1593,8 @@ const MonitorNative = () => {
                                         width: 180,
                                         render: (_, record) => (
                                             <div>
-                                            <div>{record.src_ip}</div>
-                                            <Tag color="geekblue">端口: {record.src_port}</Tag>
+                                            <div>{record.ip40}</div>
+                                            <Tag color="geekblue">端口: {record.clientPort}</Tag>
                                             </div>
                                         ),
                                         },

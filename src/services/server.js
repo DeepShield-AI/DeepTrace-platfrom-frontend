@@ -2,6 +2,26 @@ import axios from 'axios';
 import qs from 'qs';
 import { accessGetAllMockData, overviewGetAllMockData } from './mock.js';
 
+// v2接口 mock数据
+import {
+  fieldEnumMappingMockData,
+  fieldOptionsMockData,
+  filterFieldsMockData,
+  graphNodeMetricsMockData,
+  tableNodeMetricsMockData,
+  graphEdgeMetricsMockData,
+  spanDetailsMockData,
+  nodeCountTimeSeriesMockData,
+  nodeErrorTimeSeriesMockData,
+  nodeLatencyTimeSeriesMockData,
+  spanDetailsByTraceMockData,
+  traceListMockData,
+  traceLatencyTimeSeriesMockData,
+  traceErrorTimeSeriesMockData,
+  traceCountTimeSeriesMockData,
+  spanListMockData,
+} from './mock.js';
+
 // mock接口数据
 let isMock = true;
 
@@ -449,7 +469,7 @@ const getFieldOptions = async (params) => {
   });
 };
 
-// 2. 查询表过滤字段配置
+// 2. 查询表过滤字段配置 - getFilterFields (FilterFieldsDTO)
 const getFilterFields = async (params) => {
   return makeRequest(async () => {
     try {
@@ -460,12 +480,13 @@ const getFilterFields = async (params) => {
       return data;
     } catch (error) {
       console.error('==ERROR==', error);
+      if (isMock) return filterFieldsMockData;
       throw error;
     }
   });
 };
 
-// 3. 图节点筛选及其指标
+// 3. 图节点筛选及其指标 - queryGraphNodeMetrics (GraphNodeMetricsDTO)
 const queryGraphNodeMetrics = async (params) => {
   return makeRequest(async () => {
     try {
@@ -474,6 +495,7 @@ const queryGraphNodeMetrics = async (params) => {
       return data;
     } catch (error) {
       console.error('==ERROR==', error);
+      if (isMock) return graphNodeMetricsMockData;
       throw error;
     }
   });
@@ -493,7 +515,7 @@ const queryTableNodeMetrics = async (params) => {
   });
 };
 
-// 5. 拓扑图边筛选及其指标
+// 5. 拓扑图边筛选及其指标 - queryGraphEdgeMetrics (GraphEdgeMetricsDTO)
 const queryGraphEdgeMetrics = async (params) => {
   return makeRequest(async () => {
     try {
@@ -502,6 +524,7 @@ const queryGraphEdgeMetrics = async (params) => {
       return data;
     } catch (error) {
       console.error('==ERROR==', error);
+      if (isMock) return graphEdgeMetricsMockData;
       throw error;
     }
   });
@@ -563,7 +586,7 @@ const queryNodelatencyTimeSeries = async (params) => {
   });
 };
 
-// 10. 根据TraceId查询Span明细
+// 10. 根据TraceId查询Span明细 - querySpanDetailsByTrace (SpanDTO)
 const querySpanDetailsByTrace = async (params) => {
   return makeRequest(async () => {
     try {
@@ -574,12 +597,13 @@ const querySpanDetailsByTrace = async (params) => {
       return data;
     } catch (error) {
       console.error('==ERROR==', error);
+      if (isMock) return spanDetailsByTraceMockData;
       throw error;
     }
   });
 };
 
-// 11. 查询Trace列表（分页）
+// 11. 查询Trace列表（分页） - queryTraceList (TraceInfoDTO)
 const queryTraceList = async (params) => {
   return makeRequest(async () => {
     try {
@@ -588,12 +612,13 @@ const queryTraceList = async (params) => {
       return data;
     } catch (error) {
       console.error('==ERROR==', error);
+      if (isMock) return traceListMockData;
       throw error;
     }
   });
 };
 
-// 12. 查询Trace响应时延时间序列
+// 12. 查询Trace响应时延时间序列 - queryTraceLatencyTimeSeries (TimeSeriesDTO)
 const queryTraceLatencyTimeSeries = async (params) => {
   return makeRequest(async () => {
     try {
@@ -602,12 +627,13 @@ const queryTraceLatencyTimeSeries = async (params) => {
       return data;
     } catch (error) {
       console.error('==ERROR==', error);
+      if (isMock) return traceLatencyTimeSeriesMockData;
       throw error;
     }
   });
 };
 
-// 13. 查询Trace错误数时间序列
+// 13. 查询Trace错误数时间序列 - queryTraceErrorTimeSeries (TimeSeriesDTO)
 const queryTraceErrorTimeSeries = async (params) => {
   return makeRequest(async () => {
     try {
@@ -616,12 +642,13 @@ const queryTraceErrorTimeSeries = async (params) => {
       return data;
     } catch (error) {
       console.error('==ERROR==', error);
+      if (isMock) return traceErrorTimeSeriesMockData;
       throw error;
     }
   });
 };
 
-// 14. 查询Trace请求数时间序列
+// 14. 查询Trace请求数时间序列 - queryTraceCountTimeSeries (TimeSeriesDTO)
 const queryTraceCountTimeSeries = async (params) => {
   return makeRequest(async () => {
     try {
@@ -630,6 +657,7 @@ const queryTraceCountTimeSeries = async (params) => {
       return data;
     } catch (error) {
       console.error('==ERROR==', error);
+      if (isMock) return traceCountTimeSeriesMockData;
       throw error;
     }
   });

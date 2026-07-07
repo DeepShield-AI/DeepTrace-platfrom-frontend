@@ -1,4 +1,3 @@
-import { errorData, requestData } from '@/services/mock';
 import { Area, Line } from '@ant-design/plots';
 import { Card, Col, Drawer, Row, Tabs, message, DatePicker, Button, Space, Statistic } from 'antd';
 import dagre from 'dagre';
@@ -18,10 +17,10 @@ import PointDrawer from './PointDrawer';
 import { 
     getEsEdgeEndpointList,
     getEsNodeEndpointList,
-    getEsKpiQps,
-    getEsKpiErrorRate,
-    getEsKpiLatencyStats,
-    getEsKpiResourceUsage // 假设有资源使用情况接口
+    queryNodeCountTimeSeries,   // v2: 查询节点请求数时间序列 - TimeSeriesDTO
+    queryNodeErrorTimeSeries,   // v2: 查询节点错误数时间序列 - TimeSeriesDTO
+    queryNodelatencyTimeSeries, // v2: 查询节点延迟时间序列 - TimeSeriesDTO
+    getEsKpiResourceUsage
 } from '../../../services/server.js';
 import moment from 'moment';
 
@@ -143,22 +142,22 @@ const PointDetailDrawer = ({selectedObj = {}}) => {
             }
         ];
         
-        // 时延兜底数据
+        // v2: 时延兜底数据 - 使用新的type名称
         const fallbackLatencyData = timeSeries.flatMap(time => [
             {
                 time: time,
-                latency: Math.random() * 100 + 50, // 50-150ms
-                type: '平均时延'
+                latency: Math.random() * 100 + 50,
+                type: 'avg',
             },
             {
                 time: time,
-                latency: Math.random() * 150 + 100, // 100-250ms
-                type: 'P75'
+                latency: Math.random() * 150 + 100,
+                type: 'p75',
             },
             {
                 time: time,
-                latency: Math.random() * 200 + 150, // 150-350ms
-                type: 'P99'
+                latency: Math.random() * 200 + 150,
+                type: 'p99',
             }
         ]);
         
@@ -256,22 +255,22 @@ const PointDetailDrawer = ({selectedObj = {}}) => {
 
         const errorRate = totalRequests > 0 ? totalErrors / totalRequests : 0;
 
-        // 计算平均时延
+        // v2: 计算平均时延 - 使用新的type名称
         let avgDuration = 0;
         if (latencyData && latencyData.length > 0) {
-            const avgLatencies = latencyData.filter(item => item.type === '平均时延');
+            const avgLatencies = latencyData.filter(item => item.type === 'avg');
             if (avgLatencies.length > 0) {
-                const recentAvgLatencies = avgLatencies.slice(-5); // 取最近5个平均时延
+                const recentAvgLatencies = avgLatencies.slice(-5);
                 avgDuration = recentAvgLatencies.reduce((sum, item) => sum + (item.latency || 0), 0) / recentAvgLatencies.length;
             }
         }
 
-        // 计算P75和P99时延
+        // v2: 计算P75和P99时延
         let p75Duration = 0;
         let p99Duration = 0;
         if (latencyData && latencyData.length > 0) {
-            const p75Latencies = latencyData.filter(item => item.type === 'P75');
-            const p99Latencies = latencyData.filter(item => item.type === 'P99');
+            const p75Latencies = latencyData.filter(item => item.type === 'p75');
+            const p99Latencies = latencyData.filter(item => item.type === 'p99');
             
             if (p75Latencies.length > 0) {
                 const recentP75 = p75Latencies.slice(-5);
@@ -368,43 +367,50 @@ const PointDetailDrawer = ({selectedObj = {}}) => {
                 return;
             }
 
-            console.log('获取图表数据，参数:', params);
+            console.log('获取图表数据 v2，参数:', params);
             
-            // 并行请求三个接口
-            const [qpsResponse, errorRateResponse, latencyResponse] = await Promise.all([
-                getEsKpiQps(params),
-                getEsKpiErrorRate(params),
-                getEsKpiLatencyStats(params)
+            // v2: 并行请求三个时序接口 - TimeSeriesDTO 格式
+            const [countResponse, errorResponse, latencyResponse] = await Promise.all([
+                queryNodeCountTimeSeries(params),     // v2: 请求数时序
+                queryNodeErrorTimeSeries(params),     // v2: 错误数时序
+                queryNodelatencyTimeSeries(params),   // v2: 延迟时序
             ]);
             
-            // 处理QPS数据
+            // v2: 转换 TimeSeriesDTO 为图表兼容格式
+            // TimeSeriesDTO: { minute, totalRequests, errorRequests, avgLatencySeconds, p50LatencySeconds, p75LatencySeconds, p99LatencySeconds }
             let requestData = [];
-            if (qpsResponse && qpsResponse.success && qpsResponse.data && qpsResponse.data.length > 0) {
-                requestData = qpsResponse.data;
-                console.log('QPS数据获取成功，数据量:', requestData.length);
+            if (Array.isArray(countResponse) && countResponse.length > 0) {
+                requestData = countResponse.map(item => ({
+                    timeKey: new Date(item.minute).getTime(),  // 转为时间戳
+                    docCount: item.totalRequests || 0,
+                }));
+                console.log('v2 QPS数据获取成功，数据量:', requestData.length);
             } else {
-                console.warn('QPS接口返回空数据，使用兜底数据');
+                console.warn('v2 QPS接口返回空数据，使用兜底数据');
                 requestData = getFallbackChartData().requestData;
             }
             
-            // 处理错误率数据
             let errorData = [];
-            if (errorRateResponse && errorRateResponse.success && errorRateResponse.data && errorRateResponse.data.length > 0) {
-                errorData = errorRateResponse.data;
-                console.log('错误率数据获取成功，数据量:', errorData.length);
+            if (Array.isArray(errorResponse) && errorResponse.length > 0) {
+                errorData = [{
+                    statusCode: '500',  // v2: 使用'500'确保错误计数正确
+                    timeBuckets: errorResponse.map(item => ({
+                        timeKey: new Date(item.minute).getTime(),
+                        docCount: item.errorRequests || 0,
+                    })),
+                }];
+                console.log('v2 错误率数据获取成功，数据量:', errorData.length);
             } else {
-                console.warn('错误率接口返回空数据，使用兜底数据');
+                console.warn('v2 错误率接口返回空数据，使用兜底数据');
                 errorData = getFallbackChartData().errorData;
             }
             
-            // 处理时延数据
             let latencyData = [];
-            if (latencyResponse && latencyResponse.success && latencyResponse.data && latencyResponse.data.length > 0) {
-                // 转换时延数据格式，假设接口返回的数据需要转换
-                latencyData = transformLatencyData(latencyResponse.data);
-                console.log('时延数据获取成功，数据量:', latencyData.length);
+            if (Array.isArray(latencyResponse) && latencyResponse.length > 0) {
+                latencyData = transformV2LatencyData(latencyResponse);
+                console.log('v2 时延数据获取成功，数据量:', latencyData.length);
             } else {
-                console.warn('时延接口返回空数据，使用兜底数据');
+                console.warn('v2 时延接口返回空数据，使用兜底数据');
                 latencyData = getFallbackChartData().latencyData;
             }
             
@@ -431,34 +437,40 @@ const PointDetailDrawer = ({selectedObj = {}}) => {
         }
     };
 
-    // 转换时延数据格式
-    const transformLatencyData = (originalData) => {
+    // v2: 转换时延数据格式 - TimeSeriesDTO → 图表兼容格式
+    // TimeSeriesDTO: { minute, avgLatencySeconds, p50LatencySeconds, p75LatencySeconds, p99LatencySeconds }
+    const transformV2LatencyData = (originalData) => {
         if (!originalData || !Array.isArray(originalData)) return [];
         
-        // 假设原始数据格式为：[{ time: timestamp, avg: number, p75: number, p99: number }]
-        // 转换为：[{ time: timestamp, latency: number, type: 'avg' }, ...]
         const transformed = [];
-        
         originalData.forEach(item => {
-            if (item.avg !== undefined) {
+            const time = new Date(item.minute).getTime();
+            if (item.avgLatencySeconds !== undefined) {
                 transformed.push({
-                    time: item.time,
-                    latency: item.avg,
-                    type: '平均时延'
+                    time: time,
+                    latency: item.avgLatencySeconds * 1000, // 秒转毫秒
+                    type: 'avg',
                 });
             }
-            if (item.p75 !== undefined) {
+            if (item.p50LatencySeconds !== undefined) {
                 transformed.push({
-                    time: item.time,
-                    latency: item.p75,
-                    type: 'P75'
+                    time: time,
+                    latency: item.p50LatencySeconds * 1000,
+                    type: 'p50',
                 });
             }
-            if (item.p99 !== undefined) {
+            if (item.p75LatencySeconds !== undefined) {
                 transformed.push({
-                    time: item.time,
-                    latency: item.p99,
-                    type: 'P99'
+                    time: time,
+                    latency: item.p75LatencySeconds * 1000,
+                    type: 'p75',
+                });
+            }
+            if (item.p99LatencySeconds !== undefined) {
+                transformed.push({
+                    time: time,
+                    latency: item.p99LatencySeconds * 1000,
+                    type: 'p99',
                 });
             }
         });

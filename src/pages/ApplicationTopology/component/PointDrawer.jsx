@@ -34,17 +34,19 @@ import {
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 
-// 导入你的接口
+// 导入接口 - 已切换为v2版本
 import FlameGraphMain from '../../../components/flamegraph/index.jsx';
 import GraphVisEGraphVisualizationxample from '../../../components/topology/index.jsx';
 import {
-  getFilters,
-  getFlamegraphDataByTraceId,
-  getTraceDetail,
-  traceChartQuery,
-  traceTableQuery,
-  getEsNodesLog,
-  getEsEdgesLog
+  getFilterFields,            // v2: 查询表过滤字段配置 - FilterFieldsDTO
+  getFlamegraphDataByTraceId, // v1: 火焰图数据（暂无v2版本）
+  querySpanDetailsByTrace,    // v2: 根据TraceId查询Span明细 - SpanDTO
+  queryTraceCountTimeSeries,  // v2: 查询Trace请求数时间序列 - TimeSeriesDTO
+  queryTraceErrorTimeSeries,  // v2: 查询Trace错误数时间序列 - TimeSeriesDTO
+  queryTraceLatencyTimeSeries,// v2: 查询Trace响应时延时间序列 - TimeSeriesDTO
+  queryTraceList,             // v2: 查询Trace列表（分页） - TraceInfoDTO
+  getEsNodesLog,              // v1: 节点日志（暂无v2版本）
+  getEsEdgesLog               // v1: 边日志（暂无v2版本）
 } from '../../../services/server.js';
 
 import { convertToGraphStructure } from '../../../utils/convert2graph.js';
@@ -321,14 +323,18 @@ const PointDrawer = ({
         };
         response = await getEsEdgesLog(params);
       } else {
-        response = await traceTableQuery(baseParams);
+        response = await queryTraceList(baseParams);  // v2: 查询Trace列表
       }
 
       let dataList = [];
       let totalCount = 0;
 
       if (response && typeof response === 'object') {
-        if (response.content && typeof response.totalElements !== 'undefined') {
+        // v2返回格式: { totalCount, data: TraceInfoDTO[] }
+        if (response.data && Array.isArray(response.data)) {
+          dataList = response.data;
+          totalCount = response.totalCount || 0;
+        } else if (response.content && typeof response.totalElements !== 'undefined') {
           dataList = response.content;
           totalCount = response.totalElements;
         } else if (response.data && response.data.records) {
@@ -567,16 +573,16 @@ const PointDrawer = ({
     return transformedData;
   }
 
-  // 获取图表数据函数
+  // v2: 获取图表数据函数 - 使用Trace时序接口 (TimeSeriesDTO)
   const fetchChartData = async () => {
     setChartLoading(true);
     try {
       const [requestResponse, errorResponse, latencyResponse] = await Promise.all([
-        traceChartQuery('count'),
-        traceChartQuery('statusCount'),
-        traceChartQuery('latencyStats'),
+        queryTraceCountTimeSeries(),     // v2: 请求数时序
+        queryTraceErrorTimeSeries(),     // v2: 错误数时序
+        queryTraceLatencyTimeSeries(),   // v2: 响应时延时序
       ]);
-      console.log(requestResponse.data, errorResponse.data, latencyResponse.data, '0000');
+      console.log(requestResponse, errorResponse, latencyResponse, 'v2 chart data');
 
     } catch (error) {
       message.error('图表数据获取失败');
@@ -586,11 +592,11 @@ const PointDrawer = ({
     }
   };
 
-  // 获取Trace详情数据
+  // v2: 获取Trace详情数据 - querySpanDetailsByTrace (SpanDTO)
   const fetchTraceDetail = async (traceId) => {
     setTraceDetailLoading(true);
     try {
-      const response = await getTraceDetail(traceId);
+      const response = await querySpanDetailsByTrace({ traceId });
       console.log(response, 'response');
 
       const traceDetail = response?.content[0] || {};
