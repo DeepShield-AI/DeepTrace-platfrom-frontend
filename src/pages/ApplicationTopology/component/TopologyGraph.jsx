@@ -1,4 +1,3 @@
-import { errorData, requestData } from '@/services/mock';
 import { Area, Line } from '@ant-design/plots';
 import { Card, Col, Drawer, Row, Select, Tabs, Tooltip, Button } from 'antd';
 import dagre from 'dagre';

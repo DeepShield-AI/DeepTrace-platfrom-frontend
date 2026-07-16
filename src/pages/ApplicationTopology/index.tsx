@@ -27,14 +27,11 @@ import ReactFlow, {
 import 'react-flow-renderer/dist/style.css';
 import dagre from 'dagre';
 import TopologyGraph from "./component/TopologyGraph.jsx"
+// 导入接口 - 已切换为v2版本
 import { 
-    traceTableQuery, 
-    traceChartQuery, 
-    getFlamegraphDataByTraceId, 
-    getFilters, 
-    getTraceDetail,
-    getEsTracesGraphEdges,
-    getEsTracesGraphNodes
+    queryGraphNodeMetrics,  // v2: 图节点筛选及其指标 - GraphNodeMetricsDTO
+    queryGraphEdgeMetrics,  // v2: 拓扑图边筛选及其指标 - GraphEdgeMetricsDTO
+    getFilterFields,        // v2: 查询表过滤字段配置 - FilterFieldsDTO
 } from '../../services/server.js';
 import moment from 'moment';
 
@@ -229,6 +226,45 @@ const STATUS_CODE_OPTIONS = [
     "201"
 ];
 
+// v2: 将v2节点数据转换为v1兼容格式 (GraphNodeMetricsDTO → v1格式)
+// v2格式: { appService, serviceId, totalRequests, totalErrors, totalResponses, errorRate, avgRttMicroseconds }
+// v1格式: { nodeId, containerName, avgDuration, errorCount, totalCount, errorRate, qps }
+const transformV2NodeData = (v2Nodes, timeRangeSeconds) => {
+    if (!Array.isArray(v2Nodes)) return [];
+    return v2Nodes.map(node => ({
+        nodeId: node.serviceId || node.nodeId,
+        containerName: node.appService || node.containerName,
+        avgDuration: node.avgRttMicroseconds || node.avgDuration,
+        errorCount: node.totalErrors || node.errorCount,
+        totalCount: node.totalRequests || node.totalCount,
+        errorRate: node.errorRate || 0,
+        qps: timeRangeSeconds > 0 ? (node.totalRequests || 0) / timeRangeSeconds : 0,
+    }));
+};
+
+// v2: 将v2边数据转换为v1兼容格式 (GraphEdgeMetricsDTO[] → v1格式)
+// v2格式: [{ srcNodeId, destNodeId, totalRequests, totalErrors, totalResponses, errorRate, avgRttMicroseconds }]
+// v1格式: { [srcNodeId]: [{ srcNodeId, dstNodeId, avgDuration, totalCount, errorRate, qps }] }
+const transformV2EdgeData = (v2Edges, timeRangeSeconds) => {
+    if (!Array.isArray(v2Edges)) return {};
+    const edgeMap = {};
+    v2Edges.forEach(edge => {
+        const srcId = edge.srcNodeId;
+        if (!edgeMap[srcId]) {
+            edgeMap[srcId] = [];
+        }
+        edgeMap[srcId].push({
+            srcNodeId: edge.srcNodeId,
+            dstNodeId: edge.destNodeId || edge.dstNodeId,
+            avgDuration: edge.avgRttMicroseconds || edge.avgDuration,
+            totalCount: edge.totalRequests || edge.totalCount,
+            errorRate: edge.errorRate || 0,
+            qps: timeRangeSeconds > 0 ? (edge.totalRequests || 0) / timeRangeSeconds : 0,
+        });
+    });
+    return edgeMap;
+};
+
 // 页面入口组件
 const ApplicationTopology = () => {
     // 定义默认日期范围：2025年10月30日 - 2025年10月31日
@@ -256,12 +292,12 @@ const ApplicationTopology = () => {
     // 统计边总数
     const totalEdges = Object.values(edgeData).reduce((sum, edges) => sum + edges.length, 0);
 
-    // 获取拓扑数据
+    // v2: 获取拓扑数据 - 使用 queryGraphNodeMetrics 和 queryGraphEdgeMetrics
     const fetchTopologyData = useCallback(async (start, end, statusCodes, endpoints, protocols) => {
         setLoading(true);
         
         try {
-            console.log('获取拓扑数据参数（毫秒级）:', { 
+            console.log('获取拓扑数据参数（毫秒级） v2:', { 
                 start, 
                 end, 
                 statusCodes,
@@ -271,10 +307,12 @@ const ApplicationTopology = () => {
                 endFormatted: moment(end).format('YYYY-MM-DD HH:mm:ss')
             });
             
-            // 并行请求节点和边数据
+            // 计算时间范围（秒），用于QPS计算
+            const timeRangeSeconds = (end - start) / 1000;
+            
+            // v2: 并行请求节点和边数据
             const [nodesResponse, edgesResponse] = await Promise.all([
-                getEsTracesGraphNodes({
-                    // 传递毫秒级时间戳和筛选参数
+                queryGraphNodeMetrics({
                     startTime: start,
                     endTime: end,
                     statusCodes: statusCodes,
@@ -283,10 +321,9 @@ const ApplicationTopology = () => {
                 }).catch(error => {
                     console.error('获取节点数据失败:', error);
                     message.warning('节点数据获取失败，使用默认数据');
-                    return { success: false, data: DEFAULT_NODE_DATA };
+                    return null;
                 }),
-                getEsTracesGraphEdges({
-                    // 传递毫秒级时间戳和筛选参数
+                queryGraphEdgeMetrics({
                     startTime: start,
                     endTime: end,
                     statusCodes: statusCodes,
@@ -295,20 +332,22 @@ const ApplicationTopology = () => {
                 }).catch(error => {
                     console.error('获取边数据失败:', error);
                     message.warning('边数据获取失败，使用默认数据');
-                    return { success: false, data: DEFAULT_EDGE_DATA };
+                    return null;
                 })
             ]);
 
-            // 更新节点数据（接口成功则用接口数据，失败则用默认数据）
-            if (nodesResponse) {
-                setNodeData(nodesResponse || DEFAULT_NODE_DATA);
+            // v2: 转换节点数据格式
+            if (nodesResponse && nodesResponse.length > 0) {
+                const transformedNodes = transformV2NodeData(nodesResponse, timeRangeSeconds);
+                setNodeData(transformedNodes);
             } else {
                 setNodeData(DEFAULT_NODE_DATA);
             }
 
-            // 更新边数据（接口成功则用接口数据，失败则用默认数据）
-            if (edgesResponse) {
-                setEdgeData(edgesResponse || DEFAULT_EDGE_DATA);
+            // v2: 转换边数据格式
+            if (edgesResponse && edgesResponse.length > 0) {
+                const transformedEdges = transformV2EdgeData(edgesResponse, timeRangeSeconds);
+                setEdgeData(transformedEdges);
             } else {
                 setEdgeData(DEFAULT_EDGE_DATA);
             }
@@ -319,7 +358,6 @@ const ApplicationTopology = () => {
         } catch (error) {
             console.error('获取拓扑数据异常:', error);
             message.error('获取拓扑数据异常，使用默认数据');
-            // 异常情况下使用默认数据兜底
             setNodeData(DEFAULT_NODE_DATA);
             setEdgeData(DEFAULT_EDGE_DATA);
         } finally {
